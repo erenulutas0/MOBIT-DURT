@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+data/db.sqlite3
+data/logs/*
+!data/logs/.gitkeep
+data/originals/*
+!data/originals/.gitkeep
+vault/ihaleler/*
+!vault/ihaleler/.gitkeep
