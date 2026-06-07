@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db, init_db
-from app.models import Document
+from app.models import Document, Tender
 from app.utils.logging import configure_logging
 from app.whatsapp.webhook import router as whatsapp_router
 
@@ -31,6 +31,19 @@ class DocumentOut(BaseModel):
     document_type: str
     status: str
     error_message: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class TenderOut(BaseModel):
+    id: int
+    tender_id: str
+    organization: str
+    year: int
+    sequence: int
+    title: str | None
+    status: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -62,3 +75,16 @@ def get_document(document_id: int, db: Session = Depends(get_db)) -> Document:
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return document
+
+
+@app.get("/tenders", response_model=list[TenderOut])
+def list_tenders(db: Session = Depends(get_db)) -> list[Tender]:
+    return db.query(Tender).order_by(Tender.year.desc(), Tender.tender_id).all()
+
+
+@app.get("/tenders/{tender_id}", response_model=TenderOut)
+def get_tender(tender_id: str, db: Session = Depends(get_db)) -> Tender:
+    tender = db.query(Tender).filter(Tender.tender_id == tender_id).one_or_none()
+    if tender is None:
+        raise HTTPException(status_code=404, detail="Tender not found")
+    return tender

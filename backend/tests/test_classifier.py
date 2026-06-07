@@ -27,3 +27,16 @@ def test_classifier_falls_back_to_unclassified_tender():
     assert classification.organization is None
     assert classification.document_type == "unknown"
     assert classification.tender_id == "UNCLASSIFIED-2026-06-01"
+
+
+def test_classifier_detects_year_with_underscores_and_camel_case_document_type():
+    classification = classify_document(
+        "2026_343930_1_Kısım_Telsiz_Bataryası.docx",
+        "teknikSartnameEk",
+        datetime(2026, 6, 5, tzinfo=UTC),
+    )
+
+    assert classification.year == 2026
+    assert classification.organization is None
+    assert classification.document_type == "technical_spec"
+    assert classification.tender_id == "UNCLASSIFIED-2026-06-05"

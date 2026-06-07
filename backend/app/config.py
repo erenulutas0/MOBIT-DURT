@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     whatsapp_graph_base_url: str = Field(
         default="https://graph.facebook.com", alias="WHATSAPP_GRAPH_BASE_URL"
     )
+    telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
     database_url: str = Field(default="sqlite:///./data/db.sqlite3", alias="DATABASE_URL")
     data_dir: Path = Field(default=PROJECT_ROOT / "data", alias="DATA_DIR")
     vault_dir: Path = Field(default=PROJECT_ROOT / "vault", alias="VAULT_DIR")

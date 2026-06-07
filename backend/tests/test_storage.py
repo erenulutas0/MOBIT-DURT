@@ -50,5 +50,5 @@ def test_storage_uses_unclassified_fallback_path(tmp_path):
     )
 
     assert stored.path.exists()
-    assert stored.path.parts[-3:-1] == ("unclassified", "2026-06-01")
+    assert stored.path.parts[-5:-1] == ("unclassified", "2026", "06", "01")
     assert stored.path.suffix == ".jpg"

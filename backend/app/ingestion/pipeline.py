@@ -1,8 +1,10 @@
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.ingestion.checksum import hash_sender, sha256_bytes
-from app.ingestion.classifier import classify_document
+from app.ingestion.classifier import Classification, classify_document
 from app.ingestion.storage import LocalFileStorage, safe_filename_from
 from app.models import Document
 from app.obsidian.vault_writer import ObsidianVaultWriter
@@ -23,17 +25,20 @@ class IngestionPipeline:
         self.storage = storage or LocalFileStorage(settings.resolved_data_dir)
         self.vault_writer = vault_writer or ObsidianVaultWriter(settings.resolved_vault_dir)
 
-    async def process(self, db: Session, incoming: IncomingMediaMessage) -> Document:
+    async def process(
+        self,
+        db: Session,
+        incoming: IncomingMediaMessage,
+        classification_override: Classification | None = None,
+    ) -> Document:
         existing_message = (
             db.query(Document).filter(Document.message_id == incoming.message_id).one_or_none()
         )
         if existing_message:
             return existing_message
 
-        classification = classify_document(
-            incoming.filename,
-            incoming.caption,
-            incoming.timestamp,
+        classification = classification_override or classify_document(
+            incoming.filename, incoming.caption, incoming.timestamp
         )
         sender_hash = hash_sender(incoming.sender, self.settings.phone_hash_salt)
 
@@ -84,7 +89,7 @@ class IngestionPipeline:
         sender_hash: str,
     ) -> Document:
         checksum = sha256_bytes(downloaded.content)
-        duplicate = db.query(Document).filter(Document.checksum == checksum).first()
+        duplicate = self._find_reusable_duplicate(db, checksum, classification.tender_id)
         effective_filename = incoming.filename or safe_filename_from(
             None,
             downloaded.mime_type or incoming.mime_type,
@@ -130,3 +135,18 @@ class IngestionPipeline:
         db.commit()
         db.refresh(document)
         return document
+
+    @staticmethod
+    def _find_reusable_duplicate(
+        db: Session, checksum: str, tender_id: str
+    ) -> Document | None:
+        candidates = (
+            db.query(Document)
+            .filter(Document.checksum == checksum, Document.tender_id == tender_id)
+            .order_by(Document.id.desc())
+            .all()
+        )
+        for candidate in candidates:
+            if candidate.file_path and Path(candidate.file_path).is_file():
+                return candidate
+        return None

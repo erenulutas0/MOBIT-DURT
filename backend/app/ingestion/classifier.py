@@ -53,27 +53,34 @@ def classify_document(
 
 
 def _detect_year(text: str) -> int | None:
-    match = re.search(r"\b(2024|2025|2026)\b", text)
+    match = re.search(r"(?<!\d)(2024|2025|2026)(?!\d)", text)
     return int(match.group(1)) if match else None
 
 
 def _detect_organization(text: str) -> str | None:
     for canonical, aliases in ORGANIZATIONS.items():
-        if any(alias in text for alias in aliases):
+        if any(_matches_alias(text, alias) for alias in aliases):
             return canonical
     return None
 
 
 def _detect_document_type(text: str) -> str:
     for document_type, aliases in DOCUMENT_TYPES.items():
-        if any(_normalize(alias) in text for alias in aliases):
+        if any(_matches_alias(text, alias) for alias in aliases):
             return document_type
     return "unknown"
 
 
 def _normalize(value: str) -> str:
-    lowered = value.lower()
+    separated = re.sub(r"([a-zçğıöşü])([A-ZÇĞİÖŞÜ])", r"\1 \2", value)
+    lowered = separated.lower()
     without_marks = "".join(
         char for char in unicodedata.normalize("NFKD", lowered) if not unicodedata.combining(char)
     )
-    return without_marks.replace("ı", "i")
+    ascii_turkish = without_marks.replace("ı", "i")
+    return re.sub(r"[^a-z0-9]+", " ", ascii_turkish).strip()
+
+
+def _matches_alias(text: str, alias: str) -> bool:
+    normalized_alias = _normalize(alias)
+    return normalized_alias in text or normalized_alias.replace(" ", "") in text.replace(" ", "")

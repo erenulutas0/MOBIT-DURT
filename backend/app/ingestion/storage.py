@@ -53,7 +53,13 @@ class LocalFileStorage:
                 / classification.tender_id
                 / classification.document_type
             )
-        return self.originals_dir / "unclassified" / timestamp.date().isoformat()
+        return (
+            self.originals_dir
+            / "unclassified"
+            / str(timestamp.year)
+            / f"{timestamp.month:02d}"
+            / f"{timestamp.day:02d}"
+        )
 
 
 def safe_filename_from(

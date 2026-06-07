@@ -31,3 +31,33 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Tender(Base):
+    __tablename__ = "tenders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    tender_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    organization: Mapped[str] = mapped_column(String(64), index=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class TelegramChatBinding(Base):
+    __tablename__ = "telegram_chat_bindings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    chat_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    chat_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tender_id: Mapped[str] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
