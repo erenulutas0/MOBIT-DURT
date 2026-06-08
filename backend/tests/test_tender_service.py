@@ -12,6 +12,7 @@ from app.tenders.service import (
     get_tender_stats,
     list_tender_documents,
     parse_tender_command,
+    workspace_command,
 )
 
 
@@ -21,19 +22,34 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
-def test_parse_tender_command_normalizes_id():
-    command = parse_tender_command("/tender bedaş 2026 1")
+def test_parse_tender_command_creates_dated_workspace_id():
+    command = parse_tender_command("/start BEDAS-08.06.2026")
 
     assert command is not None
     assert command.organization == "BEDAS"
     assert command.year == 2026
-    assert command.sequence == 1
-    assert command.tender_id == "BEDAS-2026-001"
+    assert command.sequence == 20260608
+    assert command.tender_id == "BEDAS-08.06.2026"
+
+
+def test_workspace_command_detects_year_from_folder_name():
+    command = workspace_command("TEDAS", "Trafo-Bakim-06.08.2026", 2025)
+
+    assert command.organization == "TEDAS"
+    assert command.year == 2026
+    assert command.tender_id == "TEDAS-Trafo-Bakim-06.08.2026"
+
+
+def test_workspace_command_uses_fallback_year_when_name_has_no_year():
+    command = workspace_command("TEDAS", "Trafo-Bakim", 2026)
+
+    assert command.year == 2026
+    assert command.tender_id == "TEDAS-Trafo-Bakim"
 
 
 def test_binding_routes_unknown_filename_to_tender_workspace():
     with _session() as db:
-        command = parse_tender_command("/tender BEDAS 2026 001")
+        command = parse_tender_command("/start BEDAS-08.06.2026")
         assert command is not None
         bind_telegram_chat(db, -100123, "2026 BEDAS 1", command)
 
@@ -48,34 +64,34 @@ def test_binding_routes_unknown_filename_to_tender_workspace():
         assert classification is not None
         assert classification.organization == "BEDAS"
         assert classification.year == 2026
-        assert classification.tender_id == "BEDAS-2026-001"
+        assert classification.tender_id == "BEDAS-08.06.2026"
         assert db.query(Tender).count() == 1
         assert db.query(TelegramChatBinding).count() == 1
 
 
 def test_binding_can_be_updated_to_another_tender():
     with _session() as db:
-        first = parse_tender_command("/tender BEDAS 2026 001")
-        second = parse_tender_command("/tender BEDAS 2026 002")
+        first = parse_tender_command("/start BEDAS-08.06.2026")
+        second = parse_tender_command("/start BEDAS-09.06.2026")
         assert first is not None and second is not None
 
         bind_telegram_chat(db, -100123, "Tender group", first)
         bind_telegram_chat(db, -100123, "Tender group", second)
 
         binding = db.query(TelegramChatBinding).one()
-        assert binding.tender_id == "BEDAS-2026-002"
+        assert binding.tender_id == "BEDAS-09.06.2026"
         assert db.query(Tender).count() == 2
 
 
-def test_company_selection_creates_dated_sequential_tenders():
+def test_company_selection_reuses_the_dated_workspace():
     with _session() as db:
         created_at = datetime(2026, 6, 6, 10, 0, tzinfo=UTC)
 
         first = create_and_bind_dated_tender(db, -100111, "First", "BEDAS", created_at)
         second = create_and_bind_dated_tender(db, -100222, "Second", "BEDAS", created_at)
 
-        assert first.tender_id == "BEDAS-2026-20260606-001"
-        assert second.tender_id == "BEDAS-2026-20260606-002"
+        assert first.tender_id == "BEDAS-2026-06-06"
+        assert second.tender_id == "BEDAS-2026-06-06"
 
 
 def test_tender_documents_and_stats_are_scoped_to_tender():

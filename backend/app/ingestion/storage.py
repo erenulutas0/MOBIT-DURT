@@ -51,7 +51,6 @@ class LocalFileStorage:
                 / str(classification.year)
                 / classification.organization
                 / classification.tender_id
-                / classification.document_type
             )
         return (
             self.originals_dir

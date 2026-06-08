@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.ingestion.classifier import Classification, ORGANIZATIONS, classify_document
+from app.ingestion.classifier import Classification, ORGANIZATIONS
 from app.models import Document, TelegramChatBinding, Tender
 
 
@@ -26,25 +26,65 @@ class TenderStats:
 
 def parse_tender_command(text: str) -> TenderCommand | None:
     parts = text.strip().split()
-    if not parts or parts[0].split("@", 1)[0].lower() != "/tender":
+    if not parts or parts[0].split("@", 1)[0].lower() != "/start":
         return None
-    if len(parts) != 4:
-        raise ValueError("Kullanim: /tender BEDAS 2026 001")
+    if len(parts) != 2:
+        raise ValueError("Kullanim: /start TEDAS-06.08.2026")
 
-    organization = _normalize_organization(parts[1])
+    match = re.fullmatch(r"([A-Za-z]+)-(\d{2}\.\d{2}\.\d{4})", parts[1])
+    if match is None:
+        raise ValueError("Klasor adi SIRKET-GG.AA.YYYY olmali. Ornek: TEDAS-06.08.2026")
+
+    organization = _normalize_organization(match.group(1))
     if organization not in ORGANIZATIONS:
         known = ", ".join(ORGANIZATIONS)
         raise ValueError(f"Bilinmeyen kurum. Desteklenenler: {known}")
 
-    if not re.fullmatch(r"20\d{2}", parts[2]):
-        raise ValueError("Yil 4 haneli olmali. Ornek: 2026")
-    year = int(parts[2])
+    try:
+        workspace_date = datetime.strptime(match.group(2), "%d.%m.%Y")
+    except ValueError as exc:
+        raise ValueError("Tarih formati GG.AA.YYYY olmali. Ornek: 06.08.2026") from exc
 
-    if not parts[3].isdigit() or int(parts[3]) < 1:
-        raise ValueError("Ihale sirasi pozitif sayi olmali. Ornek: 001")
-    sequence = int(parts[3])
-    tender_id = f"{organization}-{year}-{sequence:03d}"
+    year = workspace_date.year
+    sequence = int(workspace_date.strftime("%Y%m%d"))
+    tender_id = f"{organization}-{workspace_date:%d.%m.%Y}"
     return TenderCommand(organization, year, sequence, tender_id)
+
+
+def workspace_command(
+    organization: str,
+    folder_name: str,
+    fallback_year: int,
+) -> TenderCommand:
+    canonical = _normalize_organization(organization)
+    if canonical not in ORGANIZATIONS:
+        raise ValueError("Bilinmeyen kurum")
+
+    clean_name = re.sub(r'[<>:"/\\|?*]+', "-", folder_name.strip()).strip(" .-")
+    if not clean_name:
+        raise ValueError("Klasor adi bos olamaz.")
+
+    if clean_name.upper().startswith(f"{canonical}-"):
+        workspace_id = f"{canonical}-{clean_name[len(canonical) + 1:]}"
+    else:
+        workspace_id = f"{canonical}-{clean_name}"
+
+    year_match = re.search(r"(?<!\d)(20\d{2})(?!\d)", workspace_id)
+    year = int(year_match.group(1)) if year_match else fallback_year
+    date_match = re.search(r"(\d{2})\.(\d{2})\.(20\d{2})", workspace_id)
+    if date_match:
+        try:
+            parsed = datetime.strptime(date_match.group(0), "%d.%m.%Y")
+        except ValueError as exc:
+            raise ValueError("Klasor adindaki tarih gecersiz.") from exc
+        year = parsed.year
+
+    return TenderCommand(
+        organization=canonical,
+        year=year,
+        sequence=int(f"{year}0101"),
+        tender_id=workspace_id,
+    )
 
 
 def bind_telegram_chat(
@@ -93,20 +133,12 @@ def create_and_bind_dated_tender(
     if canonical not in ORGANIZATIONS:
         raise ValueError("Bilinmeyen kurum")
 
-    date_code = created_at.strftime("%Y%m%d")
-    prefix = f"{canonical}-{created_at.year}-{date_code}-"
-    existing_ids = [
-        row[0]
-        for row in db.query(Tender.tender_id)
-        .filter(Tender.tender_id.like(f"{prefix}%"))
-        .all()
-    ]
-    sequence = max((_sequence_from_id(value) for value in existing_ids), default=0) + 1
+    workspace_id = f"{canonical}-{created_at:%Y-%m-%d}"
     command = TenderCommand(
         organization=canonical,
         year=created_at.year,
-        sequence=sequence,
-        tender_id=f"{prefix}{sequence:03d}",
+        sequence=int(created_at.strftime("%Y%m%d")),
+        tender_id=workspace_id,
     )
     return bind_telegram_chat(db, chat_id, chat_title, command)
 
@@ -130,12 +162,11 @@ def classification_for_telegram_chat(
     if tender is None:
         return None
 
-    detected = classify_document(filename, caption, timestamp)
     return Classification(
         year=tender.year,
         organization=tender.organization,
         tender_id=tender.tender_id,
-        document_type=detected.document_type,
+        document_type="document",
     )
 
 
@@ -181,10 +212,3 @@ def _normalize_organization(value: str) -> str:
     normalized = value.upper()
     replacements = str.maketrans({"Ş": "S", "İ": "I", "Ğ": "G", "Ü": "U", "Ö": "O", "Ç": "C"})
     return normalized.translate(replacements)
-
-
-def _sequence_from_id(tender_id: str) -> int:
-    try:
-        return int(tender_id.rsplit("-", 1)[1])
-    except (IndexError, ValueError):
-        return 0

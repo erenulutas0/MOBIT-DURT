@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         default="https://graph.facebook.com", alias="WHATSAPP_GRAPH_BASE_URL"
     )
     telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
+    telegram_admin_user_ids: str = Field(default="", alias="TELEGRAM_ADMIN_USER_IDS")
     database_url: str = Field(default="sqlite:///./data/db.sqlite3", alias="DATABASE_URL")
     data_dir: Path = Field(default=PROJECT_ROOT / "data", alias="DATA_DIR")
     vault_dir: Path = Field(default=PROJECT_ROOT / "vault", alias="VAULT_DIR")
@@ -49,6 +50,14 @@ class Settings(BaseSettings):
             db_path = PROJECT_ROOT / self.database_url.removeprefix("sqlite:///./")
             return f"sqlite:///{db_path.as_posix()}"
         return self.database_url
+
+    @property
+    def telegram_admin_ids(self) -> set[int]:
+        return {
+            int(value.strip())
+            for value in self.telegram_admin_user_ids.split(",")
+            if value.strip().lstrip("-").isdigit()
+        }
 
 
 @lru_cache

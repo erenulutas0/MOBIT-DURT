@@ -23,11 +23,10 @@ def test_storage_saves_classified_file_under_tender_path(tmp_path):
 
     assert stored.path.exists()
     assert stored.path.name == "BEDAS-teknik-sartname.pdf"
-    assert stored.path.parts[-5:] == (
+    assert stored.path.parts[-4:] == (
         "2025",
         "BEDAS",
         "BEDAS-2025-INBOX",
-        "technical_spec",
         "BEDAS-teknik-sartname.pdf",
     )
 

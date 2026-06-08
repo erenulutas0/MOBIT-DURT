@@ -53,7 +53,7 @@ async def test_pipeline_restores_deleted_duplicate_file(tmp_path):
     with _session() as db:
         first = await pipeline.process(db, _incoming("first"), classification)
         assert first.file_path is not None
-        first_path = pipeline.storage.originals_dir / "2026" / "BEDAS" / "BEDAS-2026-001" / "unknown" / "TS.pdf"
+        first_path = pipeline.storage.originals_dir / "2026" / "BEDAS" / "BEDAS-2026-001" / "TS.pdf"
         assert first_path.exists()
         first_path.unlink()
 
