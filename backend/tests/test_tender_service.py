@@ -4,15 +4,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Document, TelegramChatBinding, Tender
+from app.models import Document, TelegramChatBinding, Tender, TenderOrganization
 from app.tenders.service import (
+    add_tender_organization,
     bind_telegram_chat,
     classification_for_telegram_chat,
     create_and_bind_dated_tender,
     get_tender_stats,
+    list_tender_organizations,
     list_tender_documents,
     parse_tender_command,
-    workspace_command,
+    set_internal_unit,
 )
 
 
@@ -22,34 +24,19 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
-def test_parse_tender_command_creates_dated_workspace_id():
-    command = parse_tender_command("/start BEDAS-08.06.2026")
+def test_parse_tender_command_normalizes_id():
+    command = parse_tender_command("/tender bedaş 2026 1")
 
     assert command is not None
     assert command.organization == "BEDAS"
     assert command.year == 2026
-    assert command.sequence == 20260608
-    assert command.tender_id == "BEDAS-08.06.2026"
-
-
-def test_workspace_command_detects_year_from_folder_name():
-    command = workspace_command("TEDAS", "Trafo-Bakim-06.08.2026", 2025)
-
-    assert command.organization == "TEDAS"
-    assert command.year == 2026
-    assert command.tender_id == "TEDAS-Trafo-Bakim-06.08.2026"
-
-
-def test_workspace_command_uses_fallback_year_when_name_has_no_year():
-    command = workspace_command("TEDAS", "Trafo-Bakim", 2026)
-
-    assert command.year == 2026
-    assert command.tender_id == "TEDAS-Trafo-Bakim"
+    assert command.sequence == 1
+    assert command.tender_id == "BEDAS-2026-001"
 
 
 def test_binding_routes_unknown_filename_to_tender_workspace():
     with _session() as db:
-        command = parse_tender_command("/start BEDAS-08.06.2026")
+        command = parse_tender_command("/tender BEDAS 2026 001")
         assert command is not None
         bind_telegram_chat(db, -100123, "2026 BEDAS 1", command)
 
@@ -64,34 +51,68 @@ def test_binding_routes_unknown_filename_to_tender_workspace():
         assert classification is not None
         assert classification.organization == "BEDAS"
         assert classification.year == 2026
-        assert classification.tender_id == "BEDAS-08.06.2026"
+        assert classification.tender_id == "BEDAS-2026-001"
         assert db.query(Tender).count() == 1
         assert db.query(TelegramChatBinding).count() == 1
 
 
 def test_binding_can_be_updated_to_another_tender():
     with _session() as db:
-        first = parse_tender_command("/start BEDAS-08.06.2026")
-        second = parse_tender_command("/start BEDAS-09.06.2026")
+        first = parse_tender_command("/tender BEDAS 2026 001")
+        second = parse_tender_command("/tender BEDAS 2026 002")
         assert first is not None and second is not None
 
         bind_telegram_chat(db, -100123, "Tender group", first)
         bind_telegram_chat(db, -100123, "Tender group", second)
 
         binding = db.query(TelegramChatBinding).one()
-        assert binding.tender_id == "BEDAS-09.06.2026"
+        assert binding.tender_id == "BEDAS-2026-002"
         assert db.query(Tender).count() == 2
 
 
-def test_company_selection_reuses_the_dated_workspace():
+def test_company_selection_creates_dated_sequential_tenders():
     with _session() as db:
         created_at = datetime(2026, 6, 6, 10, 0, tzinfo=UTC)
 
         first = create_and_bind_dated_tender(db, -100111, "First", "BEDAS", created_at)
         second = create_and_bind_dated_tender(db, -100222, "Second", "BEDAS", created_at)
 
-        assert first.tender_id == "BEDAS-2026-06-06"
-        assert second.tender_id == "BEDAS-2026-06-06"
+        assert first.tender_id == "BEDAS-2026-20260606-001"
+        assert second.tender_id == "BEDAS-2026-20260606-002"
+
+
+def test_internal_unit_is_saved_and_used_in_classification():
+    with _session() as db:
+        set_internal_unit(db, -100111, "Group", "MOBIT")
+        tender = create_and_bind_dated_tender(
+            db, -100111, "Group", "BEDAS", datetime(2026, 6, 6, tzinfo=UTC), "MOBIT"
+        )
+
+        classification = classification_for_telegram_chat(
+            db, -100111, "file.pdf", None, datetime(2026, 6, 6, tzinfo=UTC)
+        )
+
+        assert tender.internal_unit == "MOBIT"
+        assert classification is not None
+        assert classification.internal_unit == "MOBIT"
+
+
+def test_organization_catalog_supports_paging_search_and_add():
+    with _session() as db:
+        for index in range(12):
+            db.add(TenderOrganization(code=f"ORG_{index}", name=f"Organization {index:02d}"))
+        db.commit()
+
+        first_page = list_tender_organizations(db, page=0)
+        second_page = list_tender_organizations(db, page=1)
+        added = add_tender_organization(db, "Yeni Şirket")
+        search = list_tender_organizations(db, search="Yeni")
+
+        assert len(first_page.items) == 5
+        assert len(second_page.items) == 5
+        assert first_page.total_pages == 3
+        assert added.code == "YENI_SIRKET"
+        assert [item.name for item in search.items] == ["Yeni Şirket"]
 
 
 def test_tender_documents_and_stats_are_scoped_to_tender():

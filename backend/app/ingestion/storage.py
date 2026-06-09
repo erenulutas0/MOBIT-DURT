@@ -46,12 +46,10 @@ class LocalFileStorage:
 
     def _target_dir(self, classification: Classification, timestamp: datetime) -> Path:
         if classification.year and classification.organization:
-            return (
-                self.originals_dir
-                / str(classification.year)
-                / classification.organization
-                / classification.tender_id
-            )
+            target = self.originals_dir / str(classification.year)
+            if classification.internal_unit:
+                target /= classification.internal_unit
+            return target / classification.organization / classification.tender_id
         return (
             self.originals_dir
             / "unclassified"

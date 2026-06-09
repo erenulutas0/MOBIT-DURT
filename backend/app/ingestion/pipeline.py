@@ -125,6 +125,7 @@ class IngestionPipeline:
             checksum=checksum,
             file_path=file_path,
             file_size=downloaded.file_size,
+            internal_unit=classification.internal_unit,
             organization=classification.organization,
             year=classification.year,
             tender_id=classification.tender_id,

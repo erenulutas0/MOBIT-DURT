@@ -29,6 +29,7 @@ class Classification:
     organization: str | None
     tender_id: str
     document_type: str
+    internal_unit: str | None = None
 
 
 def classify_document(

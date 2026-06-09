@@ -27,9 +27,12 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def init_db() -> None:
     from app import models  # noqa: F401
+    from app.tenders.service import seed_tender_organizations
 
     Base.metadata.create_all(bind=engine)
     _ensure_sqlite_columns()
+    with SessionLocal() as db:
+        seed_tender_organizations(db)
 
 
 def _ensure_sqlite_columns() -> None:
@@ -40,10 +43,17 @@ def _ensure_sqlite_columns() -> None:
     if "documents" not in inspector.get_table_names():
         return
 
-    columns = {column["name"] for column in inspector.get_columns("documents")}
-    if "stored_filename" not in columns:
-        with engine.begin() as connection:
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspector.get_columns("documents")}
+        if "stored_filename" not in columns:
             connection.execute(text("ALTER TABLE documents ADD COLUMN stored_filename VARCHAR(255)"))
+        if "internal_unit" not in columns:
+            connection.execute(text("ALTER TABLE documents ADD COLUMN internal_unit VARCHAR(64)"))
+
+        if "tenders" in inspector.get_table_names():
+            tender_columns = {column["name"] for column in inspector.get_columns("tenders")}
+            if "internal_unit" not in tender_columns:
+                connection.execute(text("ALTER TABLE tenders ADD COLUMN internal_unit VARCHAR(64)"))
 
 
 def get_db() -> Generator[Session, None, None]:

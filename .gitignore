@@ -8,6 +8,8 @@ htmlcov/
 .ruff_cache/
 .venv/
 venv/
+frontend/node_modules/
+frontend/dist/
 data/db.sqlite3
 data/logs/*
 !data/logs/.gitkeep

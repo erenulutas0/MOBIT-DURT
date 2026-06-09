@@ -9,6 +9,7 @@ from app.database import get_db, init_db
 from app.models import Document, Tender
 from app.utils.logging import configure_logging
 from app.whatsapp.webhook import router as whatsapp_router
+from app.dashboard.router import router as dashboard_router
 
 
 class DocumentOut(BaseModel):
@@ -25,6 +26,7 @@ class DocumentOut(BaseModel):
     checksum: str | None
     file_path: str | None
     file_size: int | None
+    internal_unit: str | None
     organization: str | None
     year: int | None
     tender_id: str
@@ -41,6 +43,7 @@ class TenderOut(BaseModel):
     organization: str
     year: int
     sequence: int
+    internal_unit: str | None
     title: str | None
     status: str
     created_at: datetime
@@ -57,6 +60,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Tender Knowledge Hub", version="0.1.0", lifespan=lifespan)
 app.include_router(whatsapp_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/health")

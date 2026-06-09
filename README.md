@@ -86,18 +86,41 @@ After binding, all media sent to that group is stored under `BEDAS-2026-001`, ev
 The recommended group setup flow is:
 
 ```text
+/unit
+```
+
+First select the internal company unit: Mobit, Stok Enerji, Depart, Area, or Mobiser. Then run:
+
+```text
 /company
 ```
 
-Select the tender organization from the buttons. The bot creates and binds a dated workspace such as `BEDAS-2026-20260606-001`. Until a group is bound, the bot refuses document ingestion and asks users to select a company.
+The tender organization catalog is stored in SQLite and displayed five organizations per page. Search or add organizations with:
+
+```text
+/company_search bedas
+/company_add Yeni Sirket Adi
+```
+
+For Telegram's native inline search field, enable inline mode in BotFather:
+
+```text
+/setinline -> select DocsMobitBot -> enter a placeholder such as "Sirket ara..."
+```
+
+After restarting the bot, the `Sirket ara` button opens Telegram's inline search interface and filters the SQLite organization catalog as the user types. If inline mode is disabled, the button falls back to asking for the company name in chat.
+
+After selecting the tender organization, the bot creates and binds a dated workspace such as `BEDAS-2026-20260606-001`. Until setup is complete, the bot refuses document ingestion.
 
 When the bot is added during group creation or added to an existing group later, it introduces itself and immediately shows the company selector. Use `/help` at any time to display the workflow and available commands.
 
 Useful Telegram commands:
 
 ```text
+/unit           Select the internal company unit
 /company        Select the tender organization and create a dated workspace
-/companies      List supported organizations
+/company_search Search the tender organization catalog
+/company_add    Add a new tender organization to the catalog
 /documents      List the latest 10 documents for the bound tender
 /stats          Show document type and processing status counts
 /tender_status  Show the tender currently bound to the group
@@ -144,8 +167,10 @@ Tests use fixtures and fakes. They do not make real WhatsApp API calls.
 Classified files are stored under:
 
 ```text
-data/originals/{year}/{organization}/{tender_id}/{document_type}/{safe_filename}
+data/originals/{year}/{internal_unit}/{organization}/{tender_id}/{safe_filename}
 ```
+
+Document types such as `technical_spec` and `unknown` remain searchable metadata in SQLite and Obsidian; they do not create physical subfolders.
 
 Unclassified files are stored by received date under:
 

@@ -29,7 +29,10 @@ class ObsidianVaultWriter:
     def _tender_dir(self, document: Document) -> Path:
         year = str(document.year) if document.year else "unclassified"
         organization = document.organization or "unclassified"
-        return self.vault_dir / "ihaleler" / year / organization / document.tender_id
+        root = self.vault_dir / "ihaleler" / year
+        if document.internal_unit:
+            root /= document.internal_unit
+        return root / organization / document.tender_id
 
     def _document_slug(self, document: Document) -> str:
         source = (
