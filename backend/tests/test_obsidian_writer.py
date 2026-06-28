@@ -11,7 +11,7 @@ def test_obsidian_writer_creates_notes_and_preserves_human_content(tmp_path):
         id=7,
         message_id="wamid.TEST-DOCUMENT",
         sender_hash="abc123",
-        source="whatsapp",
+        source="telegram",
         timestamp=datetime(2025, 1, 1, tzinfo=UTC),
         media_id="media-123",
         mime_type="application/pdf",

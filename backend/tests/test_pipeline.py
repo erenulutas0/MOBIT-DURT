@@ -7,11 +7,10 @@ from sqlalchemy.orm import sessionmaker
 from app.config import Settings
 from app.database import Base
 from app.ingestion.classifier import Classification
+from app.ingestion.media import DownloadedMedia, IncomingMediaMessage
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.storage import LocalFileStorage
 from app.obsidian.vault_writer import ObsidianVaultWriter
-from app.whatsapp.media import DownloadedMedia
-from app.whatsapp.parser import IncomingMediaMessage
 
 
 class FakeDownloader:

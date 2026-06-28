@@ -3,9 +3,8 @@ from datetime import UTC, datetime
 
 from app.config import get_settings
 from app.database import SessionLocal, init_db
+from app.ingestion.media import DownloadedMedia, IncomingMediaMessage
 from app.ingestion.pipeline import IngestionPipeline
-from app.whatsapp.media import DownloadedMedia
-from app.whatsapp.parser import IncomingMediaMessage
 
 
 class FakeDownloader:
@@ -30,13 +29,14 @@ async def main() -> None:
     run_id = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     incoming = IncomingMediaMessage(
         message_id=f"smoke-{run_id}",
-        sender="+905551112233",
+        sender="telegram:123456789",
         timestamp=datetime(2026, 6, 2, 12, 0, tzinfo=UTC),
         media_id=f"fake-media-smoke-test-{run_id}",
         mime_type="application/pdf",
         filename="BEDAS-2026-teknik-sartname.pdf",
         caption="BEDAŞ 2026 teknik şartname smoke test",
         message_type="document",
+        source="telegram",
     )
 
     with SessionLocal() as db:

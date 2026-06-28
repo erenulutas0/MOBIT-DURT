@@ -55,6 +55,13 @@ def _ensure_sqlite_columns() -> None:
             if "internal_unit" not in tender_columns:
                 connection.execute(text("ALTER TABLE tenders ADD COLUMN internal_unit VARCHAR(64)"))
 
+        if "erp_users" in inspector.get_table_names():
+            erp_user_columns = {column["name"] for column in inspector.get_columns("erp_users")}
+            if "password_hash" not in erp_user_columns:
+                connection.execute(text("ALTER TABLE erp_users ADD COLUMN password_hash VARCHAR(255)"))
+            if "approved_at" not in erp_user_columns:
+                connection.execute(text("ALTER TABLE erp_users ADD COLUMN approved_at DATETIME"))
+
 
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()

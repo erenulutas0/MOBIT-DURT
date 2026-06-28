@@ -5,23 +5,22 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.ingestion.checksum import hash_sender, sha256_bytes
 from app.ingestion.classifier import Classification, classify_document
+from app.ingestion.media import DownloadedMedia, IncomingMediaMessage
 from app.ingestion.storage import LocalFileStorage, safe_filename_from
 from app.models import Document
 from app.obsidian.vault_writer import ObsidianVaultWriter
-from app.whatsapp.media import DownloadedMedia, WhatsAppMediaDownloader
-from app.whatsapp.parser import IncomingMediaMessage
 
 
 class IngestionPipeline:
     def __init__(
         self,
         settings: Settings,
-        downloader: WhatsAppMediaDownloader | None = None,
+        downloader,
         storage: LocalFileStorage | None = None,
         vault_writer: ObsidianVaultWriter | None = None,
     ):
         self.settings = settings
-        self.downloader = downloader or WhatsAppMediaDownloader(settings)
+        self.downloader = downloader
         self.storage = storage or LocalFileStorage(settings.resolved_data_dir)
         self.vault_writer = vault_writer or ObsidianVaultWriter(settings.resolved_vault_dir)
 

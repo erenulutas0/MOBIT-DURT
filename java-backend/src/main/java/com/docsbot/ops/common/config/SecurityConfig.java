@@ -1,0 +1,287 @@
+package com.docsbot.ops.common.config;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationConverter jwtAuthenticationConverter
+    ) throws Exception {
+        return http
+                .cors(Customizer.withDefaults())
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .httpBasic(httpBasic -> httpBasic.disable())
+                .formLogin(form -> form.disable())
+                .oauth2ResourceServer(resourceServer -> resourceServer
+                        .authenticationEntryPoint(this::writeUnauthorized)
+                        .accessDeniedHandler(this::writeForbidden)
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(this::writeUnauthorized)
+                        .accessDeniedHandler(this::writeForbidden))
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(
+                                "/health",
+                                "/actuator/health",
+                                "/erp/auth/admin-login",
+                                "/erp/auth/login",
+                                "/erp/auth/refresh",
+                                "/erp/auth/logout",
+                                "/webhook/telegram",
+                                "/shared/documents/**")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/erp/account-requests")
+                        .permitAll()
+                        .requestMatchers("/erp/account-requests/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                "/documents/**",
+                                "/tenders/**",
+                                "/dashboard/tree",
+                                "/dashboard/vault/**",
+                                "/dashboard/files/**",
+                                "/dashboard/tree-file")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/dashboard/upload")
+                        .hasRole("ADMIN")
+                        .requestMatchers("/telegram/chats/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/users")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/erp/users/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/tasks")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                "/erp/workflow-templates",
+                                "/erp/workflow-templates/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/erp/tasks/bulk/status")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/tasks/bulk/assignees")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/tasks/from-document/*")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/erp/task-documents/*")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/erp/tasks/*/approve-completion",
+                                "/erp/tasks/*/reject-completion")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/teams")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/erp/teams/*/members/*")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/erp/teams/*/members/*")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/erp/analytics/summary",
+                                "/erp/activity")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/erp/overview",
+                                "/erp/users",
+                                "/erp/users/page",
+                                "/erp/teams",
+                                "/erp/tasks",
+                                "/erp/tasks/page",
+                                "/erp/tasks/*",
+                                "/erp/tasks/*/documents",
+                                "/erp/task-documents/*/content")
+                        .authenticated()
+                        .requestMatchers(
+                                "/document-groups",
+                                "/document-groups/**")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.POST, "/erp/users/*/presence")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/erp/tasks/*")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/erp/tasks/*/completion-request",
+                                "/erp/tasks/*/comments",
+                                "/erp/tasks/*/documents")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/erp/notifications",
+                                "/erp/notifications/unread-count",
+                                "/erp/notifications/stream",
+                                "/erp/messages",
+                                "/erp/notification-preferences",
+                                "/erp/web-push/vapid-public-key")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/erp/messages")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/erp/mobile-push/tokens")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/erp/mobile-push/tokens")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/erp/web-push/subscriptions")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/erp/web-push/subscriptions")
+                        .authenticated()
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/erp/notifications/*/read",
+                                "/erp/notifications/read-all",
+                                "/erp/messages/*/read",
+                                "/erp/notification-preferences")
+                        .authenticated()
+                        .anyRequest()
+                        .denyAll())
+                .build();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of(
+                "https://localhost",
+                "http://localhost",
+                "capacitor://localhost",
+                "ionic://localhost"));
+        configuration.setAllowedOriginPatterns(List.of(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "https://localhost:*"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
+        configuration.setExposedHeaders(List.of("Content-Disposition"));
+        configuration.setAllowCredentials(false);
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder(12);
+    }
+
+    @Bean
+    JwtEncoder jwtEncoder(DocsBotProperties properties) {
+        return NimbusJwtEncoder.withSecretKey(jwtSecret(properties)).build();
+    }
+
+    @Bean
+    JwtDecoder jwtDecoder(DocsBotProperties properties) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtSecret(properties))
+                .macAlgorithm(MacAlgorithm.HS256)
+                .build();
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.jwt().issuer()));
+        return decoder;
+    }
+
+    @Bean
+    JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        authoritiesConverter.setAuthoritiesClaimName("roles");
+        authoritiesConverter.setAuthorityPrefix("ROLE_");
+
+        JwtAuthenticationConverter authenticationConverter = new JwtAuthenticationConverter();
+        authenticationConverter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        return authenticationConverter;
+    }
+
+    private SecretKey jwtSecret(DocsBotProperties properties) {
+        String secret = properties.jwt().secret();
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("DOCSBOT_JWT_SECRET must contain at least 32 bytes");
+        }
+        return new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+    }
+
+    private void writeUnauthorized(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Exception exception
+    ) throws IOException {
+        writeSecurityError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+    }
+
+    private void writeForbidden(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Exception exception
+    ) throws IOException {
+        writeSecurityError(request, response, HttpServletResponse.SC_FORBIDDEN, "Forbidden");
+    }
+
+    private void writeSecurityError(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            int status,
+            String error
+    ) throws IOException {
+        response.setHeader("WWW-Authenticate", null);
+        response.setStatus(status);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType("application/json");
+        response.getWriter().printf(
+                "{\"timestamp\":\"%s\",\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\",\"fieldErrors\":{}}",
+                Instant.now(),
+                status,
+                error,
+                error,
+                request.getRequestURI());
+    }
+}

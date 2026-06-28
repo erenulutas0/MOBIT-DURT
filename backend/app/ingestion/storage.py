@@ -63,7 +63,7 @@ def safe_filename_from(
     original_filename: str | None, mime_type: str | None, checksum: str
 ) -> str:
     fallback_ext = mimetypes.guess_extension(mime_type or "") or ".bin"
-    filename = original_filename or f"whatsapp-media-{checksum[:12]}{fallback_ext}"
+    filename = original_filename or f"telegram-media-{checksum[:12]}{fallback_ext}"
     path = Path(filename)
     stem = _slugify(path.stem) or f"document-{checksum[:12]}"
     suffix = path.suffix or fallback_ext

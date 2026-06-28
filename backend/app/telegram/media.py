@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.config import Settings
-from app.whatsapp.media import DownloadedMedia, MediaDownloadError
+from app.ingestion.media import DownloadedMedia, MediaDownloadError
 
 
 class TelegramMediaDownloader:

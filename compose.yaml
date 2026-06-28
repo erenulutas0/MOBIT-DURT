@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: docsbot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: docsbot
+      POSTGRES_USER: docsbot
+      POSTGRES_PASSWORD: docsbot-local
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - docsbot_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docsbot -d docsbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  docsbot_postgres_data:

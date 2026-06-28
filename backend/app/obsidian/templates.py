@@ -39,7 +39,7 @@ def document_note_template(document: Document, tender_note_name: str) -> str:
             f"status: {document.status}",
             "---",
             "",
-            f"# {document.original_filename or 'WhatsApp Document'}",
+            f"# {document.original_filename or 'Telegram Document'}",
             "",
             f"Tender: [[{tender_note_name}]]",
             "",

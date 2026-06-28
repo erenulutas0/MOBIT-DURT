@@ -1,0 +1,32 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+      - org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration
+      - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+
+docsbot:
+  data-dir: ../data
+  vault-dir: ../vault
+  max-file-size-bytes: 26214400
+  phone-hash-salt: test-phone-hash-salt
+  telegram:
+    enabled: false
+    token:
+    api-base-url: http://127.0.0.1
+    poll-timeout-seconds: 1
+    poll-delay-ms: 1000
+    allowed-chat-ids:
+    admin-user-ids:
+    mode: polling
+    webhook-url:
+    webhook-secret:
+  admin:
+    username: admin
+    password: admin123
+    display-name: Admin
+  jwt:
+    issuer: docsbot-ops-test
+    secret: test-secret-that-is-at-least-32-bytes-long
+    access-token-minutes: 15

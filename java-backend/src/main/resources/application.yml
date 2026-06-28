@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: docsbot-ops-backend
+  profiles:
+    default: nodb
+  config:
+    import: optional:file:../.env[.properties]
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  threads:
+    virtual:
+      enabled: true
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE_BYTES:26214400}
+      max-request-size: ${MAX_FILE_SIZE_BYTES:26214400}
+
+server:
+  address: ${JAVA_SERVER_ADDRESS:127.0.0.1}
+  port: ${JAVA_SERVER_PORT:8080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+docsbot:
+  data-dir: ${DATA_DIR:../data}
+  vault-dir: ${VAULT_DIR:../vault}
+  max-file-size-bytes: ${MAX_FILE_SIZE_BYTES:26214400}
+  phone-hash-salt: ${PHONE_HASH_SALT:change-me-local-salt}
+  production: ${DOCSBOT_PRODUCTION:false}
+  deadline-scan-ms: ${ERP_DEADLINE_SCAN_MS:60000}
+  deadline-initial-delay-ms: ${ERP_DEADLINE_INITIAL_DELAY_MS:10000}
+  workflow-template-scan-ms: ${ERP_WORKFLOW_TEMPLATE_SCAN_MS:60000}
+  workflow-template-initial-delay-ms: ${ERP_WORKFLOW_TEMPLATE_INITIAL_DELAY_MS:20000}
+  web-push:
+    enabled: ${DOCSBOT_WEB_PUSH_ENABLED:false}
+    public-key: ${DOCSBOT_WEB_PUSH_PUBLIC_KEY:}
+    private-key: ${DOCSBOT_WEB_PUSH_PRIVATE_KEY:}
+    subject: ${DOCSBOT_WEB_PUSH_SUBJECT:mailto:admin@example.com}
+    ttl-seconds: ${DOCSBOT_WEB_PUSH_TTL_SECONDS:86400}
+  mobile-push:
+    enabled: ${DOCSBOT_MOBILE_PUSH_ENABLED:false}
+    fcm-project-id: ${DOCSBOT_FCM_PROJECT_ID:}
+    fcm-access-token: ${DOCSBOT_FCM_ACCESS_TOKEN:}
+    fcm-service-account-json: ${DOCSBOT_FCM_SERVICE_ACCOUNT_JSON:}
+    fcm-service-account-path: ${DOCSBOT_FCM_SERVICE_ACCOUNT_PATH:}
+    fcm-api-base-url: ${DOCSBOT_FCM_API_BASE_URL:https://fcm.googleapis.com}
+    apns-team-id: ${DOCSBOT_APNS_TEAM_ID:}
+    apns-key-id: ${DOCSBOT_APNS_KEY_ID:}
+    apns-bundle-id: ${DOCSBOT_APNS_BUNDLE_ID:}
+    apns-private-key: ${DOCSBOT_APNS_PRIVATE_KEY:}
+    apns-private-key-path: ${DOCSBOT_APNS_PRIVATE_KEY_PATH:}
+    apns-environment: ${DOCSBOT_APNS_ENVIRONMENT:sandbox}
+    apns-api-base-url: ${DOCSBOT_APNS_API_BASE_URL:}
+    timeout-seconds: ${DOCSBOT_MOBILE_PUSH_TIMEOUT_SECONDS:10}
+    process-delay-ms: ${DOCSBOT_MOBILE_PUSH_PROCESS_DELAY_MS:15000}
+    initial-delay-ms: ${DOCSBOT_MOBILE_PUSH_INITIAL_DELAY_MS:10000}
+  email:
+    enabled: ${DOCSBOT_EMAIL_ENABLED:false}
+    dry-run: ${DOCSBOT_EMAIL_DRY_RUN:false}
+    from: ${DOCSBOT_EMAIL_FROM:docsbot@example.com}
+    admin-to: ${DOCSBOT_EMAIL_ADMIN_TO:}
+    subject-prefix: ${DOCSBOT_EMAIL_SUBJECT_PREFIX:[DocsBot Ops]}
+  telegram:
+    enabled: ${TELEGRAM_POLLING_ENABLED:false}
+    token: ${TELEGRAM_BOT_TOKEN:}
+    api-base-url: ${TELEGRAM_API_BASE_URL:https://api.telegram.org}
+    poll-timeout-seconds: ${TELEGRAM_POLL_TIMEOUT_SECONDS:25}
+    poll-delay-ms: ${TELEGRAM_POLL_DELAY_MS:1000}
+    allowed-chat-ids: ${TELEGRAM_ALLOWED_CHAT_IDS:}
+    admin-user-ids: ${TELEGRAM_ADMIN_USER_IDS:}
+    mode: ${TELEGRAM_MODE:polling}
+    webhook-url: ${TELEGRAM_WEBHOOK_URL:}
+    webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}
+  admin:
+    username: ${ERP_ADMIN_USERNAME:admin}
+    password: ${ERP_ADMIN_PASSWORD:admin123}
+    display-name: ${ERP_ADMIN_DISPLAY_NAME:Admin}
+  jwt:
+    issuer: ${DOCSBOT_JWT_ISSUER:docsbot-ops}
+    secret: ${DOCSBOT_JWT_SECRET:local-development-secret-change-me-32-bytes}
+    access-token-minutes: ${DOCSBOT_JWT_ACCESS_TOKEN_MINUTES:60}
+
+logging:
+  structured:
+    format:
+      console: logstash

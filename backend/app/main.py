@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db, init_db
 from app.models import Document, Tender
 from app.utils.logging import configure_logging
-from app.whatsapp.webhook import router as whatsapp_router
 from app.dashboard.router import router as dashboard_router
+from app.erp.router import router as erp_router
 
 
 class DocumentOut(BaseModel):
@@ -59,8 +59,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Tender Knowledge Hub", version="0.1.0", lifespan=lifespan)
-app.include_router(whatsapp_router)
 app.include_router(dashboard_router)
+app.include_router(erp_router)
 
 
 @app.get("/health")

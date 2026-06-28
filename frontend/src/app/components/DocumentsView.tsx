@@ -1,6 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Info, BookOpen, Filter, ChevronDown, Search } from "lucide-react";
-import { ApiDocument, displayStatus, fileType, formatBytes, getDocuments } from "../api";
+import {
+  BookOpen,
+  ChevronDown,
+  ClipboardPlus,
+  Download,
+  Eye,
+  Filter,
+  Info,
+  Search,
+  X,
+} from "lucide-react";
+import {
+  ApiDocument,
+  ERPTeam,
+  ERPUser,
+  createTaskFromTenderDocument,
+  displayStatus,
+  downloadBlob,
+  fileType,
+  formatBytes,
+  getDocuments,
+  getERPOverview,
+  getTenderDocumentBlob,
+  openBlob,
+} from "../api";
 
 type Doc = {
   id: string;
@@ -58,6 +81,17 @@ export function DocumentsView() {
   const [orgFilter, setOrgFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [fileActionId, setFileActionId] = useState<number | null>(null);
+  const [taskDocument, setTaskDocument] = useState<Doc | null>(null);
+  const [users, setUsers] = useState<ERPUser[]>([]);
+  const [teams, setTeams] = useState<ERPTeam[]>([]);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskPriority, setTaskPriority] = useState("normal");
+  const [taskDeadline, setTaskDeadline] = useState("");
+  const [assigneeUserId, setAssigneeUserId] = useState("");
+  const [assigneeTeamId, setAssigneeTeamId] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
 
   useEffect(() => {
     getDocuments().then(setApiDocs).catch((err) => setError(err.message));
@@ -90,6 +124,59 @@ export function DocumentsView() {
     if (search && !d.filename.toLowerCase().includes(search.toLowerCase()) && !d.tenderId.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  async function handleFile(doc: Doc, download: boolean) {
+    setError("");
+    setFileActionId(doc.apiId);
+    try {
+      const blob = await getTenderDocumentBlob(doc.apiId, download);
+      if (download) downloadBlob(blob, doc.filename);
+      else openBlob(blob);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "File could not be opened");
+    } finally {
+      setFileActionId(null);
+    }
+  }
+
+  async function openTaskDialog(doc: Doc) {
+    setError("");
+    setTaskDocument(doc);
+    setTaskTitle(`${doc.tenderId} - ${doc.filename}`);
+    setTaskDescription("");
+    setTaskPriority("normal");
+    setTaskDeadline("");
+    setAssigneeUserId("");
+    setAssigneeTeamId("");
+    try {
+      const overview = await getERPOverview();
+      setUsers(overview.users.filter((user) => user.role !== "admin"));
+      setTeams(overview.teams);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ERP assignees could not be loaded");
+    }
+  }
+
+  async function submitTask() {
+    if (!taskDocument) return;
+    setError("");
+    setTaskSaving(true);
+    try {
+      await createTaskFromTenderDocument(taskDocument.apiId, {
+        title: taskTitle,
+        description: taskDescription || null,
+        assignee_user_ids: assigneeUserId ? [Number(assigneeUserId)] : [],
+        assignee_team_ids: assigneeTeamId ? [Number(assigneeTeamId)] : [],
+        priority: taskPriority,
+        deadline_at: taskDeadline ? new Date(taskDeadline).toISOString() : null,
+      });
+      setTaskDocument(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Task could not be created");
+    } finally {
+      setTaskSaving(false);
+    }
+  }
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "Inter, sans-serif" }}>
@@ -196,14 +283,37 @@ export function DocumentsView() {
                     <td style={{ padding: "9px 14px", fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{doc.uploaded}</td>
                     <td style={{ padding: "9px 14px" }}>
                       <div className="flex items-center gap-2">
-                        <a href={`/dashboard/files/${doc.apiId}`} title="Download" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}>
+                        <button
+                          type="button"
+                          disabled={fileActionId === doc.apiId}
+                          onClick={() => handleFile(doc, true)}
+                          title="Download"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}
+                        >
                           <Download size={14} />
-                        </a>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={fileActionId === doc.apiId}
+                          onClick={() => handleFile(doc, false)}
+                          title="Open / Preview"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}
+                        >
+                          <Eye size={14} />
+                        </button>
                         <button title="Metadata" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}>
                           <Info size={14} />
                         </button>
                         <button title="Open Obsidian" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}>
                           <BookOpen size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openTaskDialog(doc)}
+                          title="Create ERP task from document"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--primary)", padding: 2 }}
+                        >
+                          <ClipboardPlus size={14} />
                         </button>
                       </div>
                     </td>
@@ -214,6 +324,75 @@ export function DocumentsView() {
           </tbody>
         </table>
       </div>
+
+      {taskDocument && (
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ background: "rgba(15, 23, 42, 0.48)", zIndex: 80 }}
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setTaskDocument(null);
+          }}
+        >
+          <div style={{ width: 520, maxWidth: "calc(100vw - 32px)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 6 }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Create ERP task</div>
+                <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>{taskDocument.filename}</div>
+              </div>
+              <button type="button" onClick={() => setTaskDocument(null)} title="Close" style={{ background: "none", border: "none", cursor: "pointer" }}>
+                <X size={17} />
+              </button>
+            </div>
+            <div className="p-5 grid gap-3">
+              <label style={{ fontSize: 12 }}>
+                Task title
+                <input className="w-full mt-1 px-3 py-2" value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 4 }} />
+              </label>
+              <label style={{ fontSize: 12 }}>
+                Description
+                <textarea className="w-full mt-1 px-3 py-2" rows={3} value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 4, resize: "vertical" }} />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label style={{ fontSize: 12 }}>
+                  Employee
+                  <select className="w-full mt-1 px-3 py-2" value={assigneeUserId} onChange={(event) => setAssigneeUserId(event.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 4 }}>
+                    <option value="">Unassigned</option>
+                    {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                  </select>
+                </label>
+                <label style={{ fontSize: 12 }}>
+                  Team
+                  <select className="w-full mt-1 px-3 py-2" value={assigneeTeamId} onChange={(event) => setAssigneeTeamId(event.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 4 }}>
+                    <option value="">No team</option>
+                    {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label style={{ fontSize: 12 }}>
+                  Priority
+                  <select className="w-full mt-1 px-3 py-2" value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 4 }}>
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </label>
+                <label style={{ fontSize: 12 }}>
+                  Deadline
+                  <input className="w-full mt-1 px-3 py-2" type="datetime-local" value={taskDeadline} onChange={(event) => setTaskDeadline(event.target.value)} style={{ border: "1px solid var(--border)", borderRadius: 4 }} />
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <button type="button" onClick={() => setTaskDocument(null)} className="px-4 py-2" style={{ border: "1px solid var(--border)", borderRadius: 4, background: "var(--card)" }}>Cancel</button>
+              <button type="button" disabled={taskSaving || taskTitle.trim().length < 3} onClick={submitTask} className="px-4 py-2" style={{ border: 0, borderRadius: 4, background: "var(--primary)", color: "white" }}>
+                {taskSaving ? "Creating..." : "Create task"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

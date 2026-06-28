@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -42,8 +43,8 @@ def file_tree(settings: Settings = Depends(get_settings)) -> dict[str, object]:
     data_root = settings.resolved_data_dir / "originals"
     vault_root = settings.resolved_vault_dir / "ihaleler"
     return {
-        "data_originals": _tree_node(data_root, settings.resolved_data_dir),
-        "obsidian_vault": _tree_node(vault_root, settings.resolved_vault_dir),
+        "data_originals": _tree_node(data_root, settings.resolved_data_dir, "data"),
+        "obsidian_vault": _tree_node(vault_root, settings.resolved_vault_dir, "vault"),
     }
 
 
@@ -88,6 +89,42 @@ def download_document(document_id: int, db: Session = Depends(get_db)) -> FileRe
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Stored file is missing")
     return FileResponse(path, filename=document.stored_filename or document.original_filename or path.name)
+
+
+@router.get("/files/{document_id}/view")
+def view_document(document_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    document = db.get(Document, document_id)
+    if document is None or not document.file_path:
+        raise HTTPException(status_code=404, detail="Document not found")
+    path = Path(document.file_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Stored file is missing")
+    return FileResponse(
+        path,
+        filename=document.stored_filename or document.original_filename or path.name,
+        media_type=document.mime_type,
+        content_disposition_type="inline",
+    )
+
+
+@router.get("/tree-files/{root_key}/{file_path:path}")
+def download_tree_file(
+    root_key: str,
+    file_path: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    target = _resolve_tree_file(root_key, file_path, settings)
+    return FileResponse(target, filename=target.name)
+
+
+@router.get("/tree-file-view/{root_key}/{file_path:path}")
+def view_tree_file(
+    root_key: str,
+    file_path: str,
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    target = _resolve_tree_file(root_key, file_path, settings)
+    return FileResponse(target, filename=target.name, content_disposition_type="inline")
 
 
 @router.post("/upload")
@@ -183,23 +220,43 @@ def _resolve_tender(
     return created
 
 
-def _tree_node(path: Path, base: Path, depth: int = 0) -> dict[str, object]:
+def _resolve_tree_file(root_key: str, file_path: str, settings: Settings) -> Path:
+    if root_key == "data":
+        base = settings.resolved_data_dir
+    elif root_key == "vault":
+        base = settings.resolved_vault_dir
+    else:
+        raise HTTPException(status_code=404, detail="Unknown file root")
+    root = base.resolve()
+    target = (root / file_path).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return target
+
+
+def _tree_node(path: Path, base: Path, root_key: str, depth: int = 0) -> dict[str, object]:
     if not path.exists():
         return {"name": path.name, "path": str(path), "type": "missing", "children": []}
     if depth >= 5 or path.is_file():
-        return {
+        relative_path = path.relative_to(base).as_posix() if path.is_relative_to(base) else path.as_posix()
+        encoded_path = quote(relative_path)
+        node = {
             "name": path.name,
-            "path": str(path.relative_to(base)) if path.is_relative_to(base) else str(path),
+            "path": relative_path,
             "type": "file" if path.is_file() else "folder",
             "size": path.stat().st_size if path.is_file() else None,
             "children": [],
         }
+        if path.is_file():
+            node["download_url"] = f"/dashboard/tree-files/{root_key}/{encoded_path}"
+            node["view_url"] = f"/dashboard/tree-file-view/{root_key}/{encoded_path}"
+        return node
     children = sorted(path.iterdir(), key=lambda item: (item.is_file(), item.name.lower()))[:200]
     return {
         "name": path.name,
-        "path": str(path.relative_to(base)) if path.is_relative_to(base) else str(path),
+        "path": path.relative_to(base).as_posix() if path.is_relative_to(base) else path.as_posix(),
         "type": "folder",
-        "children": [_tree_node(child, base, depth + 1) for child in children],
+        "children": [_tree_node(child, base, root_key, depth + 1) for child in children],
     }
 
 

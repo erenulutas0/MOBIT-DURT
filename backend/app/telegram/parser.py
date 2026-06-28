@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from app.whatsapp.parser import IncomingMediaMessage
+from app.ingestion.media import IncomingMediaMessage
 
 
 def parse_telegram_update(update: dict[str, Any]) -> IncomingMediaMessage | None:

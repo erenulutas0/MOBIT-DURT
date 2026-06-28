@@ -1,0 +1,703 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------< com.docsbot:docsbot-ops-backend >-------------------
+[INFO] Building DocsBot Ops Backend 0.1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- enforcer:3.6.2:enforce (enforce-java) @ docsbot-ops-backend ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireJavaVersion passed
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ docsbot-ops-backend ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 5 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ docsbot-ops-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ docsbot-ops-backend ---
+[INFO] Copying 2 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ docsbot-ops-backend ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 6 source files with javac [debug parameters release 21] to target\test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ docsbot-ops-backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.docsbot.ops.auth.AccountFlowIntegrationTest
+20:02:04.450 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.docsbot.ops.auth.AccountFlowIntegrationTest]: AccountFlowIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+20:02:04.648 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.auth.AccountFlowIntegrationTest
+20:02:04.759 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.docsbot.ops.auth.AccountFlowIntegrationTest]: AccountFlowIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+20:02:04.763 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.auth.AccountFlowIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-21T20:02:05.349+03:00  INFO 86436 --- [           main] c.d.ops.auth.AccountFlowIntegrationTest  : Starting AccountFlowIntegrationTest using Java 22.0.1 with PID 86436 (started by pc in C:\Users\pc\OneDrive\Masa?st?\AI_INTEGRATION\tender-knowledge-hub\java-backend)
+2026-06-21T20:02:05.351+03:00  INFO 86436 --- [           main] c.d.ops.auth.AccountFlowIntegrationTest  : The following 1 profile is active: "postgres"
+2026-06-21T20:02:06.614+03:00  INFO 86436 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-21T20:02:06.727+03:00  INFO 86436 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 101 ms. Found 11 JPA repository interfaces.
+2026-06-21T20:02:07.772+03:00  INFO 86436 --- [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-06-21T20:02:07.929+03:00  INFO 86436 --- [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-06-21T20:02:08.692+03:00  INFO 86436 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-21T20:02:08.736+03:00  INFO 86436 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-06-21T20:02:08.955+03:00  INFO 86436 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:docsbot user=SA
+2026-06-21T20:02:08.957+03:00  INFO 86436 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-06-21T20:02:09.029+03:00  INFO 86436 --- [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:h2:mem:docsbot]
+	Database driver: H2 JDBC Driver
+	Database dialect: H2Dialect
+	Database version: 2.4.240
+	Default catalog/schema: docsbot/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: 100
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-21T20:02:10.372+03:00  INFO 86436 --- [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-21T20:02:10.419+03:00  WARN 86436 --- [           main] o.h.t.s.i.ExceptionHandlerLoggedImpl     : GenerationTarget encountered exception accepting command : Error executing DDL "create table documents (year integer, file_size bigint, id bigint generated by default as identity, timestamp timestamp(6) with time zone not null, caption varchar(255), checksum varchar(255), document_type varchar(255) not null, error_message varchar(255), file_path varchar(255), internal_unit varchar(255), media_id varchar(255) not null, message_id varchar(255) not null, mime_type varchar(255), organization varchar(255), original_filename varchar(255), sender_hash varchar(255) not null, source varchar(255) not null, status varchar(255) not null, stored_filename varchar(255), tender_id varchar(255) not null, primary key (id))" via JDBC [Syntax error in SQL statement "create table documents ([*]year integer, file_size bigint, id bigint generated by default as identity, timestamp timestamp(6) with time zone not null, caption varchar(255), checksum varchar(255), document_type varchar(255) not null, error_message varchar(255), file_path varchar(255), internal_unit varchar(255), media_id varchar(255) not null, message_id varchar(255) not null, mime_type varchar(255), organization varchar(255), original_filename varchar(255), sender_hash varchar(255) not null, source varchar(255) not null, status varchar(255) not null, stored_filename varchar(255), tender_id varchar(255) not null, primary key (id))"; expected "identifier";]
+
+org.hibernate.tool.schema.spi.CommandAcceptanceException: Error executing DDL "create table documents (year integer, file_size bigint, id bigint generated by default as identity, timestamp timestamp(6) with time zone not null, caption varchar(255), checksum varchar(255), document_type varchar(255) not null, error_message varchar(255), file_path varchar(255), internal_unit varchar(255), media_id varchar(255) not null, message_id varchar(255) not null, mime_type varchar(255), organization varchar(255), original_filename varchar(255), sender_hash varchar(255) not null, source varchar(255) not null, status varchar(255) not null, stored_filename varchar(255), tender_id varchar(255) not null, primary key (id))" via JDBC [Syntax error in SQL statement "create table documents ([*]year integer, file_size bigint, id bigint generated by default as identity, timestamp timestamp(6) with time zone not null, caption varchar(255), checksum varchar(255), document_type varchar(255) not null, error_message varchar(255), file_path varchar(255), internal_unit varchar(255), media_id varchar(255) not null, message_id varchar(255) not null, mime_type varchar(255), organization varchar(255), original_filename varchar(255), sender_hash varchar(255) not null, source varchar(255) not null, status varchar(255) not null, stored_filename varchar(255), tender_id varchar(255) not null, primary key (id))"; expected "identifier";]
+	at org.hibernate.tool.schema.internal.exec.GenerationTargetToDatabase.accept(GenerationTargetToDatabase.java:91) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.Helper.applySqlString(Helper.java:218) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.Helper.applySqlStrings(Helper.java:204) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.createTables(SchemaCreatorImpl.java:404) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.createSequencesTablesConstraints(SchemaCreatorImpl.java:320) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.createFromMetadata(SchemaCreatorImpl.java:215) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.performCreation(SchemaCreatorImpl.java:151) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.doCreation(SchemaCreatorImpl.java:121) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.doCreation(SchemaCreatorImpl.java:97) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.performDatabaseAction(SchemaManagementToolCoordinator.java:239) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.lambda$process$1(SchemaManagementToolCoordinator.java:101) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at java.base/java.util.HashMap.forEach(HashMap.java:1429) ~[na:na]
+	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.process(SchemaManagementToolCoordinator.java:100) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.boot.internal.SessionFactoryObserverForSchemaExport.sessionFactoryCreated(SessionFactoryObserverForSchemaExport.java:35) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.internal.SessionFactoryObserverChain.sessionFactoryCreated(SessionFactoryObserverChain.java:33) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.internal.SessionFactoryImpl.<init>(SessionFactoryImpl.java:327) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.internal.SessionFactoryRegistry.instantiateSessionFactory(SessionFactoryRegistry.java:64) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.boot.internal.SessionFactoryBuilderImpl.build(SessionFactoryBuilderImpl.java:458) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.build(EntityManagerFactoryBuilderImpl.java:1452) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.springframework.orm.jpa.vendor.SpringHibernateJpaPersistenceProvider.createContainerEntityManagerFactory(SpringHibernateJpaPersistenceProvider.java:93) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.createNativeEntityManagerFactory(LocalContainerEntityManagerFactoryBean.java:443) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.buildNativeEntityManagerFactory(AbstractEntityManagerFactoryBean.java:436) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.afterPropertiesSet(AbstractEntityManagerFactoryBean.java:411) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.afterPropertiesSet(LocalContainerEntityManagerFactoryBean.java:419) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.invokeInitMethods(AbstractAutowireCapableBeanFactory.java:1862) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1811) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:603) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:977) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$2(SpringBootContextLoader.java:155) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1465) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:600) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:155) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:114) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:247) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.lambda$loadContext$0(DefaultCacheAwareContextLoaderDelegate.java:167) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.cache.DefaultContextCache.put(DefaultContextCache.java:214) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:160) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:128) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:242) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$1(ClassBasedTestDescriptor.java:423) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.executeAndMaskThrowable(ClassBasedTestDescriptor.java:428) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$0(ClassBasedTestDescriptor.java:422) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:212) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:194) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:212) ~[na:na]
+	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1709) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:556) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:546) ~[na:na]
+	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151) ~[na:na]
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:265) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:611) ~[na:na]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.invokeTestInstancePostProcessors(ClassBasedTestDescriptor.java:422) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$instantiateAndPostProcessTestInstance$0(ClassBasedTestDescriptor.java:334) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.instantiateAndPostProcessTestInstance(ClassBasedTestDescriptor.java:333) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$1(ClassBasedTestDescriptor.java:322) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.Optional.orElseGet(Optional.java:364) ~[na:na]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$0(ClassBasedTestDescriptor.java:321) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.TestInstancesProvider.getTestInstances(TestInstancesProvider.java:27) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$prepare$0(TestMethodTestDescriptor.java:127) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:126) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:70) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$prepare$0(NodeTestTask.java:144) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.prepare(NodeTestTask.java:144) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:110) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$2(InterceptingLauncher.java:57) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:56) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.apache.maven.surefire.api.util.ReflectionUtils.invokeMethodWithArray(ReflectionUtils.java:125) ~[surefire-api-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.executeWithCancellationToken(LauncherAdapter.java:68) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.execute(LauncherAdapter.java:54) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:203) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:168) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:136) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495) ~[surefire-booter-3.5.6.jar:3.5.6]
+Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "create table documents ([*]year integer, file_size bigint, id bigint generated by default as identity, timestamp timestamp(6) with time zone not null, caption varchar(255), checksum varchar(255), document_type varchar(255) not null, error_message varchar(255), file_path varchar(255), internal_unit varchar(255), media_id varchar(255) not null, message_id varchar(255) not null, mime_type varchar(255), organization varchar(255), original_filename varchar(255), sender_hash varchar(255) not null, source varchar(255) not null, status varchar(255) not null, stored_filename varchar(255), tender_id varchar(255) not null, primary key (id))"; expected "identifier"; SQL statement:
+create table documents (year integer, file_size bigint, id bigint generated by default as identity, timestamp timestamp(6) with time zone not null, caption varchar(255), checksum varchar(255), document_type varchar(255) not null, error_message varchar(255), file_path varchar(255), internal_unit varchar(255), media_id varchar(255) not null, message_id varchar(255) not null, mime_type varchar(255), organization varchar(255), original_filename varchar(255), sender_hash varchar(255) not null, source varchar(255) not null, status varchar(255) not null, stored_filename varchar(255), tender_id varchar(255) not null, primary key (id)) [42001-240]
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:514) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:489) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.message.DbException.getSyntaxError(DbException.java:261) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.readIdentifier(Parser.java:5568) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parseTableColumnDefinition(Parser.java:8978) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parseCreateTable(Parser.java:8926) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parseCreate(Parser.java:6483) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parsePrepared(Parser.java:648) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parse(Parser.java:584) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parse(Parser.java:559) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.prepareCommand(Parser.java:487) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.engine.SessionLocal.prepareLocal(SessionLocal.java:647) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.engine.SessionLocal.prepareCommand(SessionLocal.java:563) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.jdbc.JdbcConnection.prepareCommand(JdbcConnection.java:1160) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.jdbc.JdbcStatement.executeInternal(JdbcStatement.java:245) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.jdbc.JdbcStatement.execute(JdbcStatement.java:231) ~[h2-2.4.240.jar:2.4.240]
+	at com.zaxxer.hikari.pool.ProxyStatement.execute(ProxyStatement.java:95) ~[HikariCP-7.0.2.jar:na]
+	at com.zaxxer.hikari.pool.HikariProxyStatement.execute(HikariProxyStatement.java) ~[HikariCP-7.0.2.jar:na]
+	at org.hibernate.tool.schema.internal.exec.GenerationTargetToDatabase.accept(GenerationTargetToDatabase.java:86) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	... 131 common frames omitted
+
+2026-06-21T20:02:10.469+03:00  WARN 86436 --- [           main] o.h.t.s.i.ExceptionHandlerLoggedImpl     : GenerationTarget encountered exception accepting command : Error executing DDL "create table tenders (sequence integer not null, year integer not null, created_at timestamp(6) with time zone not null, id bigint generated by default as identity, internal_unit varchar(255), organization varchar(255) not null, status varchar(255) not null, tender_id varchar(255) not null, title varchar(255), primary key (id))" via JDBC [Syntax error in SQL statement "create table tenders (sequence integer not null, [*]year integer not null, created_at timestamp(6) with time zone not null, id bigint generated by default as identity, internal_unit varchar(255), organization varchar(255) not null, status varchar(255) not null, tender_id varchar(255) not null, title varchar(255), primary key (id))"; expected "identifier";]
+
+org.hibernate.tool.schema.spi.CommandAcceptanceException: Error executing DDL "create table tenders (sequence integer not null, year integer not null, created_at timestamp(6) with time zone not null, id bigint generated by default as identity, internal_unit varchar(255), organization varchar(255) not null, status varchar(255) not null, tender_id varchar(255) not null, title varchar(255), primary key (id))" via JDBC [Syntax error in SQL statement "create table tenders (sequence integer not null, [*]year integer not null, created_at timestamp(6) with time zone not null, id bigint generated by default as identity, internal_unit varchar(255), organization varchar(255) not null, status varchar(255) not null, tender_id varchar(255) not null, title varchar(255), primary key (id))"; expected "identifier";]
+	at org.hibernate.tool.schema.internal.exec.GenerationTargetToDatabase.accept(GenerationTargetToDatabase.java:91) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.Helper.applySqlString(Helper.java:218) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.Helper.applySqlStrings(Helper.java:204) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.createTables(SchemaCreatorImpl.java:404) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.createSequencesTablesConstraints(SchemaCreatorImpl.java:320) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.createFromMetadata(SchemaCreatorImpl.java:215) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.performCreation(SchemaCreatorImpl.java:151) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.doCreation(SchemaCreatorImpl.java:121) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.internal.SchemaCreatorImpl.doCreation(SchemaCreatorImpl.java:97) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.performDatabaseAction(SchemaManagementToolCoordinator.java:239) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.lambda$process$1(SchemaManagementToolCoordinator.java:101) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at java.base/java.util.HashMap.forEach(HashMap.java:1429) ~[na:na]
+	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.process(SchemaManagementToolCoordinator.java:100) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.boot.internal.SessionFactoryObserverForSchemaExport.sessionFactoryCreated(SessionFactoryObserverForSchemaExport.java:35) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.internal.SessionFactoryObserverChain.sessionFactoryCreated(SessionFactoryObserverChain.java:33) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.internal.SessionFactoryImpl.<init>(SessionFactoryImpl.java:327) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.internal.SessionFactoryRegistry.instantiateSessionFactory(SessionFactoryRegistry.java:64) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.boot.internal.SessionFactoryBuilderImpl.build(SessionFactoryBuilderImpl.java:458) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.build(EntityManagerFactoryBuilderImpl.java:1452) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	at org.springframework.orm.jpa.vendor.SpringHibernateJpaPersistenceProvider.createContainerEntityManagerFactory(SpringHibernateJpaPersistenceProvider.java:93) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.createNativeEntityManagerFactory(LocalContainerEntityManagerFactoryBean.java:443) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.buildNativeEntityManagerFactory(AbstractEntityManagerFactoryBean.java:436) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.afterPropertiesSet(AbstractEntityManagerFactoryBean.java:411) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.afterPropertiesSet(LocalContainerEntityManagerFactoryBean.java:419) ~[spring-orm-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.invokeInitMethods(AbstractAutowireCapableBeanFactory.java:1862) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1811) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:603) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:977) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$2(SpringBootContextLoader.java:155) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1465) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:600) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:155) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:114) ~[spring-boot-test-4.1.0.jar:4.1.0]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:247) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.lambda$loadContext$0(DefaultCacheAwareContextLoaderDelegate.java:167) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.cache.DefaultContextCache.put(DefaultContextCache.java:214) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:160) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:128) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:242) ~[spring-test-7.0.8.jar:7.0.8]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$1(ClassBasedTestDescriptor.java:423) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.executeAndMaskThrowable(ClassBasedTestDescriptor.java:428) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$0(ClassBasedTestDescriptor.java:422) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:212) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:194) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:212) ~[na:na]
+	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1709) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:556) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:546) ~[na:na]
+	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151) ~[na:na]
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:265) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:611) ~[na:na]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.invokeTestInstancePostProcessors(ClassBasedTestDescriptor.java:422) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$instantiateAndPostProcessTestInstance$0(ClassBasedTestDescriptor.java:334) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.instantiateAndPostProcessTestInstance(ClassBasedTestDescriptor.java:333) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$1(ClassBasedTestDescriptor.java:322) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.Optional.orElseGet(Optional.java:364) ~[na:na]
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$0(ClassBasedTestDescriptor.java:321) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.TestInstancesProvider.getTestInstances(TestInstancesProvider.java:27) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$prepare$0(TestMethodTestDescriptor.java:127) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:126) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:70) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$prepare$0(NodeTestTask.java:144) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.prepare(NodeTestTask.java:144) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:110) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$2(InterceptingLauncher.java:57) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:56) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.apache.maven.surefire.api.util.ReflectionUtils.invokeMethodWithArray(ReflectionUtils.java:125) ~[surefire-api-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.executeWithCancellationToken(LauncherAdapter.java:68) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.execute(LauncherAdapter.java:54) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:203) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:168) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:136) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495) ~[surefire-booter-3.5.6.jar:3.5.6]
+Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "create table tenders (sequence integer not null, [*]year integer not null, created_at timestamp(6) with time zone not null, id bigint generated by default as identity, internal_unit varchar(255), organization varchar(255) not null, status varchar(255) not null, tender_id varchar(255) not null, title varchar(255), primary key (id))"; expected "identifier"; SQL statement:
+create table tenders (sequence integer not null, year integer not null, created_at timestamp(6) with time zone not null, id bigint generated by default as identity, internal_unit varchar(255), organization varchar(255) not null, status varchar(255) not null, tender_id varchar(255) not null, title varchar(255), primary key (id)) [42001-240]
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:514) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:489) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.message.DbException.getSyntaxError(DbException.java:261) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.readIdentifier(Parser.java:5568) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parseTableColumnDefinition(Parser.java:8978) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parseCreateTable(Parser.java:8926) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parseCreate(Parser.java:6483) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parsePrepared(Parser.java:648) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parse(Parser.java:584) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.parse(Parser.java:559) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.command.Parser.prepareCommand(Parser.java:487) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.engine.SessionLocal.prepareLocal(SessionLocal.java:647) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.engine.SessionLocal.prepareCommand(SessionLocal.java:563) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.jdbc.JdbcConnection.prepareCommand(JdbcConnection.java:1160) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.jdbc.JdbcStatement.executeInternal(JdbcStatement.java:245) ~[h2-2.4.240.jar:2.4.240]
+	at org.h2.jdbc.JdbcStatement.execute(JdbcStatement.java:231) ~[h2-2.4.240.jar:2.4.240]
+	at com.zaxxer.hikari.pool.ProxyStatement.execute(ProxyStatement.java:95) ~[HikariCP-7.0.2.jar:na]
+	at com.zaxxer.hikari.pool.HikariProxyStatement.execute(HikariProxyStatement.java) ~[HikariCP-7.0.2.jar:na]
+	at org.hibernate.tool.schema.internal.exec.GenerationTargetToDatabase.accept(GenerationTargetToDatabase.java:86) ~[hibernate-core-7.4.1.Final.jar:7.4.1.Final]
+	... 131 common frames omitted
+
+2026-06-21T20:02:10.479+03:00  INFO 86436 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-21T20:02:10.628+03:00  INFO 86436 --- [           main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-06-21T20:02:13.036+03:00  INFO 86436 --- [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-21T20:02:13.037+03:00  INFO 86436 --- [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-21T20:02:13.053+03:00  INFO 86436 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-06-21T20:02:13.066+03:00  INFO 86436 --- [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 29 ms
+2026-06-21T20:02:13.242+03:00  INFO 86436 --- [           main] c.d.ops.auth.AccountFlowIntegrationTest  : Started AccountFlowIntegrationTest in 8.385 seconds (process running for 10.146)
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+2026-06-21T20:02:14.012+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=400 duration_ms=259
+2026-06-21T20:02:14.491+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=408
+2026-06-21T20:02:14.535+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=30
+2026-06-21T20:02:14.581+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/account-requests status=200 duration_ms=27
+2026-06-21T20:02:14.627+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/1/approve status=200 duration_ms=41
+2026-06-21T20:02:14.887+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=258
+2026-06-21T20:02:14.935+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=41
+2026-06-21T20:02:14.961+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=16
+2026-06-21T20:02:14.976+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=409 duration_ms=8
+2026-06-21T20:02:15.262+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=244
+2026-06-21T20:02:15.266+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:15.274+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/2/reject status=200 duration_ms=4
+2026-06-21T20:02:15.281+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/2/approve status=409 duration_ms=4
+2026-06-21T20:02:15.538+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=244
+2026-06-21T20:02:15.546+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=409 duration_ms=6
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.42 s -- in com.docsbot.ops.auth.AccountFlowIntegrationTest
+[INFO] Running com.docsbot.ops.auth.AdminAuthControllerTest
+2026-06-21T20:02:15.561+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.auth.AdminAuthControllerTest]: AdminAuthControllerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:15.565+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.auth.AdminAuthControllerTest
+2026-06-21T20:02:15.567+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.auth.AdminAuthControllerTest]: AdminAuthControllerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:15.570+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.auth.AdminAuthControllerTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-21T20:02:15.618+03:00  INFO 86436 --- [           main] c.d.ops.auth.AdminAuthControllerTest     : Starting AdminAuthControllerTest using Java 22.0.1 with PID 86436 (started by pc in C:\Users\pc\OneDrive\Masa?st?\AI_INTEGRATION\tender-knowledge-hub\java-backend)
+2026-06-21T20:02:15.618+03:00  INFO 86436 --- [           main] c.d.ops.auth.AdminAuthControllerTest     : No active profile set, falling back to 1 default profile: "default"
+2026-06-21T20:02:16.248+03:00  INFO 86436 --- [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-21T20:02:16.248+03:00  INFO 86436 --- [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-21T20:02:16.253+03:00  INFO 86436 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-06-21T20:02:16.256+03:00  INFO 86436 --- [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 8 ms
+2026-06-21T20:02:16.294+03:00  INFO 86436 --- [           main] c.d.ops.auth.AdminAuthControllerTest     : Started AdminAuthControllerTest in 0.716 seconds (process running for 13.197)
+2026-06-21T20:02:16.313+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=11
+2026-06-21T20:02:16.328+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=401 duration_ms=5
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.774 s -- in com.docsbot.ops.auth.AdminAuthControllerTest
+[INFO] Running com.docsbot.ops.common.health.HealthControllerTest
+2026-06-21T20:02:16.337+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.common.health.HealthControllerTest]: HealthControllerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:16.368+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.common.health.HealthControllerTest
+2026-06-21T20:02:16.369+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.common.health.HealthControllerTest]: HealthControllerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:16.372+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.common.health.HealthControllerTest
+2026-06-21T20:02:16.382+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/health status=200 duration_ms=2
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.054 s -- in com.docsbot.ops.common.health.HealthControllerTest
+[INFO] Running com.docsbot.ops.dashboard.TenderDashboardIntegrationTest
+2026-06-21T20:02:16.392+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.dashboard.TenderDashboardIntegrationTest]: TenderDashboardIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:16.416+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.dashboard.TenderDashboardIntegrationTest
+2026-06-21T20:02:16.418+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.dashboard.TenderDashboardIntegrationTest]: TenderDashboardIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:16.420+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.dashboard.TenderDashboardIntegrationTest
+[ERROR] Tests run: 2, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 0.057 s <<< FAILURE! -- in com.docsbot.ops.dashboard.TenderDashboardIntegrationTest
+[ERROR] com.docsbot.ops.dashboard.TenderDashboardIntegrationTest.tenderHubRequiresAdminRole -- Time elapsed: 0.014 s <<< ERROR!
+org.springframework.jdbc.BadSqlGrammarException: StatementCallback; bad SQL grammar [delete from documents]
+	at org.springframework.jdbc.support.SQLExceptionSubclassTranslator.doTranslate(SQLExceptionSubclassTranslator.java:112)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:102)
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1549)
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:427)
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:580)
+	at com.docsbot.ops.dashboard.TenderDashboardIntegrationTest.clean(TenderDashboardIntegrationTest.java:42)
+Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "documents" not found; SQL statement:
+delete from documents [42102-240]
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:514)
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:489)
+	at org.h2.message.DbException.get(DbException.java:223)
+	at org.h2.message.DbException.get(DbException.java:199)
+	at org.h2.command.Parser.getTableOrViewNotFoundDbException(Parser.java:8049)
+	at org.h2.command.Parser.getTableOrViewNotFoundDbException(Parser.java:8020)
+	at org.h2.command.Parser.readTableOrView(Parser.java:7999)
+	at org.h2.command.Parser.readTableOrView(Parser.java:7961)
+	at org.h2.command.Parser.readSimpleTableFilter(Parser.java:1076)
+	at org.h2.command.Parser.parseDelete(Parser.java:1090)
+	at org.h2.command.Parser.parsePrepared(Parser.java:659)
+	at org.h2.command.Parser.parse(Parser.java:584)
+	at org.h2.command.Parser.parse(Parser.java:559)
+	at org.h2.command.Parser.prepareCommand(Parser.java:487)
+	at org.h2.engine.SessionLocal.prepareLocal(SessionLocal.java:647)
+	at org.h2.engine.SessionLocal.prepareCommand(SessionLocal.java:563)
+	at org.h2.jdbc.JdbcConnection.prepareCommand(JdbcConnection.java:1160)
+	at org.h2.jdbc.JdbcStatement.executeUpdateInternal(JdbcStatement.java:190)
+	at org.h2.jdbc.JdbcStatement.executeUpdate(JdbcStatement.java:147)
+	at com.zaxxer.hikari.pool.ProxyStatement.executeUpdate(ProxyStatement.java:120)
+	at com.zaxxer.hikari.pool.HikariProxyStatement.executeUpdate(HikariProxyStatement.java)
+	at org.springframework.jdbc.core.JdbcTemplate$1UpdateStatementCallback.doInStatement(JdbcTemplate.java:568)
+	at org.springframework.jdbc.core.JdbcTemplate$1UpdateStatementCallback.doInStatement(JdbcTemplate.java:565)
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:412)
+	... 2 more
+
+[ERROR] com.docsbot.ops.dashboard.TenderDashboardIntegrationTest.adminReadsTenderMetadataFilesTreeAndVault -- Time elapsed: 0.005 s <<< ERROR!
+org.springframework.jdbc.BadSqlGrammarException: StatementCallback; bad SQL grammar [delete from documents]
+	at org.springframework.jdbc.support.SQLExceptionSubclassTranslator.doTranslate(SQLExceptionSubclassTranslator.java:112)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:102)
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1549)
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:427)
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:580)
+	at com.docsbot.ops.dashboard.TenderDashboardIntegrationTest.clean(TenderDashboardIntegrationTest.java:42)
+Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "documents" not found; SQL statement:
+delete from documents [42102-240]
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:514)
+	at org.h2.message.DbException.getJdbcSQLException(DbException.java:489)
+	at org.h2.message.DbException.get(DbException.java:223)
+	at org.h2.message.DbException.get(DbException.java:199)
+	at org.h2.command.Parser.getTableOrViewNotFoundDbException(Parser.java:8049)
+	at org.h2.command.Parser.getTableOrViewNotFoundDbException(Parser.java:8020)
+	at org.h2.command.Parser.readTableOrView(Parser.java:7999)
+	at org.h2.command.Parser.readTableOrView(Parser.java:7961)
+	at org.h2.command.Parser.readSimpleTableFilter(Parser.java:1076)
+	at org.h2.command.Parser.parseDelete(Parser.java:1090)
+	at org.h2.command.Parser.parsePrepared(Parser.java:659)
+	at org.h2.command.Parser.parse(Parser.java:584)
+	at org.h2.command.Parser.parse(Parser.java:559)
+	at org.h2.command.Parser.prepareCommand(Parser.java:487)
+	at org.h2.engine.SessionLocal.prepareLocal(SessionLocal.java:647)
+	at org.h2.engine.SessionLocal.prepareCommand(SessionLocal.java:563)
+	at org.h2.jdbc.JdbcConnection.prepareCommand(JdbcConnection.java:1160)
+	at org.h2.jdbc.JdbcStatement.executeUpdateInternal(JdbcStatement.java:190)
+	at org.h2.jdbc.JdbcStatement.executeUpdate(JdbcStatement.java:147)
+	at com.zaxxer.hikari.pool.ProxyStatement.executeUpdate(ProxyStatement.java:120)
+	at com.zaxxer.hikari.pool.HikariProxyStatement.executeUpdate(HikariProxyStatement.java)
+	at org.springframework.jdbc.core.JdbcTemplate$1UpdateStatementCallback.doInStatement(JdbcTemplate.java:568)
+	at org.springframework.jdbc.core.JdbcTemplate$1UpdateStatementCallback.doInStatement(JdbcTemplate.java:565)
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:412)
+	... 2 more
+
+[INFO] Running com.docsbot.ops.DocsBotApplicationTest
+2026-06-21T20:02:16.452+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.DocsBotApplicationTest]: DocsBotApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:16.466+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.DocsBotApplicationTest
+2026-06-21T20:02:16.468+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.DocsBotApplicationTest]: DocsBotApplicationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:16.469+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.DocsBotApplicationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-21T20:02:16.497+03:00  INFO 86436 --- [           main] com.docsbot.ops.DocsBotApplicationTest   : Starting DocsBotApplicationTest using Java 22.0.1 with PID 86436 (started by pc in C:\Users\pc\OneDrive\Masa?st?\AI_INTEGRATION\tender-knowledge-hub\java-backend)
+2026-06-21T20:02:16.498+03:00  INFO 86436 --- [           main] com.docsbot.ops.DocsBotApplicationTest   : No active profile set, falling back to 1 default profile: "default"
+2026-06-21T20:02:17.046+03:00  INFO 86436 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-06-21T20:02:17.058+03:00  INFO 86436 --- [           main] com.docsbot.ops.DocsBotApplicationTest   : Started DocsBotApplicationTest in 0.585 seconds (process running for 13.961)
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.616 s -- in com.docsbot.ops.DocsBotApplicationTest
+[INFO] Running com.docsbot.ops.erp.ErpDomainIntegrationTest
+2026-06-21T20:02:17.069+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.erp.ErpDomainIntegrationTest]: ErpDomainIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:17.093+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.erp.ErpDomainIntegrationTest
+2026-06-21T20:02:17.094+03:00  INFO 86436 --- [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.docsbot.ops.erp.ErpDomainIntegrationTest]: ErpDomainIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-21T20:02:17.096+03:00  INFO 86436 --- [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.docsbot.ops.DocsBotApplication for test class com.docsbot.ops.erp.ErpDomainIntegrationTest
+2026-06-21T20:02:17.135+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:17.394+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=256
+2026-06-21T20:02:17.406+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/4/approve status=200 duration_ms=8
+2026-06-21T20:02:17.656+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=247
+2026-06-21T20:02:17.905+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=247
+2026-06-21T20:02:17.916+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/5/approve status=200 duration_ms=7
+2026-06-21T20:02:18.164+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=246
+2026-06-21T20:02:18.210+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=42
+2026-06-21T20:02:18.232+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/1/completion-request status=200 duration_ms=19
+2026-06-21T20:02:18.257+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=21
+2026-06-21T20:02:18.274+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/1/approve-completion status=200 duration_ms=9
+2026-06-21T20:02:18.281+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/notifications status=200 duration_ms=4
+2026-06-21T20:02:18.289+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=PATCH path=/erp/notifications/3/read status=404 duration_ms=6
+2026-06-21T20:02:18.297+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=PATCH path=/erp/notifications/3/read status=200 duration_ms=5
+2026-06-21T20:02:18.330+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=0
+2026-06-21T20:02:18.579+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=245
+2026-06-21T20:02:18.588+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/6/approve status=200 duration_ms=6
+2026-06-21T20:02:18.834+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=244
+2026-06-21T20:02:18.841+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=400 duration_ms=3
+2026-06-21T20:02:18.853+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=8
+2026-06-21T20:02:18.869+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=12
+2026-06-21T20:02:18.915+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:19.169+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=253
+2026-06-21T20:02:19.180+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/7/approve status=200 duration_ms=8
+2026-06-21T20:02:19.430+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=248
+2026-06-21T20:02:19.682+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=250
+2026-06-21T20:02:19.690+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/8/approve status=200 duration_ms=5
+2026-06-21T20:02:19.936+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=244
+2026-06-21T20:02:19.950+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/teams status=200 duration_ms=11
+2026-06-21T20:02:19.965+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/teams/1/members/5 status=204 duration_ms=12
+2026-06-21T20:02:19.979+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=11
+2026-06-21T20:02:19.987+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/teams status=200 duration_ms=5
+2026-06-21T20:02:19.998+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/tasks/3 status=200 duration_ms=7
+2026-06-21T20:02:20.004+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/tasks/3 status=404 duration_ms=3
+2026-06-21T20:02:20.014+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=DELETE path=/erp/teams/1/members/5 status=204 duration_ms=6
+2026-06-21T20:02:20.021+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/tasks/3 status=404 duration_ms=5
+2026-06-21T20:02:20.052+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:20.301+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=246
+2026-06-21T20:02:20.311+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/9/approve status=200 duration_ms=7
+2026-06-21T20:02:20.556+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=243
+2026-06-21T20:02:20.805+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=248
+2026-06-21T20:02:20.815+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/10/approve status=200 duration_ms=6
+2026-06-21T20:02:21.060+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=242
+2026-06-21T20:02:21.071+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=8
+2026-06-21T20:02:21.093+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/4/documents status=200 duration_ms=14
+2026-06-21T20:02:21.113+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/task-documents/1/content status=200 duration_ms=12
+2026-06-21T20:02:21.121+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/task-documents/1/content status=404 duration_ms=4
+2026-06-21T20:02:21.132+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=DELETE path=/erp/task-documents/1 status=204 duration_ms=7
+2026-06-21T20:02:21.138+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/task-documents/1/content status=404 duration_ms=3
+2026-06-21T20:02:21.173+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:21.427+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=252
+2026-06-21T20:02:21.438+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/11/approve status=200 duration_ms=8
+2026-06-21T20:02:21.686+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=246
+2026-06-21T20:02:21.696+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=7
+2026-06-21T20:02:21.706+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/5/documents status=400 duration_ms=7
+2026-06-21T20:02:21.742+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=1
+2026-06-21T20:02:21.996+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=252
+2026-06-21T20:02:22.005+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/12/approve status=200 duration_ms=6
+2026-06-21T20:02:22.257+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=251
+2026-06-21T20:02:22.269+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=8
+2026-06-21T20:02:22.350+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/tasks/6 status=200 duration_ms=4
+2026-06-21T20:02:22.356+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/notifications status=200 duration_ms=3
+2026-06-21T20:02:22.363+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/notifications status=200 duration_ms=3
+2026-06-21T20:02:22.392+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:22.641+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=247
+2026-06-21T20:02:22.650+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/13/approve status=200 duration_ms=6
+2026-06-21T20:02:22.900+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=247
+2026-06-21T20:02:23.153+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=251
+2026-06-21T20:02:23.162+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/14/approve status=200 duration_ms=5
+2026-06-21T20:02:23.412+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=248
+2026-06-21T20:02:23.422+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=6
+2026-06-21T20:02:23.440+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=15
+2026-06-21T20:02:23.447+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=4
+2026-06-21T20:02:23.459+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=PATCH path=/erp/tasks/7 status=200 duration_ms=9
+2026-06-21T20:02:23.466+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=PATCH path=/erp/tasks/7 status=403 duration_ms=5
+2026-06-21T20:02:23.473+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=PATCH path=/erp/tasks/7 status=403 duration_ms=5
+2026-06-21T20:02:23.478+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=PATCH path=/erp/tasks/7 status=400 duration_ms=3
+2026-06-21T20:02:23.513+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:23.766+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=251
+2026-06-21T20:02:23.774+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/15/approve status=200 duration_ms=6
+2026-06-21T20:02:24.021+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=245
+2026-06-21T20:02:24.267+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=245
+2026-06-21T20:02:24.275+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/16/approve status=200 duration_ms=4
+2026-06-21T20:02:24.524+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=247
+2026-06-21T20:02:24.535+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/users/13/presence status=200 duration_ms=8
+2026-06-21T20:02:24.539+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/users/14/presence status=403 duration_ms=2
+2026-06-21T20:02:24.552+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/users status=200 duration_ms=10
+2026-06-21T20:02:24.560+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=DELETE path=/erp/users/15 status=204 duration_ms=6
+2026-06-21T20:02:24.567+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/users status=200 duration_ms=3
+2026-06-21T20:02:24.594+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:24.846+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=251
+2026-06-21T20:02:24.855+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/17/approve status=200 duration_ms=6
+2026-06-21T20:02:25.101+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=245
+2026-06-21T20:02:25.352+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=248
+2026-06-21T20:02:25.360+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/18/approve status=200 duration_ms=6
+2026-06-21T20:02:25.609+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=246
+2026-06-21T20:02:25.620+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=7
+2026-06-21T20:02:25.635+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/8/comments status=200 duration_ms=12
+2026-06-21T20:02:25.643+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/8/comments status=403 duration_ms=4
+2026-06-21T20:02:25.653+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/8/comments status=200 duration_ms=7
+2026-06-21T20:02:25.661+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=5
+2026-06-21T20:02:25.670+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/8/completion-request status=200 duration_ms=7
+2026-06-21T20:02:25.683+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/8/reject-completion status=200 duration_ms=10
+2026-06-21T20:02:25.698+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/overview status=200 duration_ms=12
+2026-06-21T20:02:25.734+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:25.979+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=243
+2026-06-21T20:02:25.986+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/19/approve status=200 duration_ms=4
+2026-06-21T20:02:26.232+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=244
+2026-06-21T20:02:26.481+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=246
+2026-06-21T20:02:26.488+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/20/approve status=200 duration_ms=5
+2026-06-21T20:02:26.731+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=240
+2026-06-21T20:02:26.738+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/teams status=200 duration_ms=4
+2026-06-21T20:02:26.744+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/teams/2/members/18 status=204 duration_ms=2
+2026-06-21T20:02:26.749+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/teams/2/members/19 status=204 duration_ms=3
+2026-06-21T20:02:26.762+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=10
+2026-06-21T20:02:26.774+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/9/completion-request status=200 duration_ms=9
+2026-06-21T20:02:26.784+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/9/approve-completion status=200 duration_ms=8
+2026-06-21T20:02:26.789+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/notifications status=200 duration_ms=2
+2026-06-21T20:02:26.793+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/notifications status=200 duration_ms=2
+2026-06-21T20:02:26.820+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=0
+2026-06-21T20:02:27.070+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=247
+2026-06-21T20:02:27.077+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/21/approve status=200 duration_ms=5
+2026-06-21T20:02:27.320+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=242
+2026-06-21T20:02:27.564+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=243
+2026-06-21T20:02:27.570+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/22/approve status=200 duration_ms=4
+2026-06-21T20:02:27.817+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=244
+2026-06-21T20:02:27.821+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=GET path=/erp/users status=200 duration_ms=1
+2026-06-21T20:02:27.844+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/admin-login status=200 duration_ms=2
+2026-06-21T20:02:28.090+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests status=200 duration_ms=245
+2026-06-21T20:02:28.097+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/account-requests/23/approve status=200 duration_ms=5
+2026-06-21T20:02:28.341+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/auth/login status=200 duration_ms=242
+2026-06-21T20:02:28.348+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks status=200 duration_ms=5
+2026-06-21T20:02:28.354+03:00  INFO 86436 --- [           main] c.d.o.c.logging.RequestLoggingFilter     : request_complete method=POST path=/erp/tasks/10/documents status=400 duration_ms=3
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.29 s -- in com.docsbot.ops.erp.ErpDomainIntegrationTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Errors: 
+[ERROR]   TenderDashboardIntegrationTest.clean:42 � BadSqlGrammar StatementCallback; bad SQL grammar [delete from documents]
+[ERROR]   TenderDashboardIntegrationTest.clean:42 � BadSqlGrammar StatementCallback; bad SQL grammar [delete from documents]
+[INFO] 
+[ERROR] Tests run: 23, Failures: 0, Errors: 2, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  31.390 s
+[INFO] Finished at: 2026-06-21T20:02:28+03:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.6:test (default-test) on project docsbot-ops-backend: 
+[ERROR] 
+[ERROR] See C:\Users\pc\OneDrive\Masa�st�\AI_INTEGRATION\tender-knowledge-hub\java-backend\target\surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

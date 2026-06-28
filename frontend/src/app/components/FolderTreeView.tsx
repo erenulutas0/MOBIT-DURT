@@ -7,10 +7,15 @@ import {
   FileText,
   Download,
   Info,
-  ExternalLink,
   Eye,
 } from "lucide-react";
-import { ApiTreeNode, getFolderTree } from "../api";
+import {
+  ApiTreeNode,
+  downloadBlob,
+  getDashboardTreeFileBlob,
+  getFolderTree,
+  openBlob,
+} from "../api";
 
 type FolderNode = {
   id: string;
@@ -28,6 +33,8 @@ type FileRow = {
   source: string;
   timestamp: string;
   status: "classified" | "processing" | "unclassified";
+  downloadUrl?: string | null;
+  viewUrl?: string | null;
 };
 
 const statusBadge = {
@@ -104,16 +111,36 @@ function TreeNode({
 export function FolderTreeView() {
   const [folderTree, setFolderTree] = useState<FolderNode[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [fileActionId, setFileActionId] = useState<string | null>(null);
   const files = selectedId ? (findNode(folderTree, selectedId)?.files ?? []) : [];
   const selectedNode = selectedId ? findNode(folderTree, selectedId) : null;
 
   useEffect(() => {
-    getFolderTree().then((tree) => {
-      const roots = [toFolderNode(tree.data_originals), toFolderNode(tree.obsidian_vault)];
-      setFolderTree(roots);
-      setSelectedId(firstFolderWithFiles(roots)?.id || roots[0]?.id || null);
-    });
+    getFolderTree()
+      .then((tree) => {
+        const roots = [toFolderNode(tree.data_originals), toFolderNode(tree.obsidian_vault)];
+        setFolderTree(roots);
+        setSelectedId(firstFolderWithFiles(roots)?.id || roots[0]?.id || null);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Folder tree could not be loaded"));
   }, []);
+
+  async function handleFile(file: FileRow, download: boolean) {
+    const target = download ? file.downloadUrl : file.viewUrl || file.downloadUrl;
+    if (!target) return;
+    setError("");
+    setFileActionId(file.id);
+    try {
+      const blob = await getDashboardTreeFileBlob(target);
+      if (download) downloadBlob(blob, file.name);
+      else openBlob(blob);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "File could not be opened");
+    } finally {
+      setFileActionId(null);
+    }
+  }
 
   return (
     <div className="flex h-full" style={{ fontFamily: "Inter, sans-serif" }}>
@@ -125,6 +152,7 @@ export function FolderTreeView() {
         <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>Folder Tree</div>
           <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 1 }}>Live data + Obsidian vault</div>
+          {error && <div style={{ fontSize: 11, color: "var(--warning)", marginTop: 4 }}>{error}</div>}
         </div>
         <div className="py-2 overflow-y-auto flex-1 px-1">
           {folderTree.map((node) => (
@@ -221,14 +249,26 @@ export function FolderTreeView() {
                       </td>
                       <td style={{ padding: "9px 14px" }}>
                         <div className="flex items-center gap-2">
-                          <button title="Download" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}>
+                          <button
+                            type="button"
+                            disabled={!file.downloadUrl || fileActionId === file.id}
+                            onClick={() => handleFile(file, true)}
+                            title="Download"
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}
+                          >
                             <Download size={14} />
                           </button>
                           <button title="Metadata" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}>
                             <Info size={14} />
                           </button>
-                          <button title="Open in Vault" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}>
-                            <ExternalLink size={14} />
+                          <button
+                            type="button"
+                            disabled={(!file.viewUrl && !file.downloadUrl) || fileActionId === file.id}
+                            onClick={() => handleFile(file, false)}
+                            title="Open / Preview"
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: 2 }}
+                          >
+                            <Eye size={14} />
                           </button>
                         </div>
                       </td>
@@ -266,6 +306,8 @@ function toFolderNode(node: ApiTreeNode): FolderNode {
       source: node.path.startsWith("ihaleler") ? "Obsidian" : "Local",
       timestamp: "-",
       status: "classified" as const,
+      downloadUrl: child.download_url,
+      viewUrl: child.view_url,
     }));
   return {
     id: node.path || node.name,

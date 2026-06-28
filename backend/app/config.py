@@ -9,15 +9,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    whatsapp_verify_token: str = Field(default="", alias="WHATSAPP_VERIFY_TOKEN")
-    whatsapp_access_token: str = Field(default="", alias="WHATSAPP_ACCESS_TOKEN")
-    whatsapp_api_version: str = Field(default="v20.0", alias="WHATSAPP_API_VERSION")
-    whatsapp_phone_number_id: str = Field(default="", alias="WHATSAPP_PHONE_NUMBER_ID")
-    whatsapp_graph_base_url: str = Field(
-        default="https://graph.facebook.com", alias="WHATSAPP_GRAPH_BASE_URL"
-    )
     telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
     telegram_admin_user_ids: str = Field(default="", alias="TELEGRAM_ADMIN_USER_IDS")
+    erp_admin_username: str = Field(default="admin", alias="ERP_ADMIN_USERNAME")
+    erp_admin_password: str = Field(default="admin123", alias="ERP_ADMIN_PASSWORD")
     database_url: str = Field(default="sqlite:///./data/db.sqlite3", alias="DATABASE_URL")
     data_dir: Path = Field(default=PROJECT_ROOT / "data", alias="DATA_DIR")
     vault_dir: Path = Field(default=PROJECT_ROOT / "vault", alias="VAULT_DIR")
