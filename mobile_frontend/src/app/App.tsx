@@ -144,7 +144,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 };
 
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
-const APP_VERSION = "1.0.8";
+const APP_VERSION = "1.0.9";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
