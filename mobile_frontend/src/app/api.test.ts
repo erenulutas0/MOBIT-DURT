@@ -68,23 +68,57 @@ function requestHeader(call: unknown[], name: string) {
 }
 
 describe("mobil API istemcisi", () => {
-  it("admin girişini prod parola sızdırmadan admin endpoint'ine gönderir", async () => {
+  it("gercek bir calisan hesabi admin-benzeri e-postayla bile once employee endpoint'inden giris yapabilir", async () => {
+    // "admin@mobit.com.tr" is not a database row by default, but IF one is ever
+    // approved with that email, it must still be reachable — the shared admin
+    // identity is a fallback, never a shadow over a real account.
     const fetchMock = stubFetch(jsonResponse(okSession({
-      role: "admin",
-      name: "Admin",
-      user_id: 1,
+      role: "user",
+      name: "Gercek Admin Calisani",
+      user_id: 7,
       email: "admin@mobit.com.tr",
     })));
+
+    const user = await loginToBackend("admin@mobit.com.tr", "gercek-sifre");
+
+    expect(user.role).toBe("user");
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_BASE}/erp/auth/login`,
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(requestBody(fetchMock.mock.calls[0])).toEqual({
+      email: "admin@mobit.com.tr",
+      password: "gercek-sifre",
+    });
+  });
+
+  it("employee girişi başarısız olunca paylaşılan admin kimliğine düşer, prod parolayı sızdırmadan", async () => {
+    const fetchMock = stubFetch(
+      jsonResponse({ detail: "Invalid credentials" }, { status: 401 }),
+      jsonResponse(okSession({
+        role: "admin",
+        name: "Admin",
+        user_id: 1,
+        email: "admin@mobit.com.tr",
+      }))
+    );
 
     const user = await loginToBackend("admin@mobit.com.tr", "admin123");
 
     expect(user.role).toBe("admin");
     expect(user.email).toBe("admin@mobit.com.tr");
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      `${API_BASE}/erp/auth/login`,
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
       `${API_BASE}/erp/auth/admin-login`,
       expect.objectContaining({ method: "POST" })
     );
-    expect(requestBody(fetchMock.mock.calls[0])).toEqual({
+    expect(requestBody(fetchMock.mock.calls[1])).toEqual({
       username: "admin",
       password: "admin123",
     });

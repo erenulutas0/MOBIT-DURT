@@ -348,16 +348,12 @@ function apiBaseUrl() {
   return "http://127.0.0.1:8080";
 }
 
+// A real approved employee account always takes priority; the shared admin
+// identity (env-configured, not a database row) is only a fallback. This
+// matters if an employee is ever approved with an "admin@..."-looking email:
+// that real account must still be reachable, not silently shadowed by the
+// admin fallback.
 export async function loginToBackend(identifier: string, password: string): Promise<BackendAuthUser> {
-  if (isAdminIdentifier(identifier)) {
-    const admin = await tryLogin("/erp/auth/admin-login", {
-      username: adminUsername(identifier),
-      password,
-    });
-    if (admin.ok) return toUser(admin.session);
-    throw new Error(admin.detail || "Admin girişi yapılamadı.");
-  }
-
   const employee = await tryLogin("/erp/auth/login", { email: identifier, password });
   if (employee.ok) return toUser(employee.session);
 
@@ -1168,11 +1164,6 @@ function adminUsername(identifier: string) {
   const trimmed = identifier.trim();
   if (trimmed.toLowerCase() === "admin@mobit.com.tr") return "admin";
   return trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
-}
-
-function isAdminIdentifier(identifier: string) {
-  const trimmed = identifier.trim().toLowerCase();
-  return trimmed === "admin" || trimmed === "admin@mobit.com.tr";
 }
 
 function usesNativeSessionStore() {
