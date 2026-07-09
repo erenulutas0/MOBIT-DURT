@@ -58,14 +58,16 @@ class ApnsMobilePushGatewayTest {
 
         MobilePushGateway.Result result = gateway.send(
                 ErpMobilePushToken.create(42, "ios", "iphone-1", "device-token-1", "1.0.0", clock.instant()),
-                ErpNotification.create(42, "TASK_ASSIGNED", "Yeni gorev", "Kontrol gerekli", 7L, "NORMAL", null, clock.instant()));
+                ErpNotification.create(42, "TASK_ASSIGNED", "Yeni gorev", "Kontrol gerekli", 7L, "NORMAL", "task-assigned:7", clock.instant()));
 
         assertEquals(MobilePushGateway.Status.DELIVERED, result.status());
         wireMock.verify(postRequestedFor(urlEqualTo("/3/device/device-token-1"))
                 .withHeader("Authorization", containing("bearer "))
                 .withHeader("apns-topic", equalTo("com.mobit.docsbot"))
                 .withHeader("apns-push-type", equalTo("alert"))
-                .withRequestBody(containing("\"task_id\":\"7\"")));
+                .withRequestBody(containing("\"task_id\":\"7\""))
+                .withRequestBody(containing("\"event_key\":\"task-assigned:7\""))
+                .withRequestBody(containing("\"type\":\"TASK_ASSIGNED\"")));
     }
 
     @Test
@@ -118,6 +120,12 @@ class ApnsMobilePushGatewayTest {
                         wireMock.baseUrl(),
                         10),
                 new DocsBotProperties.Email(false, false, "docsbot@example.com", null, "[DocsBot Ops]"),
+                new DocsBotProperties.AppUpdate(
+                        "1.0.7",
+                        "1.0.6",
+                        "Yeni versiyon geldi",
+                        "Uygulamayı düzgün kullanmanız için güncellemeniz öneriliyor.",
+                        "https://play.google.com/store/apps/details?id=com.mobit.docsbotops"),
                 new DocsBotProperties.Telegram(
                         false,
                         "test-token",

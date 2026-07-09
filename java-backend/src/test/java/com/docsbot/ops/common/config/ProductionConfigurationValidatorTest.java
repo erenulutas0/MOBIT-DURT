@@ -44,6 +44,12 @@ class ProductionConfigurationValidatorTest {
                         "docsbot@example.com",
                         "",
                         "[DocsBot Ops]"),
+                new DocsBotProperties.AppUpdate(
+                        "1.0.7",
+                        "1.0.6",
+                        "Yeni versiyon geldi",
+                        "Uygulamayı düzgün kullanmanız için güncellemeniz öneriliyor.",
+                        "https://play.google.com/store/apps/details?id=com.mobit.docsbotops"),
                 new DocsBotProperties.Telegram(
                         true,
                         "replace-with-telegram-bot-token",
@@ -115,6 +121,12 @@ class ProductionConfigurationValidatorTest {
                         "docsbot@example.com",
                         "ops@example.com",
                         "[DocsBot Ops]"),
+                new DocsBotProperties.AppUpdate(
+                        "1.0.7",
+                        "1.0.6",
+                        "Yeni versiyon geldi",
+                        "Uygulamayı düzgün kullanmanız için güncellemeniz öneriliyor.",
+                        "https://play.google.com/store/apps/details?id=com.mobit.docsbotops"),
                 new DocsBotProperties.Telegram(
                         true,
                         "123456789:realisticTelegramBotTokenValue",

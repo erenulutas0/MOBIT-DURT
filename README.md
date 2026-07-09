@@ -14,6 +14,28 @@ The active backend is Java 21 and Spring Boot. Python runtime is disabled and mu
 
 The authoritative plan is [JAVA_MIGRATION_ROADMAP.md](JAVA_MIGRATION_ROADMAP.md), and route ownership is tracked in [MIGRATION_ENDPOINT_MATRIX.md](MIGRATION_ENDPOINT_MATRIX.md).
 
+## Repo Map — What Is Live, What Is Legacy
+
+Live code (changes go here):
+
+- `java-backend/` — the active Spring Boot backend. All API traffic is served from here.
+- `frontend/` — the live React web dashboard. The 16 pages are currently defined inline in
+  `frontend/src/app/App.tsx`; **`frontend/src/app/components/` is orphaned dead code** that
+  nothing imports — do not extend it without consciously re-adopting it.
+- `mobile_frontend/` — the live Capacitor 7 + React mobile app (Android; no iOS platform
+  directory exists yet).
+- `vault/` — generated Obsidian notes; `data/` — stored tender documents; `scripts/` — dev
+  and deployment helpers; `docs/` — operational documentation.
+
+Legacy / frozen (do not build on these):
+
+- `backend/` — the archived Python FastAPI backend. The runtime is disabled and the code is
+  retained only until the planned Phase 8 cleanup. Never start it.
+- `contracts/` — the frozen legacy FastAPI OpenAPI contract, kept as a migration baseline.
+  The living API spec is served by the Java backend at `/v3/api-docs` (Swagger UI in dev).
+- `figma_frontend/` — an orphaned design export; not wired into any build.
+- `TODO_PREMOTERM.md` — pre-migration backlog, not yet reconciled; prefer `TODO.md`.
+
 ## MVP Scope
 
 - Telegram Bot API polling ingestion.
@@ -89,7 +111,8 @@ Active Java endpoints:
 - `GET/POST /erp/teams` (`POST` is `ADMIN`)
 - `POST/DELETE /erp/teams/{team_id}/members/{user_id}` (`ADMIN`)
 - `GET/POST /erp/tasks` (`POST` is `ADMIN`)
-- `GET/PATCH /erp/tasks/{task_id}`
+- `GET/PATCH /erp/tasks/{task_id}` (`PATCH` accepts a status transition for assignees, and
+  title/description/priority/deadline edits for `ADMIN`)
 - `GET/POST /erp/workflow-templates` (`ADMIN`)
 - `PATCH /erp/workflow-templates/{template_id}/active` (`ADMIN`)
 - `POST /erp/workflow-templates/{template_id}/run` (`ADMIN`)
@@ -336,8 +359,8 @@ cd ..\frontend
 npm run build
 ```
 
-The Java test suite currently contains 78 tests and covers authentication,
-approval, RBAC, user presence, task ownership, team membership, completion approval,
+The Java test suite covers authentication,
+approval, RBAC, user presence, task ownership, task editing, team membership, completion approval,
 message isolation, recurring workflow templates, notifications, unread/read-all state, notification preferences,
 authenticated SSE notification streaming, due-soon and overdue scheduling,
 task document security, document favorites/recent/share links, MIME/signature validation,
@@ -368,8 +391,18 @@ Unclassified files are stored by received date under:
 data/originals/unclassified/{year}/{month}/{day}/{safe_filename}
 ```
 
-Obsidian notes are written under:
+Obsidian notes are written under the canonical layout:
 
 ```text
-vault/ihaleler/{year}/{organization}/{tender_id}/
+vault/ihaleler/{year}/{INTERNAL_UNIT}/{ORGANIZATION}/{tender_id}/
+```
+
+Unit and organization directory names are transliterated to ASCII upper-case
+(`BEDAŞ` → `BEDAS`) so Turkish spelling variants share one directory. Notes carry
+`tags:` frontmatter and `_index.md` files (root and per year) provide Dataview
+tables. To re-file a vault that predates this layout, run:
+
+```powershell
+node scripts/migrate-vault-layout.mjs           # dry run
+node scripts/migrate-vault-layout.mjs --apply   # backup + migrate
 ```

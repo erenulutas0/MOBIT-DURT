@@ -90,6 +90,7 @@ class ErpTaskWorkflowService {
             String description,
             Collection<Long> assigneeUserIds,
             Collection<Long> assigneeTeamIds,
+            Long responsibleUserId,
             String priority,
             Instant deadlineAt
     ) {
@@ -99,6 +100,9 @@ class ErpTaskWorkflowService {
         Set<Long> userIds = new LinkedHashSet<>(assigneeUserIds == null ? List.of() : assigneeUserIds);
         Set<Long> teamIds = new LinkedHashSet<>(assigneeTeamIds == null ? List.of() : assigneeTeamIds);
         accessService.validateTargets(userIds, teamIds);
+        if (responsibleUserId != null && !userIds.contains(responsibleUserId)) {
+            throw new ErpExceptions.BadRequest("Responsible user must be assigned to the task");
+        }
 
         Instant now = clock.instant();
         ErpTask task = taskRepository.saveAndFlush(ErpTask.create(
@@ -110,7 +114,11 @@ class ErpTaskWorkflowService {
                 now));
 
         List<ErpTaskAssignment> assignments = new ArrayList<>();
-        userIds.forEach(userId -> assignments.add(ErpTaskAssignment.forUser(task.getId(), userId, now)));
+        userIds.forEach(userId -> assignments.add(ErpTaskAssignment.forUser(
+                task.getId(),
+                userId,
+                responsibleUserId != null && responsibleUserId.equals(userId) ? "responsible" : "participant",
+                now)));
         teamIds.forEach(teamId -> assignments.add(ErpTaskAssignment.forTeam(task.getId(), teamId, now)));
         assignmentRepository.saveAll(assignments);
         userIds.forEach(userId -> activityRecorder.record(
@@ -219,6 +227,90 @@ class ErpTaskWorkflowService {
     ErpTask updateTaskStatus(ErpPrincipal principal, long taskId, String status) {
         ErpTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ErpExceptions.NotFound("Task not found"));
+        return applyStatusTransition(principal, task, status);
+    }
+
+    @Transactional
+    ErpTask updateTaskDetails(
+            ErpPrincipal principal,
+            long taskId,
+            String title,
+            String description,
+            String priority,
+            Instant deadlineAt,
+            boolean clearDeadline,
+            String status
+    ) {
+        ErpValidation.requireAdmin(principal);
+        if (deadlineAt != null && clearDeadline) {
+            throw new ErpExceptions.BadRequest("deadline_at cannot be combined with clear_deadline");
+        }
+        ErpTask task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Task not found"));
+
+        // PATCH semantics: absent fields stay unchanged; a blank description clears it.
+        String newTitle = title == null ? task.getTitle() : ErpValidation.normalizeTitle(title);
+        String newDescription = description == null
+                ? task.getDescription()
+                : ErpValidation.normalizeOptional(description);
+        TaskPriority newPriority = priority == null
+                ? task.getPriority()
+                : ErpValidation.parse(TaskPriority.class, priority, "Unknown task priority");
+        Instant newDeadline = clearDeadline ? null : (deadlineAt != null ? deadlineAt : task.getDeadlineAt());
+
+        List<String> changedFields = new ArrayList<>();
+        if (!newTitle.equals(task.getTitle())) {
+            changedFields.add("title");
+        }
+        if (!java.util.Objects.equals(newDescription, task.getDescription())) {
+            changedFields.add("description");
+        }
+        if (newPriority != task.getPriority()) {
+            changedFields.add("priority");
+        }
+        boolean deadlineChanged = !java.util.Objects.equals(newDeadline, task.getDeadlineAt());
+        if (deadlineChanged) {
+            changedFields.add("deadline");
+        }
+
+        if (!changedFields.isEmpty()) {
+            Instant now = clock.instant();
+            try {
+                task.edit(newTitle, newDescription, newPriority, newDeadline, now);
+            } catch (IllegalStateException exception) {
+                throw new ErpExceptions.BadRequest(exception.getMessage());
+            }
+            if (deadlineChanged) {
+                notificationService.rearmDeadlineAlerts(taskId);
+            }
+            activityRecorder.record(
+                    principal,
+                    "TASK_UPDATED",
+                    "TASK",
+                    String.valueOf(taskId),
+                    taskId,
+                    "fields=" + String.join(",", changedFields)
+                            + (deadlineChanged
+                                    ? "; deadline_at=" + (newDeadline == null ? "none" : newDeadline)
+                                    : ""));
+            notificationService.notifyUsers(
+                    accessService.assignedUserIds(taskId),
+                    "task_updated",
+                    "Task updated",
+                    task.getTitle(),
+                    task.getId(),
+                    newPriority == TaskPriority.URGENT ? "HIGH" : "NORMAL",
+                    null,
+                    now);
+        }
+        if (status != null && !status.isBlank()) {
+            applyStatusTransition(principal, task, status);
+        }
+        return task;
+    }
+
+    private ErpTask applyStatusTransition(ErpPrincipal principal, ErpTask task, String status) {
+        long taskId = task.getId();
         TaskStatus nextStatus = ErpValidation.parse(TaskStatus.class, status, "Unknown task status");
 
         if (principal.admin()) {

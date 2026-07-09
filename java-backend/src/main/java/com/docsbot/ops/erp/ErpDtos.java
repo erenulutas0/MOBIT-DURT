@@ -94,6 +94,7 @@ public final class ErpDtos {
             @JsonProperty("task_id") Long taskId,
             @JsonProperty("assignee_user_id") Long assigneeUserId,
             @JsonProperty("assignee_team_id") Long assigneeTeamId,
+            String role,
             @JsonProperty("created_at") Instant createdAt
     ) {
         public static AssignmentResponse from(ErpTaskAssignment assignment) {
@@ -102,6 +103,7 @@ public final class ErpDtos {
                     assignment.getTaskId(),
                     assignment.getAssigneeUserId(),
                     assignment.getAssigneeTeamId(),
+                    assignment.getRole(),
                     assignment.getCreatedAt());
         }
     }
@@ -137,11 +139,29 @@ public final class ErpDtos {
             @JsonProperty("message_kind") String messageKind,
             @JsonProperty("media_mime_type") String mediaMimeType,
             @JsonProperty("media_data") String mediaData,
+            @JsonProperty("media_url") String mediaUrl,
+            @JsonProperty("media_ref") String mediaRef,
             @JsonProperty("media_duration_ms") Integer mediaDurationMs,
+            @JsonProperty("client_message_id") String clientMessageId,
+            @JsonProperty("delivered_at") Instant deliveredAt,
             @JsonProperty("read_at") Instant readAt,
+            @JsonProperty("delivery_status") String deliveryStatus,
             @JsonProperty("created_at") Instant createdAt
     ) {
         public static DirectMessageResponse from(ErpDirectMessage message) {
+            return from(message, message.getMediaData(), null, null);
+        }
+
+        public static DirectMessageResponse from(ErpDirectMessage message, String mediaData) {
+            return from(message, mediaData, null, null);
+        }
+
+        public static DirectMessageResponse from(
+                ErpDirectMessage message,
+                String mediaData,
+                String mediaUrl,
+                String mediaRef
+        ) {
             return new DirectMessageResponse(
                     message.getId(),
                     message.getSenderType(),
@@ -153,9 +173,14 @@ public final class ErpDtos {
                     message.getBody(),
                     message.getMessageKind(),
                     message.getMediaMimeType(),
-                    message.getMediaData(),
+                    mediaData,
+                    mediaUrl,
+                    mediaRef,
                     message.getMediaDurationMs(),
+                    message.getClientMessageId(),
+                    message.getDeliveredAt(),
                     message.getReadAt(),
+                    message.getReadAt() != null ? "read" : message.getDeliveredAt() != null ? "delivered" : "sent",
                     message.getCreatedAt());
         }
     }

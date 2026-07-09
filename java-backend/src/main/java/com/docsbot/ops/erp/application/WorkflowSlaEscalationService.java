@@ -3,6 +3,7 @@ package com.docsbot.ops.erp.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -33,6 +34,12 @@ public class WorkflowSlaEscalationService {
     private final ErpActivityRecorder activityRecorder;
     private final Duration blockedAfter;
     private final Duration approvalAfter;
+    /**
+     * Repeat rungs measured from the reference activity, sorted ascending. Once a task stays
+     * blocked / pending past a rung, the escalation re-fires with CRITICAL urgency. Only the
+     * highest crossed rung fires, so long-stuck tasks do not storm at deploy or catch-up.
+     */
+    private final List<Duration> repeatRungs;
     private final Clock clock;
 
     @Autowired
@@ -44,7 +51,8 @@ public class WorkflowSlaEscalationService {
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
             @Value("${docsbot.sla-blocked-after-ms:86400000}") long blockedAfterMs,
-            @Value("${docsbot.sla-approval-after-ms:14400000}") long approvalAfterMs
+            @Value("${docsbot.sla-approval-after-ms:14400000}") long approvalAfterMs,
+            @Value("${docsbot.sla-repeat-after-hours:24,48}") String repeatAfterHours
     ) {
         this(
                 taskRepository,
@@ -55,6 +63,7 @@ public class WorkflowSlaEscalationService {
                 activityRecorder,
                 Duration.ofMillis(Math.max(0, blockedAfterMs)),
                 Duration.ofMillis(Math.max(0, approvalAfterMs)),
+                parseRepeatHours(repeatAfterHours),
                 Clock.systemUTC());
     }
 
@@ -67,6 +76,7 @@ public class WorkflowSlaEscalationService {
             ErpActivityRecorder activityRecorder,
             Duration blockedAfter,
             Duration approvalAfter,
+            List<Duration> repeatRungs,
             Clock clock
     ) {
         this.taskRepository = taskRepository;
@@ -77,7 +87,19 @@ public class WorkflowSlaEscalationService {
         this.activityRecorder = activityRecorder;
         this.blockedAfter = blockedAfter;
         this.approvalAfter = approvalAfter;
+        this.repeatRungs = repeatRungs.stream().sorted(Comparator.naturalOrder()).toList();
         this.clock = clock;
+    }
+
+    static List<Duration> parseRepeatHours(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(part -> !part.isEmpty())
+                .map(part -> Duration.ofHours(Long.parseLong(part)))
+                .toList();
     }
 
     @Scheduled(
@@ -93,20 +115,27 @@ public class WorkflowSlaEscalationService {
         int changed = 0;
         for (ErpTask task : taskRepository.findAllByStatusOrderByCreatedAtDescIdDesc(TaskStatus.BLOCKED)) {
             ErpActivityEvent reference = latestActivity(task, "TASK_STATUS_CHANGED");
-            if (!elapsed(reference.getCreatedAt(), now, blockedAfter)) {
+            int rung = highestCrossedRung(reference.getCreatedAt(), now, blockedAfter);
+            if (rung < 0) {
                 continue;
             }
-            String eventKey = "sla_blocked:" + task.getId() + ":" + reference.getId();
+            // Rung 0 keeps the pre-ladder key format so already-sent escalations stay deduped.
+            String eventKey = "sla_blocked:" + task.getId() + ":" + reference.getId()
+                    + (rung == 0 ? "" : ":r" + rung);
+            String urgency = rung == 0 ? "HIGH" : "CRITICAL";
+            String title = rung == 0
+                    ? "Task remains blocked"
+                    : "Task is still blocked (escalation " + rung + ")";
             int created = notificationService.notifyAdmin(
                     "task_blocked_escalation",
-                    "Task remains blocked",
+                    title,
                     task.getTitle(),
                     task.getId(),
-                    "HIGH",
+                    urgency,
                     eventKey,
                     now);
             if (created > 0) {
-                notifyAssignees(task, "task_blocked_escalation", now, eventKey);
+                notifyAssignees(task, "task_blocked_escalation", title, urgency, now, eventKey);
                 activityRecorder.recordActor(
                         "system",
                         null,
@@ -115,7 +144,7 @@ public class WorkflowSlaEscalationService {
                         "TASK",
                         task.getId().toString(),
                         task.getId(),
-                        "blocked_since=" + reference.getCreatedAt());
+                        "blocked_since=" + reference.getCreatedAt() + "; rung=" + rung);
                 changed++;
             }
         }
@@ -127,16 +156,22 @@ public class WorkflowSlaEscalationService {
         int changed = 0;
         for (ErpTask task : taskRepository.findAllByStatusOrderByCreatedAtDescIdDesc(TaskStatus.PENDING_APPROVAL)) {
             ErpActivityEvent reference = latestActivity(task, "TASK_COMPLETION_REQUESTED");
-            if (!elapsed(reference.getCreatedAt(), now, approvalAfter)) {
+            int rung = highestCrossedRung(reference.getCreatedAt(), now, approvalAfter);
+            if (rung < 0) {
                 continue;
             }
-            String eventKey = "sla_approval:" + task.getId() + ":" + reference.getId();
+            String eventKey = "sla_approval:" + task.getId() + ":" + reference.getId()
+                    + (rung == 0 ? "" : ":r" + rung);
+            String urgency = rung == 0 ? "HIGH" : "CRITICAL";
+            String title = rung == 0
+                    ? "Task approval is waiting"
+                    : "Task approval is still waiting (escalation " + rung + ")";
             int created = notificationService.notifyAdmin(
                     "task_completion_approval_escalation",
-                    "Task approval is waiting",
+                    title,
                     task.getTitle(),
                     task.getId(),
-                    "HIGH",
+                    urgency,
                     eventKey,
                     now);
             if (created > 0) {
@@ -148,21 +183,46 @@ public class WorkflowSlaEscalationService {
                         "TASK",
                         task.getId().toString(),
                         task.getId(),
-                        "pending_since=" + reference.getCreatedAt());
+                        "pending_since=" + reference.getCreatedAt() + "; rung=" + rung);
                 changed++;
             }
         }
         return changed;
     }
 
-    private void notifyAssignees(ErpTask task, String type, Instant now, String eventKey) {
+    /**
+     * Returns the highest escalation rung the elapsed time has crossed: 0 for the base
+     * threshold, 1..n for the configured repeat rungs, -1 when the base is not crossed yet.
+     */
+    private int highestCrossedRung(Instant reference, Instant now, Duration base) {
+        if (reference.plus(base).isAfter(now)) {
+            return -1;
+        }
+        Duration elapsed = Duration.between(reference, now);
+        int rung = 0;
+        for (int index = 0; index < repeatRungs.size(); index++) {
+            if (elapsed.compareTo(repeatRungs.get(index)) >= 0) {
+                rung = index + 1;
+            }
+        }
+        return rung;
+    }
+
+    private void notifyAssignees(
+            ErpTask task,
+            String type,
+            String title,
+            String urgency,
+            Instant now,
+            String eventKey
+    ) {
         notificationService.notifyUsers(
                 assignedUserIds(task.getId()),
                 type,
-                "Task remains blocked",
+                title,
                 task.getTitle(),
                 task.getId(),
-                "HIGH",
+                urgency,
                 eventKey,
                 now);
     }
@@ -181,10 +241,6 @@ public class WorkflowSlaEscalationService {
                         task.getId(),
                         "fallback=task_created_at",
                         task.getCreatedAt()));
-    }
-
-    private boolean elapsed(Instant reference, Instant now, Duration threshold) {
-        return !reference.plus(threshold).isAfter(now);
     }
 
     private Set<Long> assignedUserIds(long taskId) {

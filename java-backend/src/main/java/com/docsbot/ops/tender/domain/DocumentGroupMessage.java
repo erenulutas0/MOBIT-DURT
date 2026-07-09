@@ -41,6 +41,15 @@ public class DocumentGroupMessage {
     @Column(name = "media_duration_ms")
     private Integer mediaDurationMs;
 
+    @Column(name = "client_message_id", length = 128)
+    private String clientMessageId;
+
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
+    @Column(name = "sequence_no")
+    private Long sequenceNo;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -56,6 +65,7 @@ public class DocumentGroupMessage {
             String mediaMimeType,
             String mediaData,
             Integer mediaDurationMs,
+            String clientMessageId,
             Instant now
     ) {
         DocumentGroupMessage message = new DocumentGroupMessage();
@@ -67,8 +77,16 @@ public class DocumentGroupMessage {
         message.mediaMimeType = mediaMimeType == null || mediaMimeType.isBlank() ? null : mediaMimeType.trim();
         message.mediaData = mediaData == null || mediaData.isBlank() ? null : mediaData.trim();
         message.mediaDurationMs = mediaDurationMs;
+        message.clientMessageId = clientMessageId;
+        message.deliveredAt = now;
         message.createdAt = now;
         return message;
+    }
+
+    public void assignSequenceNo(long sequenceNo) {
+        if (this.sequenceNo == null) {
+            this.sequenceNo = sequenceNo;
+        }
     }
 
     public Long getId() { return id; }
@@ -80,5 +98,8 @@ public class DocumentGroupMessage {
     public String getMediaMimeType() { return mediaMimeType; }
     public String getMediaData() { return mediaData; }
     public Integer getMediaDurationMs() { return mediaDurationMs; }
+    public String getClientMessageId() { return clientMessageId; }
+    public Instant getDeliveredAt() { return deliveredAt; }
+    public Long getSequenceNo() { return sequenceNo; }
     public Instant getCreatedAt() { return createdAt; }
 }

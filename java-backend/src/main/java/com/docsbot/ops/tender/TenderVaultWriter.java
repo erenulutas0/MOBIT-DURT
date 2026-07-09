@@ -35,8 +35,8 @@ public class TenderVaultWriter {
         Path tenderDirectory = resolveInsideVault(
                 "ihaleler",
                 document.getYear().toString(),
-                document.getInternalUnit(),
-                document.getOrganization(),
+                vaultSegment(document.getInternalUnit()),
+                vaultSegment(document.getOrganization()),
                 document.getTenderId());
         Path documentsDirectory = tenderDirectory.resolve("documents").normalize();
         Path tenderNote = tenderDirectory.resolve(document.getTenderId() + ".md").normalize();
@@ -89,6 +89,7 @@ public class TenderVaultWriter {
                 internal_unit: %s
                 organization: %s
                 source: %s
+                tags: [tender, %s, %s]
                 ---
 
                 # %s
@@ -101,6 +102,8 @@ public class TenderVaultWriter {
                 document.getInternalUnit(),
                 document.getOrganization(),
                 document.getSource(),
+                tagSlug(document.getInternalUnit()),
+                tagSlug(document.getOrganization()),
                 document.getTenderId(),
                 DOCUMENTS_START,
                 DOCUMENTS_END);
@@ -115,10 +118,14 @@ public class TenderVaultWriter {
                 document_id: %d
                 message_id: %s
                 tender_id: %s
+                year: %d
+                internal_unit: %s
+                organization: %s
                 document_type: %s
                 mime_type: %s
                 checksum: %s
                 status: %s
+                tags: [document, %s, %s, %s]
                 ---
 
                 # %s
@@ -134,10 +141,16 @@ public class TenderVaultWriter {
                 document.getId(),
                 document.getMessageId(),
                 document.getTenderId(),
+                document.getYear(),
+                document.getInternalUnit(),
+                document.getOrganization(),
                 document.getDocumentType(),
                 document.getMimeType(),
                 document.getChecksum(),
                 document.getStatus(),
+                tagSlug(document.getDocumentType()),
+                tagSlug(document.getInternalUnit()),
+                tagSlug(document.getOrganization()),
                 document.getOriginalFilename(),
                 document.getTenderId(),
                 document.getSource(),
@@ -161,6 +174,36 @@ public class TenderVaultWriter {
                 .replaceAll("^[._-]+|[._-]+$", "");
         if (slug.isBlank()) slug = "document";
         return slug + "-" + document.getChecksum().substring(0, 10);
+    }
+
+    /**
+     * Canonical directory segment for internal-unit and organization levels: Turkish
+     * characters are transliterated so `BEDAŞ` and `BEDAS` land in the same directory.
+     */
+    static String vaultSegment(String value) {
+        if (value == null || value.isBlank()) {
+            return "UNCLASSIFIED";
+        }
+        String ascii = Normalizer.normalize(mapTurkish(value.trim()), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        String segment = ascii.toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+        return segment.isBlank() ? "UNCLASSIFIED" : segment;
+    }
+
+    static String tagSlug(String value) {
+        return vaultSegment(value).toLowerCase(Locale.ROOT);
+    }
+
+    private static String mapTurkish(String value) {
+        return value
+                .replace('ı', 'i').replace('İ', 'I')
+                .replace('ş', 's').replace('Ş', 'S')
+                .replace('ğ', 'g').replace('Ğ', 'G')
+                .replace('ü', 'u').replace('Ü', 'U')
+                .replace('ö', 'o').replace('Ö', 'O')
+                .replace('ç', 'c').replace('Ç', 'C');
     }
 
     private Path resolveInsideVault(String first, String... more) {

@@ -33,8 +33,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.docsbot.ops.erp.application.ErpPrincipal;
+import com.docsbot.ops.common.media.MessageMediaStorage;
+import com.docsbot.ops.erp.application.AppUpdateService;
 import com.docsbot.ops.erp.application.ErpActivityService;
 import com.docsbot.ops.erp.application.ErpAnalyticsService;
+import com.docsbot.ops.erp.application.ErpExceptions;
 import com.docsbot.ops.erp.application.ErpService;
 import com.docsbot.ops.erp.application.NotificationService;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -48,17 +51,23 @@ public class ErpController {
     private final NotificationService notificationService;
     private final ErpAnalyticsService analyticsService;
     private final ErpActivityService activityService;
+    private final AppUpdateService appUpdateService;
+    private final MessageMediaStorage mediaStorage;
 
     public ErpController(
             ErpService erpService,
             NotificationService notificationService,
             ErpAnalyticsService analyticsService,
-            ErpActivityService activityService
+            ErpActivityService activityService,
+            AppUpdateService appUpdateService,
+            MessageMediaStorage mediaStorage
     ) {
         this.erpService = erpService;
         this.notificationService = notificationService;
         this.analyticsService = analyticsService;
         this.activityService = activityService;
+        this.appUpdateService = appUpdateService;
+        this.mediaStorage = mediaStorage;
     }
 
     @GetMapping("/overview")
@@ -86,6 +95,23 @@ public class ErpController {
         return new ErpDtos.ActivityEventPageResponse(
                 ErpDtos.PageMeta.of(page.total(), normalizedOffset, normalizedLimit),
                 page.items().stream().map(ErpDtos.ActivityEventResponse::from).toList());
+    }
+
+    @GetMapping("/app-update")
+    AppUpdateResponse appUpdate(
+            @RequestParam(name = "current_version", defaultValue = "0.0.0") String currentVersion
+    ) {
+        return AppUpdateResponse.from(appUpdateService.info(currentVersion));
+    }
+
+    @PostMapping("/app-update/broadcast")
+    AppUpdateBroadcastResponse broadcastAppUpdate(
+            JwtAuthenticationToken authentication,
+            @Valid @RequestBody AppUpdateBroadcastRequest request
+    ) {
+        return AppUpdateBroadcastResponse.from(appUpdateService.broadcast(
+                ErpPrincipal.from(authentication),
+                request.latestVersion()));
     }
 
     @GetMapping("/users")
@@ -129,6 +155,12 @@ public class ErpController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void deleteUser(JwtAuthenticationToken authentication, @PathVariable long userId) {
         erpService.deleteUser(ErpPrincipal.from(authentication), userId);
+    }
+
+    @PostMapping("/me/account-deletion-request")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    void requestAccountDeletion(JwtAuthenticationToken authentication) {
+        erpService.requestAccountDeletion(ErpPrincipal.from(authentication));
     }
 
     @PostMapping("/users/{userId}/presence")
@@ -234,6 +266,7 @@ public class ErpController {
                 request.description(),
                 request.assigneeUserIds(),
                 request.assigneeTeamIds(),
+                request.responsibleUserId(),
                 request.priority(),
                 request.deadlineAt()));
     }
@@ -242,10 +275,25 @@ public class ErpController {
     ErpDtos.TaskResponse updateTask(
             JwtAuthenticationToken authentication,
             @PathVariable long taskId,
-            @Valid @RequestBody UpdateTaskStatusRequest request
+            @Valid @RequestBody UpdateTaskRequest request
     ) {
+        ErpPrincipal principal = ErpPrincipal.from(authentication);
+        if (request.hasEditFields()) {
+            return ErpDtos.TaskResponse.from(erpService.updateTaskDetails(
+                    principal,
+                    taskId,
+                    request.title(),
+                    request.description(),
+                    request.priority(),
+                    request.deadlineAt(),
+                    Boolean.TRUE.equals(request.clearDeadline()),
+                    request.status()));
+        }
+        if (request.status() == null || request.status().isBlank()) {
+            throw new ErpExceptions.BadRequest("No task fields to update");
+        }
         return ErpDtos.TaskResponse.from(erpService.updateTaskStatus(
-                ErpPrincipal.from(authentication),
+                principal,
                 taskId,
                 request.status()));
     }
@@ -329,14 +377,21 @@ public class ErpController {
     @GetMapping("/messages")
     List<ErpDtos.DirectMessageResponse> messages(
             JwtAuthenticationToken authentication,
-            @RequestParam(name = "limit", defaultValue = "50") int limit
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            @RequestParam(name = "before_id", required = false) Long beforeId
     ) {
         return erpService.listDirectMessages(
                         ErpPrincipal.from(authentication),
-                        normalizeLimit(limit))
+                        normalizeLimit(limit),
+                        beforeId)
                 .stream()
-                .map(ErpDtos.DirectMessageResponse::from)
+                .map(this::directMessageResponse)
                 .toList();
+    }
+
+    @GetMapping(value = "/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    SseEmitter directMessageStream(JwtAuthenticationToken authentication) {
+        return erpService.streamDirectMessages(ErpPrincipal.from(authentication));
     }
 
     @PostMapping("/messages")
@@ -344,14 +399,15 @@ public class ErpController {
             JwtAuthenticationToken authentication,
             @Valid @RequestBody DirectMessageRequest request
     ) {
-        return ErpDtos.DirectMessageResponse.from(erpService.sendDirectMessage(
+        return directMessageResponse(erpService.sendDirectMessage(
                 ErpPrincipal.from(authentication),
                 request.recipientUserId(),
                 request.body(),
                 request.messageKind(),
                 request.mediaMimeType(),
                 request.mediaData(),
-                request.mediaDurationMs()));
+                request.mediaDurationMs(),
+                request.clientMessageId()));
     }
 
     @PatchMapping("/messages/{messageId}/read")
@@ -359,9 +415,48 @@ public class ErpController {
             JwtAuthenticationToken authentication,
             @PathVariable long messageId
     ) {
-        return ErpDtos.DirectMessageResponse.from(erpService.markDirectMessageRead(
+        return directMessageResponse(erpService.markDirectMessageRead(
                 ErpPrincipal.from(authentication),
                 messageId));
+    }
+
+    @GetMapping("/messages/{messageId}/media")
+    ResponseEntity<Resource> messageMedia(
+            JwtAuthenticationToken authentication,
+            @PathVariable long messageId,
+            @RequestParam(defaultValue = "false") boolean download
+    ) {
+        MessageMediaStorage.StoredContent media = erpService.readDirectMessageMedia(
+                ErpPrincipal.from(authentication),
+                messageId);
+        ContentDisposition disposition = (download
+                ? ContentDisposition.attachment()
+                : ContentDisposition.inline())
+                .filename(media.filename())
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(media.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(new FileSystemResource(media.path()));
+    }
+
+    private ErpDtos.DirectMessageResponse directMessageResponse(com.docsbot.ops.erp.domain.ErpDirectMessage message) {
+        String mediaRef = mediaStorage.reference(message.getMediaData());
+        return ErpDtos.DirectMessageResponse.from(
+                message,
+                mediaRef == null ? mediaStorage.toDataUrl(message.getMediaData(), message.getMediaMimeType()) : null,
+                mediaRef == null ? null : "/erp/messages/" + message.getId() + "/media",
+                mediaRef);
+    }
+
+    @DeleteMapping("/messages/{messageId}")
+    ResponseEntity<Void> deleteMessage(
+            JwtAuthenticationToken authentication,
+            @PathVariable long messageId,
+            @RequestParam(name = "scope", required = false) String scope
+    ) {
+        erpService.deleteDirectMessage(ErpPrincipal.from(authentication), messageId, scope);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/notifications")
@@ -500,6 +595,7 @@ public class ErpController {
             @Size(max = 10_000) String description,
             @JsonProperty("assignee_user_ids") List<Long> assigneeUserIds,
             @JsonProperty("assignee_team_ids") List<Long> assigneeTeamIds,
+            @JsonProperty("responsible_user_id") Long responsibleUserId,
             String priority,
             @JsonProperty("deadline_at") Instant deadlineAt
     ) {
@@ -510,7 +606,21 @@ public class ErpController {
         }
     }
 
-    record UpdateTaskStatusRequest(@NotBlank String status) {
+    record UpdateTaskRequest(
+            String status,
+            @Size(min = 3, max = 255) String title,
+            @Size(max = 10_000) String description,
+            String priority,
+            @JsonProperty("deadline_at") Instant deadlineAt,
+            @JsonProperty("clear_deadline") Boolean clearDeadline
+    ) {
+        boolean hasEditFields() {
+            return title != null
+                    || description != null
+                    || priority != null
+                    || deadlineAt != null
+                    || Boolean.TRUE.equals(clearDeadline);
+        }
     }
 
     record BulkTaskStatusRequest(
@@ -562,7 +672,8 @@ public class ErpController {
             @JsonProperty("message_kind") String messageKind,
             @JsonProperty("media_mime_type") String mediaMimeType,
             @JsonProperty("media_data") String mediaData,
-            @JsonProperty("media_duration_ms") Integer mediaDurationMs
+            @JsonProperty("media_duration_ms") Integer mediaDurationMs,
+            @JsonProperty("client_message_id") String clientMessageId
     ) {
     }
 
@@ -570,6 +681,47 @@ public class ErpController {
     }
 
     record ReadAllNotificationsResponse(@JsonProperty("updated_count") int updatedCount) {
+    }
+
+    record AppUpdateResponse(
+            @JsonProperty("current_version") String currentVersion,
+            @JsonProperty("latest_version") String latestVersion,
+            @JsonProperty("minimum_version") String minimumVersion,
+            @JsonProperty("update_available") boolean updateAvailable,
+            boolean required,
+            String title,
+            String message,
+            @JsonProperty("play_store_url") String playStoreUrl
+    ) {
+        static AppUpdateResponse from(AppUpdateService.AppUpdateInfo value) {
+            return new AppUpdateResponse(
+                    value.currentVersion(),
+                    value.latestVersion(),
+                    value.minimumVersion(),
+                    value.updateAvailable(),
+                    value.required(),
+                    value.title(),
+                    value.message(),
+                    value.playStoreUrl());
+        }
+    }
+
+    record AppUpdateBroadcastRequest(
+            @JsonProperty("latest_version") @Size(max = 64) String latestVersion
+    ) {
+    }
+
+    record AppUpdateBroadcastResponse(
+            @JsonProperty("latest_version") String latestVersion,
+            @JsonProperty("active_device_users") int activeDeviceUsers,
+            @JsonProperty("notifications_created") int notificationsCreated
+    ) {
+        static AppUpdateBroadcastResponse from(AppUpdateService.AppUpdateBroadcastResult value) {
+            return new AppUpdateBroadcastResponse(
+                    value.latestVersion(),
+                    value.activeDeviceUsers(),
+                    value.notificationsCreated());
+        }
     }
 
     record NotificationPreferenceRequest(

@@ -7,8 +7,10 @@ import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.docsbot.ops.auth.domain.ErpUser;
+import com.docsbot.ops.common.media.MessageMediaStorage;
 import com.docsbot.ops.erp.ErpDtos;
 import com.docsbot.ops.erp.domain.ErpDirectMessage;
 import com.docsbot.ops.erp.domain.ErpTask;
@@ -65,6 +67,10 @@ public class ErpService {
         userService.deleteUser(principal, userId);
     }
 
+    public void requestAccountDeletion(ErpPrincipal principal) {
+        userService.requestAccountDeletion(principal);
+    }
+
     public ErpUser updatePresence(ErpPrincipal principal, long userId, String status) {
         return userService.updatePresence(principal, userId, status);
     }
@@ -107,6 +113,7 @@ public class ErpService {
             String description,
             Collection<Long> assigneeUserIds,
             Collection<Long> assigneeTeamIds,
+            Long responsibleUserId,
             String priority,
             Instant deadlineAt
     ) {
@@ -116,12 +123,34 @@ public class ErpService {
                 description,
                 assigneeUserIds,
                 assigneeTeamIds,
+                responsibleUserId,
                 priority,
                 deadlineAt);
     }
 
     public ErpTask updateTaskStatus(ErpPrincipal principal, long taskId, String status) {
         return taskService.updateTaskStatus(principal, taskId, status);
+    }
+
+    public ErpTask updateTaskDetails(
+            ErpPrincipal principal,
+            long taskId,
+            String title,
+            String description,
+            String priority,
+            Instant deadlineAt,
+            boolean clearDeadline,
+            String status
+    ) {
+        return taskService.updateTaskDetails(
+                principal,
+                taskId,
+                title,
+                description,
+                priority,
+                deadlineAt,
+                clearDeadline,
+                status);
     }
 
     public List<ErpTask> bulkUpdateTaskStatus(ErpPrincipal principal, Collection<Long> taskIds, String status) {
@@ -162,6 +191,14 @@ public class ErpService {
         return directMessageService.listMessages(principal, limit);
     }
 
+    public List<ErpDirectMessage> listDirectMessages(ErpPrincipal principal, int limit, Long beforeId) {
+        return directMessageService.listMessages(principal, limit, beforeId);
+    }
+
+    public SseEmitter streamDirectMessages(ErpPrincipal principal) {
+        return directMessageService.stream(principal);
+    }
+
     public ErpDirectMessage sendDirectMessage(
             ErpPrincipal principal,
             Long recipientUserId,
@@ -169,7 +206,8 @@ public class ErpService {
             String messageKind,
             String mediaMimeType,
             String mediaData,
-            Integer mediaDurationMs
+            Integer mediaDurationMs,
+            String clientMessageId
     ) {
         return directMessageService.sendMessage(
                 principal,
@@ -178,11 +216,20 @@ public class ErpService {
                 messageKind,
                 mediaMimeType,
                 mediaData,
-                mediaDurationMs);
+                mediaDurationMs,
+                clientMessageId);
     }
 
     public ErpDirectMessage markDirectMessageRead(ErpPrincipal principal, long messageId) {
         return directMessageService.markRead(principal, messageId);
+    }
+
+    public void deleteDirectMessage(ErpPrincipal principal, long messageId, String scope) {
+        directMessageService.deleteMessage(principal, messageId, scope);
+    }
+
+    public MessageMediaStorage.StoredContent readDirectMessageMedia(ErpPrincipal principal, long messageId) {
+        return directMessageService.readMessageMedia(principal, messageId);
     }
 
     public List<ErpTaskDocument> listTaskDocuments(ErpPrincipal principal, long taskId) {

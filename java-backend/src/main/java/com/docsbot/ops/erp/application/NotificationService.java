@@ -27,6 +27,13 @@ import com.docsbot.ops.erp.infrastructure.ErpNotificationRepository;
 @Profile("postgres")
 public class NotificationService {
 
+    /** Alert types whose event keys are re-armed when a task deadline changes. */
+    private static final Set<String> DEADLINE_ALERT_TYPES = Set.of(
+            "task_due_soon",
+            "manager_due_soon_digest",
+            "task_overdue",
+            "manager_overdue_digest");
+
     private final ErpNotificationRepository notificationRepository;
     private final ErpNotificationPreferenceRepository preferenceRepository;
     private final ErpNotificationDeliveryRepository deliveryRepository;
@@ -187,6 +194,16 @@ public class NotificationService {
                 priority,
                 eventKey,
                 now);
+    }
+
+    /**
+     * Re-arms deadline alerts for a task after its deadline changed: the dedup event keys of
+     * already-sent due-soon/overdue notifications are detached so the deadline scans can alert
+     * again for the new deadline. History stays visible to recipients.
+     */
+    @Transactional
+    public int rearmDeadlineAlerts(long taskId) {
+        return notificationRepository.detachEventKeys(taskId, DEADLINE_ALERT_TYPES);
     }
 
     @Transactional

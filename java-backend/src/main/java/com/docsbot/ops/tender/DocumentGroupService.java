@@ -4,33 +4,47 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.LocalDate;
-import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
+import com.docsbot.ops.common.media.MessageMediaStorage;
 import com.docsbot.ops.dashboard.DashboardFileService;
 import com.docsbot.ops.erp.application.ErpExceptions;
 import com.docsbot.ops.erp.application.ErpPrincipal;
+import com.docsbot.ops.erp.application.ChatEventPublisher;
+import com.docsbot.ops.erp.application.NotificationService;
 import com.docsbot.ops.tender.domain.DocumentGroup;
 import com.docsbot.ops.tender.domain.DocumentGroupDocument;
 import com.docsbot.ops.tender.domain.DocumentGroupMember;
 import com.docsbot.ops.tender.domain.DocumentGroupMessage;
+import com.docsbot.ops.tender.domain.DocumentGroupMessageHiddenReceipt;
+import com.docsbot.ops.tender.domain.DocumentGroupMessageReadReceipt;
+import com.docsbot.ops.tender.domain.DocumentGroupDocumentVersion;
 import com.docsbot.ops.tender.domain.Tender;
 import com.docsbot.ops.tender.domain.TenderDocument;
 import com.docsbot.ops.tender.infrastructure.DocumentGroupDocumentRepository;
+import com.docsbot.ops.tender.infrastructure.DocumentGroupDocumentVersionRepository;
 import com.docsbot.ops.tender.infrastructure.DocumentGroupMemberRepository;
+import com.docsbot.ops.tender.infrastructure.DocumentGroupMessageHiddenReceiptRepository;
+import com.docsbot.ops.tender.infrastructure.DocumentGroupMessageReadReceiptRepository;
 import com.docsbot.ops.tender.infrastructure.DocumentGroupMessageRepository;
 import com.docsbot.ops.tender.infrastructure.DocumentGroupRepository;
+import com.docsbot.ops.tender.infrastructure.GroupCount;
 import com.docsbot.ops.tender.infrastructure.TenderDocumentRepository;
 import com.docsbot.ops.tender.infrastructure.TenderRepository;
 
@@ -46,12 +60,18 @@ public class DocumentGroupService {
     private final DocumentGroupRepository groupRepository;
     private final DocumentGroupMemberRepository memberRepository;
     private final DocumentGroupDocumentRepository groupDocumentRepository;
+    private final DocumentGroupDocumentVersionRepository groupDocumentVersionRepository;
     private final DocumentGroupMessageRepository messageRepository;
+    private final DocumentGroupMessageHiddenReceiptRepository messageHiddenReceiptRepository;
+    private final DocumentGroupMessageReadReceiptRepository messageReadReceiptRepository;
     private final TenderDocumentRepository documentRepository;
     private final TenderRepository tenderRepository;
     private final ErpUserRepository userRepository;
     private final TenderIngestionService ingestionService;
     private final DashboardFileService fileService;
+    private final NotificationService notificationService;
+    private final MessageMediaStorage mediaStorage;
+    private final ChatEventPublisher chatEventPublisher;
     private final Clock clock;
 
     @Autowired
@@ -59,23 +79,35 @@ public class DocumentGroupService {
             DocumentGroupRepository groupRepository,
             DocumentGroupMemberRepository memberRepository,
             DocumentGroupDocumentRepository groupDocumentRepository,
+            DocumentGroupDocumentVersionRepository groupDocumentVersionRepository,
             DocumentGroupMessageRepository messageRepository,
+            DocumentGroupMessageHiddenReceiptRepository messageHiddenReceiptRepository,
+            DocumentGroupMessageReadReceiptRepository messageReadReceiptRepository,
             TenderDocumentRepository documentRepository,
             TenderRepository tenderRepository,
             ErpUserRepository userRepository,
             TenderIngestionService ingestionService,
-            DashboardFileService fileService
+            DashboardFileService fileService,
+            NotificationService notificationService,
+            MessageMediaStorage mediaStorage,
+            ChatEventPublisher chatEventPublisher
     ) {
         this(
                 groupRepository,
                 memberRepository,
                 groupDocumentRepository,
+                groupDocumentVersionRepository,
                 messageRepository,
+                messageHiddenReceiptRepository,
+                messageReadReceiptRepository,
                 documentRepository,
                 tenderRepository,
                 userRepository,
                 ingestionService,
                 fileService,
+                notificationService,
+                mediaStorage,
+                chatEventPublisher,
                 Clock.systemUTC());
     }
 
@@ -83,36 +115,54 @@ public class DocumentGroupService {
             DocumentGroupRepository groupRepository,
             DocumentGroupMemberRepository memberRepository,
             DocumentGroupDocumentRepository groupDocumentRepository,
+            DocumentGroupDocumentVersionRepository groupDocumentVersionRepository,
             DocumentGroupMessageRepository messageRepository,
+            DocumentGroupMessageHiddenReceiptRepository messageHiddenReceiptRepository,
+            DocumentGroupMessageReadReceiptRepository messageReadReceiptRepository,
             TenderDocumentRepository documentRepository,
             TenderRepository tenderRepository,
             ErpUserRepository userRepository,
             TenderIngestionService ingestionService,
             DashboardFileService fileService,
+            NotificationService notificationService,
+            MessageMediaStorage mediaStorage,
+            ChatEventPublisher chatEventPublisher,
             Clock clock
     ) {
         this.groupRepository = groupRepository;
         this.memberRepository = memberRepository;
         this.groupDocumentRepository = groupDocumentRepository;
+        this.groupDocumentVersionRepository = groupDocumentVersionRepository;
         this.messageRepository = messageRepository;
+        this.messageHiddenReceiptRepository = messageHiddenReceiptRepository;
+        this.messageReadReceiptRepository = messageReadReceiptRepository;
         this.documentRepository = documentRepository;
         this.tenderRepository = tenderRepository;
         this.userRepository = userRepository;
         this.ingestionService = ingestionService;
         this.fileService = fileService;
+        this.notificationService = notificationService;
+        this.mediaStorage = mediaStorage;
+        this.chatEventPublisher = chatEventPublisher;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public List<DocumentGroupSummary> listGroups(ErpPrincipal principal) {
-        List<DocumentGroup> groups = principal.admin() || hasDocumentNetworkVisibility(principal)
-                ? groupRepository.findAllByArchivedAtIsNullOrderByUpdatedAtDescIdDesc()
-                : memberRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(principal.requireUserId()).stream()
-                        .map(member -> groupRepository.findById(member.getGroupId()).orElse(null))
-                        .filter(group -> group != null && group.getArchivedAt() == null)
-                        .sorted(Comparator.comparing(DocumentGroup::getUpdatedAt).reversed())
-                        .toList();
-        return groups.stream().map(this::summary).toList();
+        List<DocumentGroup> groups;
+        if (principal.admin() || hasDocumentNetworkVisibility(principal)) {
+            groups = groupRepository.findAllByArchivedAtIsNullOrderByUpdatedAtDescIdDesc();
+        } else {
+            List<Long> groupIds = memberRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(principal.requireUserId())
+                    .stream()
+                    .map(DocumentGroupMember::getGroupId)
+                    .distinct()
+                    .toList();
+            groups = groupIds.isEmpty()
+                    ? List.of()
+                    : groupRepository.findAllByIdInAndArchivedAtIsNullOrderByUpdatedAtDescIdDesc(groupIds);
+        }
+        return summaries(groups, principal);
     }
 
     @Transactional
@@ -143,14 +193,14 @@ public class DocumentGroupService {
         for (Long userId : normalizeMemberIds(memberUserIds)) {
             addMemberInternal(group, userId, MEMBER_ROLE, principal.subject(), now);
         }
-        return summary(group);
+        return summary(group, principal);
     }
 
     @Transactional(readOnly = true)
     public DocumentGroupDetail getGroup(ErpPrincipal principal, long groupId) {
         DocumentGroup group = group(groupId);
         requireView(principal, group);
-        return detail(group);
+        return detail(group, principal);
     }
 
     @Transactional
@@ -171,7 +221,7 @@ public class DocumentGroupService {
         if (transferExistingDocuments && effectiveTenderId != null) {
             rerouteExistingDocuments(group, effectiveTenderId, effectiveYear);
         }
-        return detail(group);
+        return detail(group, principal);
     }
 
     @Transactional
@@ -179,7 +229,7 @@ public class DocumentGroupService {
         DocumentGroup group = group(groupId);
         requireManage(principal, group);
         group.setArchived(archived, clock.instant());
-        return detail(group);
+        return detail(group, principal);
     }
 
     @Transactional
@@ -191,16 +241,45 @@ public class DocumentGroupService {
     ) {
         DocumentGroup group = group(groupId);
         requireManage(principal, group);
-        addMemberInternal(group, userId, normalizeRole(role), principal.subject(), clock.instant());
-        return detail(group);
+        Instant now = clock.instant();
+        addMemberInternal(group, userId, normalizeRole(role), principal.subject(), now);
+        group.touch(now);
+        notifyGroupMembers(
+                group,
+                principal,
+                "document_group_member_added",
+                "Oda üyesi eklendi",
+                userName(userId) + " · " + group.getName(),
+                "document-group-member-added:" + group.getId() + ":" + userId,
+                now);
+        return detail(group, principal);
     }
 
     @Transactional
     public DocumentGroupDetail removeMember(ErpPrincipal principal, long groupId, long userId) {
         DocumentGroup group = group(groupId);
         requireManage(principal, group);
+        Instant now = clock.instant();
         memberRepository.deleteByGroupIdAndUserId(groupId, userId);
-        return detail(group);
+        group.touch(now);
+        notificationService.notifyUsers(
+                List.of(userId),
+                "document_group_member_removed",
+                "Oda üyeliğiniz kaldırıldı",
+                group.getName(),
+                null,
+                "NORMAL",
+                "document-group-member-removed:" + group.getId() + ":" + userId,
+                now);
+        notifyGroupMembers(
+                group,
+                principal,
+                "document_group_member_removed",
+                "Oda üyesi çıkarıldı",
+                userName(userId) + " · " + group.getName(),
+                "document-group-member-removed:" + group.getId() + ":" + userId + ":members",
+                now);
+        return detail(group, principal);
     }
 
     @Transactional
@@ -255,8 +334,122 @@ public class DocumentGroupService {
                         effectiveTenderId,
                         effectiveYear,
                         clock.instant()));
-        group.touch(clock.instant());
+        Instant now = clock.instant();
+        groupDocumentVersionRepository.save(DocumentGroupDocumentVersion.create(
+                mapping.getId(),
+                document.getId(),
+                1,
+                mapping.getUploadedByUserId(),
+                mapping.getUploadedBy(),
+                note,
+                now));
+        group.touch(now);
+        notifyGroupMembers(
+                group,
+                principal,
+                "document_group_document_uploaded",
+                "Yeni doküman paylaşıldı",
+                group.getName() + " · " + documentName(document),
+                "document-group-document-uploaded:" + group.getId() + ":" + mapping.getId(),
+                now);
         return new GroupDocumentItem(mapping, document);
+    }
+
+    @Transactional
+    public GroupDocumentItem replaceDocument(
+            ErpPrincipal principal,
+            long groupId,
+            long groupDocumentId,
+            MultipartFile file,
+            String note
+    ) {
+        DocumentGroup group = group(groupId);
+        requireView(principal, group);
+        if (group.getArchivedAt() != null) {
+            throw new ErpExceptions.BadRequest("Document group is archived");
+        }
+        DocumentGroupDocument mapping = groupDocumentRepository.findByIdAndGroupId(groupDocumentId, groupId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Group document not found"));
+        if (!canManage(principal, group) && !isCurrentUser(principal, mapping.getUploadedByUserId())) {
+            throw new ErpExceptions.Forbidden("Document owner or group manager access is required");
+        }
+        TenderDocument previousDocument = document(mapping.getDocumentId());
+        TenderDocument replacement = ingestionService.upload(
+                file,
+                fallback(previousDocument.getInternalUnit(), DEFAULT_INTERNAL_UNIT),
+                fallback(previousDocument.getOrganization(), DEFAULT_ORGANIZATION),
+                previousDocument.getYear() == null ? LocalDate.now(ZoneOffset.UTC).getYear() : previousDocument.getYear(),
+                mapping.getTenderId(),
+                note);
+        Instant now = clock.instant();
+        long existingVersionCount = groupDocumentVersionRepository.countByGroupDocumentId(mapping.getId());
+        if (existingVersionCount == 0) {
+            groupDocumentVersionRepository.save(DocumentGroupDocumentVersion.create(
+                    mapping.getId(),
+                    previousDocument.getId(),
+                    1,
+                    mapping.getUploadedByUserId(),
+                    mapping.getUploadedBy(),
+                    mapping.getNote(),
+                    mapping.getCreatedAt()));
+            existingVersionCount = 1;
+        }
+        int nextVersion = Math.toIntExact(existingVersionCount + 1);
+        mapping.replaceDocument(replacement.getId(), note, mapping.getTenderId(), mapping.getYear());
+        groupDocumentVersionRepository.save(DocumentGroupDocumentVersion.create(
+                mapping.getId(),
+                replacement.getId(),
+                nextVersion,
+                principal.userId().isPresent() ? principal.userId().getAsLong() : null,
+                principal.displayName(),
+                note,
+                now));
+        group.touch(now);
+        notifyGroupMembers(
+                group,
+                principal,
+                "document_group_document_replaced",
+                "Doküman revizyonu yüklendi",
+                group.getName() + " · " + documentName(replacement),
+                "document-group-document-replaced:" + group.getId() + ":" + mapping.getId(),
+                now);
+        return new GroupDocumentItem(mapping, replacement);
+    }
+
+    @Transactional(readOnly = true)
+    public List<GroupDocumentVersionItem> listDocumentVersions(
+            ErpPrincipal principal,
+            long groupId,
+            long groupDocumentId
+    ) {
+        DocumentGroup group = group(groupId);
+        requireView(principal, group);
+        DocumentGroupDocument mapping = groupDocumentRepository.findByIdAndGroupId(groupDocumentId, groupId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Group document not found"));
+        List<DocumentGroupDocumentVersion> versions =
+                groupDocumentVersionRepository.findAllByGroupDocumentIdOrderByVersionNumberDescIdDesc(mapping.getId());
+        if (versions.isEmpty()) {
+            return List.of(new GroupDocumentVersionItem(
+                    null,
+                    mapping.getId(),
+                    document(mapping.getDocumentId()),
+                    1,
+                    mapping.getUploadedByUserId(),
+                    mapping.getUploadedBy(),
+                    mapping.getNote(),
+                    mapping.getCreatedAt()));
+        }
+        return versions.stream()
+                .map(version -> new GroupDocumentVersionItem(
+                        version.getId(),
+                        version.getGroupDocumentId(),
+                        document(version.getDocumentId()),
+                        version.getVersionNumber(),
+                        version.getUploadedByUserId(),
+                        version.getUploadedBy(),
+                        version.getNote(),
+                        version.getCreatedAt()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -272,7 +465,19 @@ public class DocumentGroupService {
     public List<DocumentGroupMessage> listMessages(ErpPrincipal principal, long groupId) {
         DocumentGroup group = group(groupId);
         requireView(principal, group);
-        return messageRepository.findAllByGroupIdOrderByCreatedAtAscIdAsc(groupId);
+        return messageRepository.findVisibleByGroupId(groupId, actorKey(principal));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DocumentGroupMessage> listMessages(ErpPrincipal principal, long groupId, int limit, Long beforeId) {
+        DocumentGroup group = group(groupId);
+        requireView(principal, group);
+        List<DocumentGroupMessage> messages = messageRepository.findLatestByGroupId(
+                groupId,
+                beforeId == null || beforeId <= 0 ? null : beforeId,
+                actorKey(principal),
+                PageRequest.of(0, Math.max(1, Math.min(limit, 100))));
+        return messages.reversed();
     }
 
     @Transactional
@@ -283,7 +488,8 @@ public class DocumentGroupService {
             String messageKind,
             String mediaMimeType,
             String mediaData,
-            Integer mediaDurationMs
+            Integer mediaDurationMs,
+            String clientMessageId
     ) {
         DocumentGroup group = group(groupId);
         requireView(principal, group);
@@ -291,32 +497,111 @@ public class DocumentGroupService {
             throw new ErpExceptions.BadRequest("Document group is archived");
         }
         String kind = normalizeMessageKind(messageKind);
+        String cleanedClientMessageId = normalizeClientMessageId(clientMessageId);
+        Long authorUserId = principal.userId().isPresent() ? principal.userId().getAsLong() : null;
+        if (cleanedClientMessageId != null) {
+            List<DocumentGroupMessage> existing = messageRepository.findByClientMessageId(
+                    group.getId(),
+                    authorUserId,
+                    cleanedClientMessageId,
+                    PageRequest.of(0, 1));
+            if (!existing.isEmpty()) {
+                return existing.getFirst();
+            }
+        }
         DocumentGroupMessage message = messageRepository.saveAndFlush(DocumentGroupMessage.create(
                 group.getId(),
-                principal.userId().isPresent() ? principal.userId().getAsLong() : null,
+                authorUserId,
                 principal.displayName(),
                 "voice".equals(kind) ? "Ses mesajı" : normalizeMessageBody(body),
                 kind,
                 normalizeMessageMediaMimeType(kind, mediaMimeType),
-                normalizeMessageMediaData(kind, mediaData),
+                normalizeMessageMediaData(group.getId(), kind, mediaMimeType, mediaData),
                 "voice".equals(kind) ? Math.max(0, mediaDurationMs == null ? 0 : mediaDurationMs) : null,
+                cleanedClientMessageId,
                 clock.instant()));
-        group.touch(clock.instant());
+        message.assignSequenceNo(message.getId());
+        Instant now = clock.instant();
+        group.touch(now);
+        notifyGroupMembers(
+                group,
+                principal,
+                "document_group_message",
+                "Yeni oda mesajı",
+                group.getName() + " · " + messagePreview(message),
+                "document-group-message:" + group.getId() + ":" + message.getId(),
+                now);
+        publishDocumentGroupMessageEvents(group, message.getId());
         return message;
     }
 
     @Transactional
-    public void deleteMessage(ErpPrincipal principal, long groupId, long messageId) {
+    public int markMessagesRead(ErpPrincipal principal, long groupId, long throughMessageId) {
+        DocumentGroup group = group(groupId);
+        requireView(principal, group);
+        String actorKey = actorKey(principal);
+        Long currentUserId = principal.userId().isPresent() ? principal.userId().getAsLong() : null;
+        int updated = 0;
+        for (DocumentGroupMessage message : messageRepository.findAllByGroupIdAndIdLessThanEqualOrderByIdAsc(
+                group.getId(),
+                throughMessageId)) {
+            boolean authoredByCurrentActor = principal.admin()
+                    ? message.getAuthorUserId() == null
+                    : currentUserId != null && currentUserId.equals(message.getAuthorUserId());
+            if (authoredByCurrentActor
+                    || messageHiddenReceiptRepository.existsByMessageIdAndActorKey(message.getId(), actorKey)
+                    || messageReadReceiptRepository.existsByMessageIdAndActorKey(message.getId(), actorKey)) {
+                continue;
+            }
+            messageReadReceiptRepository.save(DocumentGroupMessageReadReceipt.create(
+                    message.getId(),
+                    actorKey,
+                    clock.instant()));
+            updated++;
+        }
+        return updated;
+    }
+
+    @Transactional
+    public void deleteMessage(ErpPrincipal principal, long groupId, long messageId, String scope) {
         DocumentGroup group = group(groupId);
         requireView(principal, group);
         DocumentGroupMessage message = messageRepository.findById(messageId)
                 .filter(value -> value.getGroupId() == groupId)
                 .orElseThrow(() -> new ErpExceptions.NotFound("Message not found"));
+        if (deleteForMe(scope)) {
+            String actorKey = actorKey(principal);
+            if (!messageHiddenReceiptRepository.existsByMessageIdAndActorKey(messageId, actorKey)) {
+                messageHiddenReceiptRepository.save(DocumentGroupMessageHiddenReceipt.create(
+                        messageId,
+                        actorKey,
+                        clock.instant()));
+            }
+            return;
+        }
         if (!canManage(principal, group) && !isCurrentUser(principal, message.getAuthorUserId())) {
             throw new ErpExceptions.Forbidden("Message owner or group manager access is required");
         }
         messageRepository.delete(message);
+        publishDocumentGroupMessageDeletedEvents(group, messageId);
         group.touch(clock.instant());
+    }
+
+    @Transactional(readOnly = true)
+    public MessageMediaStorage.StoredContent groupMessageMedia(
+            ErpPrincipal principal,
+            long groupId,
+            long messageId
+    ) {
+        DocumentGroup group = group(groupId);
+        requireView(principal, group);
+        DocumentGroupMessage message = messageRepository.findById(messageId)
+                .filter(value -> value.getGroupId() == groupId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Message media not found"));
+        if (messageHiddenReceiptRepository.existsByMessageIdAndActorKey(messageId, actorKey(principal))) {
+            throw new ErpExceptions.NotFound("Message media not found");
+        }
+        return mediaStorage.storedContent(message.getMediaData(), message.getMediaMimeType());
     }
 
     @Transactional
@@ -345,20 +630,78 @@ public class DocumentGroupService {
         return fileService.documentFile(mapping.getDocumentId());
     }
 
-    private DocumentGroupSummary summary(DocumentGroup group) {
-        long memberCount = memberRepository.findAllByGroupIdOrderByCreatedAtAscIdAsc(group.getId()).size();
-        long documentCount = groupDocumentRepository.findAllByGroupIdOrderByCreatedAtDescIdDesc(group.getId()).size();
-        return new DocumentGroupSummary(group, memberCount, documentCount);
+    @Transactional(readOnly = true)
+    public DashboardFileService.StoredFile groupDocumentVersionFile(
+            ErpPrincipal principal,
+            long groupId,
+            long groupDocumentId,
+            long versionId
+    ) {
+        DocumentGroup group = group(groupId);
+        requireView(principal, group);
+        groupDocumentRepository.findByIdAndGroupId(groupDocumentId, groupId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Group document not found"));
+        DocumentGroupDocumentVersion version = groupDocumentVersionRepository.findById(versionId)
+                .filter(value -> value.getGroupDocumentId() == groupDocumentId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Document version not found"));
+        return fileService.documentFile(version.getDocumentId());
     }
 
-    private DocumentGroupDetail detail(DocumentGroup group) {
+    private DocumentGroupSummary summary(DocumentGroup group, ErpPrincipal principal) {
+        long memberCount = memberRepository.findAllByGroupIdOrderByCreatedAtAscIdAsc(group.getId()).size();
+        long documentCount = groupDocumentRepository.findAllByGroupIdOrderByCreatedAtDescIdDesc(group.getId()).size();
+        long unreadMessageCount = unreadMessageCounts(List.of(group.getId()), principal).getOrDefault(group.getId(), 0L);
+        return new DocumentGroupSummary(group, memberCount, documentCount, unreadMessageCount);
+    }
+
+    private List<DocumentGroupSummary> summaries(List<DocumentGroup> groups, ErpPrincipal principal) {
+        if (groups.isEmpty()) {
+            return List.of();
+        }
+        List<Long> groupIds = groups.stream()
+                .map(DocumentGroup::getId)
+                .toList();
+        Map<Long, Long> memberCounts = groupCountMap(memberRepository.countMembersByGroupIdIn(groupIds));
+        Map<Long, Long> documentCounts = groupCountMap(groupDocumentRepository.countDocumentsByGroupIdIn(groupIds));
+        Map<Long, Long> unreadMessageCounts = unreadMessageCounts(groupIds, principal);
+        return groups.stream()
+                .map(group -> new DocumentGroupSummary(
+                        group,
+                        memberCounts.getOrDefault(group.getId(), 0L),
+                        documentCounts.getOrDefault(group.getId(), 0L),
+                        unreadMessageCounts.getOrDefault(group.getId(), 0L)))
+                .toList();
+    }
+
+    private Map<Long, Long> unreadMessageCounts(List<Long> groupIds, ErpPrincipal principal) {
+        if (groupIds.isEmpty()) {
+            return Map.of();
+        }
+        Long currentUserId = principal.userId().isPresent() ? principal.userId().getAsLong() : null;
+        return groupCountMap(messageRepository.countUnreadByGroupIdIn(
+                groupIds,
+                actorKey(principal),
+                principal.admin(),
+                currentUserId));
+    }
+
+    private Map<Long, Long> groupCountMap(List<GroupCount> counts) {
+        return counts.stream()
+                .collect(Collectors.toMap(GroupCount::groupId, GroupCount::total));
+    }
+
+    private DocumentGroupDetail detail(DocumentGroup group, ErpPrincipal principal) {
         List<DocumentGroupMemberItem> members = memberRepository.findAllByGroupIdOrderByCreatedAtAscIdAsc(group.getId()).stream()
                 .map(member -> new DocumentGroupMemberItem(member, userRepository.findById(member.getUserId()).orElse(null)))
                 .toList();
         List<GroupDocumentItem> documents = groupDocumentRepository.findAllByGroupIdOrderByCreatedAtDescIdDesc(group.getId()).stream()
                 .map(mapping -> new GroupDocumentItem(mapping, document(mapping.getDocumentId())))
                 .toList();
-        return new DocumentGroupDetail(summary(group), members, documents);
+        long unreadMessageCount = unreadMessageCounts(List.of(group.getId()), principal).getOrDefault(group.getId(), 0L);
+        return new DocumentGroupDetail(
+                new DocumentGroupSummary(group, members.size(), documents.size(), unreadMessageCount),
+                members,
+                documents);
     }
 
     private void addMemberInternal(
@@ -379,6 +722,122 @@ public class DocumentGroupService {
                                 role,
                                 addedBy,
                                 now)));
+    }
+
+    private void notifyGroupMembers(
+            DocumentGroup group,
+            ErpPrincipal principal,
+            String type,
+            String title,
+            String body,
+            String eventKeyPrefix,
+            Instant now
+    ) {
+        Long actorUserId = principal.userId().isPresent() ? principal.userId().getAsLong() : null;
+        List<Long> recipients = memberRepository.findAllByGroupIdOrderByCreatedAtAscIdAsc(group.getId()).stream()
+                .map(DocumentGroupMember::getUserId)
+                .filter(userId -> actorUserId == null || !userId.equals(actorUserId))
+                .distinct()
+                .toList();
+        notificationService.notifyUsers(recipients, type, title, body, null, "NORMAL", eventKeyPrefix, now);
+        if (!principal.admin()) {
+            notificationService.notifyAdmin(
+                    type,
+                    title,
+                    body,
+                    null,
+                    "NORMAL",
+                    eventKeyPrefix + ":admin",
+                    now);
+        }
+    }
+
+    private void publishDocumentGroupMessageEvents(DocumentGroup group, long messageId) {
+        for (String actorKey : groupActorKeys(group)) {
+            afterCommit(() -> chatEventPublisher.publishDocumentGroupMessage(actorKey, group.getId(), messageId));
+        }
+    }
+
+    private void publishDocumentGroupMessageDeletedEvents(DocumentGroup group, long messageId) {
+        for (String actorKey : groupActorKeys(group)) {
+            afterCommit(() -> chatEventPublisher.publishDocumentGroupMessageDeleted(actorKey, group.getId(), messageId));
+        }
+    }
+
+    private Set<String> groupActorKeys(DocumentGroup group) {
+        Set<String> actorKeys = new LinkedHashSet<>();
+        actorKeys.add("admin");
+        memberRepository.findAllByGroupIdOrderByCreatedAtAscIdAsc(group.getId()).stream()
+                .map(DocumentGroupMember::getUserId)
+                .map(userId -> "user:" + userId)
+                .forEach(actorKeys::add);
+        return actorKeys;
+    }
+
+    private void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
+    }
+
+    private String userName(long userId) {
+        return userRepository.findById(userId)
+                .map(ErpUser::getName)
+                .filter(name -> !name.isBlank())
+                .orElse("Kullanıcı " + userId);
+    }
+
+    private String documentName(TenderDocument document) {
+        if (document.getOriginalFilename() != null && !document.getOriginalFilename().isBlank()) {
+            return document.getOriginalFilename();
+        }
+        if (document.getStoredFilename() != null && !document.getStoredFilename().isBlank()) {
+            return document.getStoredFilename();
+        }
+        return "Doküman #" + document.getId();
+    }
+
+    private String fallback(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private String actorKey(ErpPrincipal principal) {
+        if (principal.admin()) {
+            return "admin";
+        }
+        return "user:" + principal.requireUserId();
+    }
+
+    private boolean deleteForMe(String scope) {
+        if (scope == null || scope.isBlank()) {
+            return false;
+        }
+        String normalized = scope.trim().toLowerCase(Locale.ROOT);
+        if (List.of("me", "mine", "self", "benden").contains(normalized)) {
+            return true;
+        }
+        if (List.of("everyone", "all", "herkesten").contains(normalized)) {
+            return false;
+        }
+        throw new ErpExceptions.BadRequest("Unsupported delete scope");
+    }
+
+    private String messagePreview(DocumentGroupMessage message) {
+        if ("voice".equals(message.getMessageKind())) {
+            return message.getAuthorName() + ": Ses mesajı";
+        }
+        String body = message.getBody();
+        if (body.length() <= 80) {
+            return message.getAuthorName() + ": " + body;
+        }
+        return message.getAuthorName() + ": " + body.substring(0, 77) + "...";
     }
 
     private DocumentGroup group(long groupId) {
@@ -483,32 +942,57 @@ public class DocumentGroupService {
     private String normalizeMessageKind(String value) {
         if (value == null || value.isBlank()) return "text";
         String normalized = value.trim().toLowerCase(Locale.ROOT);
-        if (!List.of("text", "voice").contains(normalized)) {
+        if (!List.of("text", "voice", "image", "file").contains(normalized)) {
             throw new ErpExceptions.BadRequest("Unsupported message type");
         }
         return normalized;
     }
 
-    private String normalizeMessageMediaMimeType(String kind, String value) {
-        if (!"voice".equals(kind)) return null;
-        if (value == null || value.isBlank()) return "audio/webm";
+    private String normalizeClientMessageId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
         String normalized = value.trim();
-        if (!normalized.startsWith("audio/")) {
-            throw new ErpExceptions.BadRequest("Voice message must be audio");
+        if (normalized.length() > 128) {
+            throw new ErpExceptions.BadRequest("Client message id is too long");
         }
         return normalized;
     }
 
-    private String normalizeMessageMediaData(String kind, String value) {
-        if (!"voice".equals(kind)) return null;
-        if (value == null || value.isBlank() || !value.trim().startsWith("data:audio/")) {
-            throw new ErpExceptions.BadRequest("Voice message data is required");
+    private String normalizeMessageMediaMimeType(String kind, String value) {
+        if ("text".equals(kind)) return null;
+        if (value == null || value.isBlank()) {
+            return "voice".equals(kind) ? "audio/webm" : "application/octet-stream";
         }
         String normalized = value.trim();
-        if (normalized.length() > 1_500_000) {
-            throw new ErpExceptions.BadRequest("Voice message is too large");
+        if ("voice".equals(kind) && !normalized.startsWith("audio/")) {
+            throw new ErpExceptions.BadRequest("Voice message must be audio");
+        }
+        if ("image".equals(kind) && !normalized.startsWith("image/")) {
+            throw new ErpExceptions.BadRequest("Image message must be an image");
         }
         return normalized;
+    }
+
+    private String normalizeMessageMediaData(long groupId, String kind, String mediaMimeType, String value) {
+        if ("text".equals(kind)) return null;
+        if (value == null || value.isBlank()) {
+            throw new ErpExceptions.BadRequest("Message media data is required");
+        }
+        String normalized = value.trim();
+        if (normalized.startsWith("media:")) {
+            return mediaStorage.storeDataUrl("document-group-" + groupId, kind, normalized, mediaMimeType);
+        }
+        if ("voice".equals(kind) && !normalized.startsWith("data:audio/")) {
+            throw new ErpExceptions.BadRequest("Voice message data is required");
+        }
+        if ("image".equals(kind) && !normalized.startsWith("data:image/")) {
+            throw new ErpExceptions.BadRequest("Image message data is required");
+        }
+        if (normalized.length() > 1_500_000) {
+            throw new ErpExceptions.BadRequest("Message media is too large");
+        }
+        return mediaStorage.storeDataUrl("document-group-" + groupId, kind, normalized, mediaMimeType);
     }
 
     private Set<Long> normalizeMemberIds(List<Long> memberUserIds) {
@@ -522,7 +1006,8 @@ public class DocumentGroupService {
     public record DocumentGroupSummary(
             DocumentGroup group,
             long memberCount,
-            long documentCount
+            long documentCount,
+            long unreadMessageCount
     ) {
     }
 
@@ -535,6 +1020,18 @@ public class DocumentGroupService {
     public record GroupDocumentItem(
             DocumentGroupDocument mapping,
             TenderDocument document
+    ) {
+    }
+
+    public record GroupDocumentVersionItem(
+            Long id,
+            Long groupDocumentId,
+            TenderDocument document,
+            Integer versionNumber,
+            Long uploadedByUserId,
+            String uploadedBy,
+            String note,
+            Instant createdAt
     ) {
     }
 

@@ -66,7 +66,10 @@ public class SecurityConfig {
                                 "/erp/auth/refresh",
                                 "/erp/auth/logout",
                                 "/webhook/telegram",
-                                "/shared/documents/**")
+                                "/shared/documents/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html")
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/erp/account-requests")
                         .permitAll()
@@ -122,8 +125,11 @@ public class SecurityConfig {
                                 "/erp/analytics/summary",
                                 "/erp/activity")
                         .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/app-update/broadcast")
+                        .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/erp/app-update",
                                 "/erp/overview",
                                 "/erp/users",
                                 "/erp/users/page",
@@ -154,12 +160,15 @@ public class SecurityConfig {
                                 "/erp/notifications/unread-count",
                                 "/erp/notifications/stream",
                                 "/erp/messages",
+                                "/erp/messages/stream",
+                                "/erp/messages/*/media",
                                 "/erp/notification-preferences",
                                 "/erp/web-push/vapid-public-key")
                         .authenticated()
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/erp/messages")
+                                "/erp/messages",
+                                "/erp/me/account-deletion-request")
                         .authenticated()
                         .requestMatchers(
                                 HttpMethod.POST,
@@ -167,6 +176,7 @@ public class SecurityConfig {
                         .authenticated()
                         .requestMatchers(
                                 HttpMethod.DELETE,
+                                "/erp/messages/*",
                                 "/erp/mobile-push/tokens")
                         .authenticated()
                         .requestMatchers(

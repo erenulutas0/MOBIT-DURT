@@ -49,6 +49,7 @@ public class TenderTaskService {
                 description,
                 assigneeUserIds,
                 assigneeTeamIds,
+                null,
                 priority,
                 deadlineAt);
         ErpTaskDocument taskDocument = erpService.linkTenderDocument(

@@ -1,13 +1,24 @@
 package com.docsbot.ops.tender.infrastructure;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.docsbot.ops.tender.domain.DocumentGroupDocument;
 
 public interface DocumentGroupDocumentRepository extends JpaRepository<DocumentGroupDocument, Long> {
     List<DocumentGroupDocument> findAllByGroupIdOrderByCreatedAtDescIdDesc(long groupId);
     Optional<DocumentGroupDocument> findByIdAndGroupId(long id, long groupId);
+
+    @Query("""
+            select new com.docsbot.ops.tender.infrastructure.GroupCount(document.groupId, count(document.id))
+            from DocumentGroupDocument document
+            where document.groupId in :groupIds
+            group by document.groupId
+            """)
+    List<GroupCount> countDocumentsByGroupIdIn(@Param("groupIds") Collection<Long> groupIds);
 }

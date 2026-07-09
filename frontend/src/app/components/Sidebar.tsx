@@ -1,163 +1,169 @@
+import { LayoutDashboard, Users, ClipboardList, CheckSquare, MessageSquare, Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen, Cpu, TrendingUp, Package, PanelLeftClose, PanelLeftOpen, Settings, BarChart2, Zap } from "lucide-react";
 import {
-  LayoutDashboard,
-  FileText,
-  FolderTree,
-  Upload,
-  MessageSquare,
-  BookOpen,
-  Settings,
-  Briefcase,
-  ChevronRight,
-  Home,
-  UserRound,
-  ListChecks,
-  Cpu,
-  Send,
-} from "lucide-react";
+  ERPSession,
+} from "../api";
+import type { Page, LiveData } from "../lib/types";
+import { isAdmin, userTaskIds, shortName } from "../lib/helpers";
 
-type NavItem = {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-};
-
-const erpItems: NavItem[] = [
-  { id: "erp", label: "Genel Bakış", icon: <LayoutDashboard size={15} /> },
-  { id: "erp-people", label: "Çalışanlar", icon: <UserRound size={15} /> },
-  { id: "erp-tasks", label: "Görevler", icon: <ListChecks size={15} /> },
-  { id: "erp-help", label: "Mesajlar", icon: <MessageSquare size={15} /> },
+export const navItems = [
+  {
+    label: "Ana Sayfa",
+    icon: LayoutDashboard,
+    page: "home" as Page,
+  },
+  {
+    group: "ERP-TAKIP",
+    items: [
+      { label: "Genel Bakış", icon: BarChart2, page: "erp-overview" as Page },
+      { label: "Çalışanlar", icon: Users, page: "employees" as Page },
+      { label: "Görevler", icon: ClipboardList, page: "tasks" as Page },
+      { label: "Tamamlama Onayları", icon: CheckSquare, page: "approvals" as Page },
+      { label: "Mesajlar", icon: MessageSquare, page: "messages" as Page, badge: 3 },
+      { label: "Bildirimler", icon: Bell, page: "notifications" as Page, badge: 7 },
+      { label: "Hesap Talepleri", icon: UserPlus, page: "account-requests" as Page, badge: 2 },
+    ],
+  },
+  {
+    group: "TENDER HUB",
+    items: [
+      { label: "Dashboard", icon: TrendingUp, page: "tender-dashboard" as Page },
+      { label: "Telegram Grupları", icon: Send, page: "telegram-groups" as Page },
+      { label: "Belgeler", icon: FileText, page: "documents" as Page },
+      { label: "Klasör Ağacı", icon: FolderOpen, page: "folder-tree" as Page },
+      { label: "Yükleme", icon: Upload, page: "upload" as Page },
+      { label: "Obsidian Demo", icon: BookOpen, page: "obsidian" as Page },
+      { label: "İhale Detayı", icon: Package, page: "tender-detail" as Page },
+      { label: "AI Çıkarımı", icon: Cpu, page: "ai-extraction" as Page },
+    ],
+  },
 ];
 
-const tenderItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={15} /> },
-  { id: "telegram", label: "Telegram Grupları", icon: <Send size={15} /> },
-  { id: "documents", label: "Belgeler", icon: <FileText size={15} /> },
-  { id: "folder-tree", label: "Klasör Ağacı", icon: <FolderTree size={15} /> },
-  { id: "upload", label: "Yükleme", icon: <Upload size={15} /> },
-  { id: "obsidian", label: "Obsidian Demo", icon: <BookOpen size={15} /> },
-  { id: "tenders", label: "İhale Detayı", icon: <Briefcase size={15} /> },
-  { id: "settings", label: "AI Çıkarımı", icon: <Cpu size={15} /> },
-];
-
-interface SidebarProps {
-  activeView: string;
-  activeModule: "home" | "erp" | "tender";
-  sessionRole: "admin" | "user";
-  onHome: () => void;
-  onNavigate: (id: string) => void;
+export function visibleNavItems(session: ERPSession) {
+  if (isAdmin(session)) return navItems;
+  return navItems.filter((item) => !("group" in item && item.group === "TENDER HUB")).map((item) => {
+    if ("page" in item) return item;
+    if (item.group === "ERP-TAKIP") {
+      return {
+        ...item,
+        items: item.items
+          .filter((sub) => !["approvals", "account-requests"].includes(sub.page))
+          .map((sub) => sub.page === "employees" ? { ...sub, label: "Profil" } : { ...sub, badge: undefined }),
+      };
+    }
+    return item;
+  });
 }
 
-export function Sidebar({ activeView, activeModule, sessionRole, onHome, onNavigate }: SidebarProps) {
-  const effectiveErpItems = sessionRole === "admin"
-    ? erpItems
-    : erpItems.map((item) => item.id === "erp-people" ? { ...item, label: "Profil" } : item);
-  const navSections = activeModule === "erp"
-    ? [{ title: "ERP-TAKIP", items: effectiveErpItems }]
-    : activeModule === "tender"
-      ? [{ title: "Tender Hub", items: tenderItems }]
-      : [];
-
+export function Sidebar({ current, setPage, collapsed, setCollapsed, session, live }: {
+  current: Page; setPage: (p: Page) => void; collapsed: boolean; setCollapsed: (v: boolean) => void; session: ERPSession; live: LiveData;
+}) {
+  const unreadNotifications = live.notifications.filter((item) => !item.read_at).length;
+  const messageBadge = isAdmin(session)
+    ? live.overview?.help_messages.filter((item) => item.author_user_id !== null).length || 0
+    : live.overview?.help_messages.filter((item) => {
+        const ids = userTaskIds(live.overview, session.user_id);
+        return ids.has(item.task_id) && item.author_user_id === null;
+      }).length || 0;
+  const accountRequestsBadge = isAdmin(session) ? live.accountRequests.length : 0;
   return (
     <aside
-      className="flex flex-col h-full"
-      style={{
-        width: 220,
-        minWidth: 220,
-        background: "var(--sidebar)",
-        borderRight: "1px solid var(--sidebar-border)",
-      }}
+      className="flex flex-col h-full bg-[#0F172A] border-r border-white/5 transition-all duration-200"
+      style={{ width: collapsed ? 56 : 220 }}
     >
-      {/* Logo */}
-      <div
-        className="flex items-center gap-2 px-3"
-        style={{ borderBottom: "1px solid var(--sidebar-border)" }}
-      >
-        <div style={{ height: 40, display: "flex", alignItems: "center", minWidth: 0 }}>
-          <div
-            style={{
-              color: "#f1f5f9",
-              fontSize: 13,
-              fontWeight: 800,
-              lineHeight: 1.2,
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            DocsBot <span style={{ color: "#2dd4bf" }}>Ops</span>
-          </div>
-        </div>
+      <div className="flex items-center gap-2.5 px-4 h-12 border-b border-white/5 shrink-0">
+        {!collapsed && (
+          <span className="text-sm font-bold tracking-tight text-white">DocsBot <span className="text-teal-400">Ops</span></span>
+        )}
+        {collapsed && <Zap className="w-4 h-4 text-teal-400 mx-auto" />}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="ml-auto text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+        </button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-3 overflow-y-auto">
-        <button
-          onClick={onHome}
-          className="flex items-center gap-2.5 w-full rounded px-3 py-2 text-left transition-colors"
-          style={{
-            background: activeView === "home" ? "var(--sidebar-accent)" : "transparent",
-            color: activeView === "home" ? "var(--sidebar-accent-foreground)" : "var(--sidebar-foreground)",
-            fontSize: 12,
-            fontFamily: "Inter, sans-serif",
-            fontWeight: activeView === "home" ? 500 : 400,
-            border: "none",
-            cursor: "pointer",
-            marginBottom: 12,
-          }}
-        >
-          <Home size={14} style={{ opacity: activeView === "home" ? 1 : 0.65 }} />
-          <span className="flex-1">Ana Sayfa</span>
-          {activeView === "home" && <ChevronRight size={12} style={{ opacity: 0.5 }} />}
-        </button>
-        {navSections.map((section) => (
-          <div key={section.title} style={{ marginBottom: 10 }}>
-            <div style={{ color: "#64748b", fontSize: 10, fontWeight: 700, padding: "8px 8px 6px", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "Inter, sans-serif" }}>
-              {section.title}
+      <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 scrollbar-hide">
+        {visibleNavItems(session).map((item, i) => {
+          if ("page" in item) {
+            const Icon = item.icon;
+            const active = current === item.page;
+            return (
+              <button
+                key={i}
+                onClick={() => setPage(item.page)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors rounded-sm mx-1 ${active
+                  ? "bg-teal-600/20 text-teal-400"
+                  : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                  }`}
+                style={{ width: "calc(100% - 8px)" }}
+                title={collapsed ? item.label : undefined}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {!collapsed && <span>{item.label}</span>}
+              </button>
+            );
+          }
+          return (
+            <div key={i} className="pt-3">
+              {!collapsed && (
+                <div className="px-3 pb-1.5">
+                  <span className="text-[10px] font-semibold tracking-widest text-slate-600 uppercase">{item.group}</span>
+                </div>
+              )}
+              {collapsed && <div className="h-px bg-white/5 mx-2 mb-2" />}
+              {item.items!.map((sub, j) => {
+                const Icon = sub.icon;
+                const active = current === sub.page;
+                return (
+                  <button
+                    key={j}
+                    onClick={() => setPage(sub.page)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium transition-colors rounded-sm mx-1 relative ${active
+                      ? "bg-teal-600/20 text-teal-400"
+                      : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                      }`}
+                    style={{ width: "calc(100% - 8px)" }}
+                    title={collapsed ? sub.label : undefined}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    {!collapsed && <span className="flex-1 text-left">{sub.label}</span>}
+                    {!collapsed && sub.page === "messages" && messageBadge > 0 && (
+                      <span className="bg-teal-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                        {messageBadge > 9 ? "9+" : messageBadge}
+                      </span>
+                    )}
+                    {!collapsed && sub.page === "notifications" && unreadNotifications > 0 && (
+                      <span className="bg-teal-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                        {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                      </span>
+                    )}
+                    {!collapsed && sub.page === "account-requests" && accountRequestsBadge > 0 && (
+                      <span className="bg-teal-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                        {accountRequestsBadge > 9 ? "9+" : accountRequestsBadge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            {section.items.map((item) => {
-              const active = activeView === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onNavigate(item.id)}
-                  className="flex items-center gap-2.5 w-full rounded px-3 py-2 text-left transition-colors"
-                  style={{
-                    background: active ? "rgba(13, 148, 136, 0.18)" : "transparent",
-                    color: active ? "var(--sidebar-accent-foreground)" : "var(--sidebar-foreground)",
-                    fontSize: 12,
-                    fontFamily: "Inter, sans-serif",
-                    fontWeight: active ? 500 : 400,
-                    border: "none",
-                    cursor: "pointer",
-                    marginBottom: 1,
-                  }}
-                >
-                  <span style={{ opacity: active ? 1 : 0.65 }}>{item.icon}</span>
-                  <span className="flex-1">{item.label}</span>
-                  {item.id === "erp-help" && activeModule === "erp" && (
-                    <span style={{ background: "#14b8a6", color: "#fff", fontSize: 10, borderRadius: 999, minWidth: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>3</span>
-                  )}
-                  {item.id === "settings" && activeModule === "tender" && (
-                    <span style={{ background: "#14b8a6", color: "#fff", fontSize: 10, borderRadius: 999, minWidth: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>AI</span>
-                  )}
-                  {active && <ChevronRight size={12} style={{ opacity: 0.5 }} />}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
-      {/* Footer */}
-      <div
-        className="px-4 py-3"
-        style={{ borderTop: "1px solid var(--sidebar-border)" }}
-      >
-        <div className="flex items-center gap-2">
-          <div style={{ width: 24, height: 24, borderRadius: 999, background: "#0d9488", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800 }}>AY</div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 700, fontFamily: "Inter, sans-serif" }}>Ahmet Yılmaz</div>
-            <div style={{ fontSize: 10, color: "#64748b", fontFamily: "Inter, sans-serif" }}>v1.5.0 · Admin</div>
+      <div className="border-t border-white/5 p-3 shrink-0">
+        {!collapsed ? (
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{shortName(session.name)}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-slate-200 truncate">{session.name}</p>
+              <p className="text-[10px] text-slate-500 truncate">{isAdmin(session) ? "Admin" : "Çalışan"}</p>
+            </div>
+            <Settings className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300 cursor-pointer" />
           </div>
-        </div>
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold mx-auto">{shortName(session.name)}</div>
+        )}
       </div>
     </aside>
   );

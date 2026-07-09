@@ -69,14 +69,19 @@ public class ApnsMobilePushGateway implements MobilePushGateway {
             return Result.retry("APNs mobile push gateway is not configured");
         }
         try {
+            boolean critical = "CRITICAL".equalsIgnoreCase(notification.getPriority());
             String body = objectMapper.writeValueAsString(Map.of(
                     "aps", Map.of(
                             "alert", Map.of(
                                     "title", notification.getTitle(),
                                     "body", notification.getBody() == null ? "" : notification.getBody()),
-                            "sound", "default"),
+                            "sound", "default",
+                            "interruption-level", critical ? "time-sensitive" : "active"),
                     "notification_id", String.valueOf(notification.getId()),
                     "task_id", notification.getTaskId() == null ? "" : String.valueOf(notification.getTaskId()),
+                    "event_key", notification.getEventKey() == null ? "" : notification.getEventKey(),
+                    "type", notification.getType(),
+                    "priority", notification.getPriority(),
                     "url", "/"));
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint(token)))

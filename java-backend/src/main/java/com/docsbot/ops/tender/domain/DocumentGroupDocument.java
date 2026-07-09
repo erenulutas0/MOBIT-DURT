@@ -80,4 +80,11 @@ public class DocumentGroupDocument {
         this.tenderId = tenderId == null || tenderId.isBlank() ? null : tenderId.trim();
         this.year = year;
     }
+
+    public void replaceDocument(long documentId, String note, String tenderId, Integer year) {
+        this.documentId = documentId;
+        this.note = note == null || note.isBlank() ? this.note : note.trim();
+        this.tenderId = tenderId == null || tenderId.isBlank() ? this.tenderId : tenderId.trim();
+        this.year = year == null ? this.year : year;
+    }
 }

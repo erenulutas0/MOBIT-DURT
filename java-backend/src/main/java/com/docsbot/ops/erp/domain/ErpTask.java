@@ -92,6 +92,19 @@ public class ErpTask {
         return task;
     }
 
+    public void edit(String title, String description, TaskPriority priority, Instant deadlineAt, Instant now) {
+        if (status == TaskStatus.DONE || status == TaskStatus.CANCELLED) {
+            throw new IllegalStateException("Closed tasks cannot be edited");
+        }
+        this.title = title;
+        this.description = description;
+        this.priority = priority;
+        this.deadlineAt = deadlineAt;
+        if (status == TaskStatus.OVERDUE && (deadlineAt == null || deadlineAt.isAfter(now))) {
+            status = TaskStatus.TODO;
+        }
+    }
+
     public void transitionTo(TaskStatus nextStatus, Instant now) {
         if (status == TaskStatus.DONE || status == TaskStatus.CANCELLED) {
             throw new IllegalStateException("Closed tasks cannot change status");

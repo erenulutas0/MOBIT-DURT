@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.docsbot.ops.auth.domain.ErpUser;
+import com.docsbot.ops.common.media.MessageMediaStorage;
 import com.docsbot.ops.dashboard.DashboardFileService;
 import com.docsbot.ops.erp.application.ErpPrincipal;
 import com.docsbot.ops.tender.domain.DocumentGroup;
@@ -42,9 +43,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class DocumentGroupController {
 
     private final DocumentGroupService service;
+    private final MessageMediaStorage mediaStorage;
 
-    public DocumentGroupController(DocumentGroupService service) {
+    public DocumentGroupController(DocumentGroupService service, MessageMediaStorage mediaStorage) {
         this.service = service;
+        this.mediaStorage = mediaStorage;
     }
 
     @GetMapping
@@ -164,6 +167,35 @@ public class DocumentGroupController {
                 year));
     }
 
+    @PostMapping(
+            value = "/{groupId}/documents/{groupDocumentId}/versions",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    GroupDocumentResponse replaceDocument(
+            JwtAuthenticationToken authentication,
+            @PathVariable long groupId,
+            @PathVariable long groupDocumentId,
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(name = "note", required = false) String note
+    ) {
+        return GroupDocumentResponse.from(service.replaceDocument(
+                ErpPrincipal.from(authentication),
+                groupId,
+                groupDocumentId,
+                file,
+                note));
+    }
+
+    @GetMapping("/{groupId}/documents/{groupDocumentId}/versions")
+    List<GroupDocumentVersionResponse> documentVersions(
+            JwtAuthenticationToken authentication,
+            @PathVariable long groupId,
+            @PathVariable long groupDocumentId
+    ) {
+        return service.listDocumentVersions(ErpPrincipal.from(authentication), groupId, groupDocumentId).stream()
+                .map(GroupDocumentVersionResponse::from)
+                .toList();
+    }
+
     @GetMapping("/{groupId}/documents/{groupDocumentId}/content")
     ResponseEntity<Resource> documentContent(
             JwtAuthenticationToken authentication,
@@ -186,13 +218,46 @@ public class DocumentGroupController {
                 .body(new FileSystemResource(file.path()));
     }
 
+    @GetMapping("/{groupId}/documents/{groupDocumentId}/versions/{versionId}/content")
+    ResponseEntity<Resource> documentVersionContent(
+            JwtAuthenticationToken authentication,
+            @PathVariable long groupId,
+            @PathVariable long groupDocumentId,
+            @PathVariable long versionId,
+            @RequestParam(defaultValue = "false") boolean download
+    ) {
+        DashboardFileService.StoredFile file = service.groupDocumentVersionFile(
+                ErpPrincipal.from(authentication),
+                groupId,
+                groupDocumentId,
+                versionId);
+        ContentDisposition disposition = (download
+                ? ContentDisposition.attachment()
+                : ContentDisposition.inline())
+                .filename(file.filename())
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(new FileSystemResource(file.path()));
+    }
+
     @GetMapping("/{groupId}/messages")
     List<DocumentGroupMessageResponse> messages(
             JwtAuthenticationToken authentication,
-            @PathVariable long groupId
+            @PathVariable long groupId,
+            @RequestParam(name = "limit", required = false) Integer limit,
+            @RequestParam(name = "before_id", required = false) Long beforeId
     ) {
-        return service.listMessages(ErpPrincipal.from(authentication), groupId).stream()
-                .map(DocumentGroupMessageResponse::from)
+        List<DocumentGroupMessage> messages = limit == null && beforeId == null
+                ? service.listMessages(ErpPrincipal.from(authentication), groupId)
+                : service.listMessages(
+                        ErpPrincipal.from(authentication),
+                        groupId,
+                        limit == null ? 50 : limit,
+                        beforeId);
+        return messages.stream()
+                .map(this::messageResponse)
                 .toList();
     }
 
@@ -202,24 +267,60 @@ public class DocumentGroupController {
             @PathVariable long groupId,
             @Valid @RequestBody SendMessageRequest request
     ) {
-        return DocumentGroupMessageResponse.from(service.sendMessage(
+        return messageResponse(service.sendMessage(
                 ErpPrincipal.from(authentication),
                 groupId,
                 request.body(),
                 request.messageKind(),
                 request.mediaMimeType(),
                 request.mediaData(),
-                request.mediaDurationMs()));
+                request.mediaDurationMs(),
+                request.clientMessageId()));
+    }
+
+    @PatchMapping("/{groupId}/messages/read-through")
+    ReadThroughResponse markMessagesRead(
+            JwtAuthenticationToken authentication,
+            @PathVariable long groupId,
+            @Valid @RequestBody ReadThroughRequest request
+    ) {
+        return new ReadThroughResponse(service.markMessagesRead(
+                ErpPrincipal.from(authentication),
+                groupId,
+                request.throughMessageId()));
     }
 
     @DeleteMapping("/{groupId}/messages/{messageId}")
     ResponseEntity<Void> deleteMessage(
             JwtAuthenticationToken authentication,
             @PathVariable long groupId,
-            @PathVariable long messageId
+            @PathVariable long messageId,
+            @RequestParam(name = "scope", required = false) String scope
     ) {
-        service.deleteMessage(ErpPrincipal.from(authentication), groupId, messageId);
+        service.deleteMessage(ErpPrincipal.from(authentication), groupId, messageId, scope);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{groupId}/messages/{messageId}/media")
+    ResponseEntity<Resource> messageMedia(
+            JwtAuthenticationToken authentication,
+            @PathVariable long groupId,
+            @PathVariable long messageId,
+            @RequestParam(defaultValue = "false") boolean download
+    ) {
+        MessageMediaStorage.StoredContent media = service.groupMessageMedia(
+                ErpPrincipal.from(authentication),
+                groupId,
+                messageId);
+        ContentDisposition disposition = (download
+                ? ContentDisposition.attachment()
+                : ContentDisposition.inline())
+                .filename(media.filename())
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(media.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(new FileSystemResource(media.path()));
     }
 
     @DeleteMapping("/{groupId}/documents/{groupDocumentId}")
@@ -264,8 +365,15 @@ public class DocumentGroupController {
             @JsonProperty("message_kind") String messageKind,
             @JsonProperty("media_mime_type") String mediaMimeType,
             @JsonProperty("media_data") String mediaData,
-            @JsonProperty("media_duration_ms") Integer mediaDurationMs
+            @JsonProperty("media_duration_ms") Integer mediaDurationMs,
+            @JsonProperty("client_message_id") String clientMessageId
     ) {
+    }
+
+    record ReadThroughRequest(@JsonProperty("through_message_id") long throughMessageId) {
+    }
+
+    record ReadThroughResponse(@JsonProperty("updated_count") int updatedCount) {
     }
 
     record DocumentGroupSummaryResponse(
@@ -279,7 +387,8 @@ public class DocumentGroupController {
             @JsonProperty("created_at") Instant createdAt,
             @JsonProperty("updated_at") Instant updatedAt,
             @JsonProperty("member_count") long memberCount,
-            @JsonProperty("document_count") long documentCount
+            @JsonProperty("document_count") long documentCount,
+            @JsonProperty("unread_message_count") long unreadMessageCount
     ) {
         static DocumentGroupSummaryResponse from(DocumentGroupService.DocumentGroupSummary value) {
             DocumentGroup group = value.group();
@@ -294,7 +403,8 @@ public class DocumentGroupController {
                     group.getCreatedAt(),
                     group.getUpdatedAt(),
                     value.memberCount(),
-                    value.documentCount());
+                    value.documentCount(),
+                    value.unreadMessageCount());
         }
     }
 
@@ -349,6 +459,31 @@ public class DocumentGroupController {
         }
     }
 
+    record GroupDocumentVersionResponse(
+            Long id,
+            @JsonProperty("group_document_id") Long groupDocumentId,
+            @JsonProperty("document_id") Long documentId,
+            @JsonProperty("version_number") Integer versionNumber,
+            @JsonProperty("uploaded_by_user_id") Long uploadedByUserId,
+            @JsonProperty("uploaded_by") String uploadedBy,
+            String note,
+            @JsonProperty("created_at") Instant createdAt,
+            TenderDtos.DocumentResponse document
+    ) {
+        static GroupDocumentVersionResponse from(DocumentGroupService.GroupDocumentVersionItem value) {
+            return new GroupDocumentVersionResponse(
+                    value.id(),
+                    value.groupDocumentId(),
+                    value.document().getId(),
+                    value.versionNumber(),
+                    value.uploadedByUserId(),
+                    value.uploadedBy(),
+                    value.note(),
+                    value.createdAt(),
+                    TenderDtos.DocumentResponse.from(value.document()));
+        }
+    }
+
     record DocumentGroupMessageResponse(
             Long id,
             @JsonProperty("group_id") Long groupId,
@@ -358,10 +493,21 @@ public class DocumentGroupController {
             @JsonProperty("message_kind") String messageKind,
             @JsonProperty("media_mime_type") String mediaMimeType,
             @JsonProperty("media_data") String mediaData,
+            @JsonProperty("media_url") String mediaUrl,
+            @JsonProperty("media_ref") String mediaRef,
             @JsonProperty("media_duration_ms") Integer mediaDurationMs,
+            @JsonProperty("client_message_id") String clientMessageId,
+            @JsonProperty("delivered_at") Instant deliveredAt,
+            @JsonProperty("sequence_no") Long sequenceNo,
+            @JsonProperty("delivery_status") String deliveryStatus,
             @JsonProperty("created_at") Instant createdAt
     ) {
-        static DocumentGroupMessageResponse from(DocumentGroupMessage message) {
+        static DocumentGroupMessageResponse from(
+                DocumentGroupMessage message,
+                String mediaData,
+                String mediaUrl,
+                String mediaRef
+        ) {
             return new DocumentGroupMessageResponse(
                     message.getId(),
                     message.getGroupId(),
@@ -370,10 +516,25 @@ public class DocumentGroupController {
                     message.getBody(),
                     message.getMessageKind(),
                     message.getMediaMimeType(),
-                    message.getMediaData(),
+                    mediaData,
+                    mediaUrl,
+                    mediaRef,
                     message.getMediaDurationMs(),
+                    message.getClientMessageId(),
+                    message.getDeliveredAt(),
+                    message.getSequenceNo(),
+                    message.getDeliveredAt() != null ? "delivered" : "sent",
                     message.getCreatedAt());
         }
+    }
+
+    private DocumentGroupMessageResponse messageResponse(DocumentGroupMessage message) {
+        String mediaRef = mediaStorage.reference(message.getMediaData());
+        return DocumentGroupMessageResponse.from(
+                message,
+                mediaRef == null ? mediaStorage.toDataUrl(message.getMediaData(), message.getMediaMimeType()) : null,
+                mediaRef == null ? null : "/document-groups/" + message.getGroupId() + "/messages/" + message.getId() + "/media",
+                mediaRef);
     }
 
     record DocumentGroupDetailResponse(

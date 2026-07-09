@@ -6,6 +6,12 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5433/docsbot}
     username: ${SPRING_DATASOURCE_USERNAME:docsbot}
     password: ${SPRING_DATASOURCE_PASSWORD:docsbot-local}
+    hikari:
+      # Defaults match Hikari's own; env-tunable for production sizing.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:10}
+      # 0 disables; set e.g. 60000 in production to log leaked connections.
+      leak-detection-threshold: ${DB_LEAK_DETECTION_MS:0}
   jpa:
     open-in-view: false
     hibernate:

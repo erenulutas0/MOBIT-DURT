@@ -1,5 +1,6 @@
 package com.docsbot.ops.erp.infrastructure;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -27,4 +28,18 @@ public interface ErpNotificationRepository extends JpaRepository<ErpNotification
     int markAllRead(@Param("userId") Long userId, @Param("readAt") java.time.Instant readAt);
 
     void deleteAllByUserId(Long userId);
+
+    /**
+     * Clears the dedup event keys of past alerts for a task so they can fire again,
+     * without deleting the notifications from the recipients' history.
+     */
+    @Modifying
+    @Query("""
+            update ErpNotification notification
+               set notification.eventKey = null
+             where notification.taskId = :taskId
+               and notification.eventKey is not null
+               and notification.type in :types
+            """)
+    int detachEventKeys(@Param("taskId") long taskId, @Param("types") Collection<String> types);
 }

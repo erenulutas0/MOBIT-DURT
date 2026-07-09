@@ -2,59 +2,100 @@ package com.docsbot.ops.erp.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.context.annotation.Profile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
+import com.docsbot.ops.common.media.MessageMediaStorage;
 import com.docsbot.ops.erp.domain.ErpDirectMessage;
+import com.docsbot.ops.erp.domain.ErpDirectMessageHiddenReceipt;
+import com.docsbot.ops.erp.infrastructure.ErpDirectMessageHiddenReceiptRepository;
 import com.docsbot.ops.erp.infrastructure.ErpDirectMessageRepository;
 
 @Service
 @Profile("postgres")
 class ErpDirectMessageService {
     private final ErpDirectMessageRepository messageRepository;
+    private final ErpDirectMessageHiddenReceiptRepository hiddenReceiptRepository;
     private final ErpUserRepository userRepository;
     private final NotificationService notificationService;
     private final ErpActivityRecorder activityRecorder;
+    private final MessageMediaStorage mediaStorage;
+    private final ChatEventPublisher chatEventPublisher;
     private final Clock clock;
 
     @Autowired
     ErpDirectMessageService(
             ErpDirectMessageRepository messageRepository,
+            ErpDirectMessageHiddenReceiptRepository hiddenReceiptRepository,
             ErpUserRepository userRepository,
             NotificationService notificationService,
-            ErpActivityRecorder activityRecorder
+            ErpActivityRecorder activityRecorder,
+            MessageMediaStorage mediaStorage,
+            ChatEventPublisher chatEventPublisher
     ) {
-        this(messageRepository, userRepository, notificationService, activityRecorder, Clock.systemUTC());
+        this(
+                messageRepository,
+                hiddenReceiptRepository,
+                userRepository,
+                notificationService,
+                activityRecorder,
+                mediaStorage,
+                chatEventPublisher,
+                Clock.systemUTC());
     }
 
     ErpDirectMessageService(
             ErpDirectMessageRepository messageRepository,
+            ErpDirectMessageHiddenReceiptRepository hiddenReceiptRepository,
             ErpUserRepository userRepository,
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
+            MessageMediaStorage mediaStorage,
+            ChatEventPublisher chatEventPublisher,
             Clock clock
     ) {
         this.messageRepository = messageRepository;
+        this.hiddenReceiptRepository = hiddenReceiptRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.activityRecorder = activityRecorder;
+        this.mediaStorage = mediaStorage;
+        this.chatEventPublisher = chatEventPublisher;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     List<ErpDirectMessage> listMessages(ErpPrincipal principal, int limit) {
+        return listMessages(principal, limit, null);
+    }
+
+    @Transactional(readOnly = true)
+    List<ErpDirectMessage> listMessages(ErpPrincipal principal, int limit, Long beforeId) {
         Long userId = principal.admin() ? null : principal.requireUserId();
-        return messageRepository.findVisible(
-                principal.admin(),
-                userId,
-                PageRequest.of(0, Math.max(1, Math.min(limit, 100))));
+        PageRequest pageable = PageRequest.of(0, Math.max(1, Math.min(limit, 100)));
+        String actorKey = actorKey(principal);
+        if (beforeId != null && beforeId > 0) {
+            return messageRepository.findVisibleBefore(principal.admin(), userId, beforeId, actorKey, pageable);
+        }
+        return messageRepository.findVisible(principal.admin(), userId, actorKey, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    SseEmitter stream(ErpPrincipal principal) {
+        return chatEventPublisher.subscribe(actorKey(principal));
     }
 
     @Transactional
@@ -65,7 +106,8 @@ class ErpDirectMessageService {
             String messageKind,
             String mediaMimeType,
             String mediaData,
-            Integer mediaDurationMs
+            Integer mediaDurationMs,
+            String clientMessageId
     ) {
         String cleanedKind = normalizeKind(messageKind);
         String cleanedBody = switch (cleanedKind) {
@@ -74,11 +116,22 @@ class ErpDirectMessageService {
             case "file" -> fallback(body, "Dosya");
             default -> ErpValidation.normalizeRequiredMessage(body);
         };
-        String cleanedMediaMimeType = normalizeOptional(mediaMimeType, 128);
-        String cleanedMediaData = normalizeMediaData(cleanedKind, mediaData);
-        Integer cleanedDurationMs = normalizeDuration(cleanedKind, mediaDurationMs);
+        String cleanedClientMessageId = normalizeClientMessageId(clientMessageId);
         Actor sender = sender(principal);
         Actor recipient = recipient(sender, recipientUserId);
+        if (cleanedClientMessageId != null) {
+            List<ErpDirectMessage> existing = messageRepository.findByClientMessageId(
+                    sender.type(),
+                    sender.userId(),
+                    cleanedClientMessageId,
+                    PageRequest.of(0, 1));
+            if (!existing.isEmpty()) {
+                return existing.getFirst();
+            }
+        }
+        String cleanedMediaMimeType = normalizeOptional(mediaMimeType, 128);
+        String cleanedMediaData = normalizeMediaData(cleanedKind, cleanedMediaMimeType, mediaData);
+        Integer cleanedDurationMs = normalizeDuration(cleanedKind, mediaDurationMs);
         Instant now = clock.instant();
 
         ErpDirectMessage message = messageRepository.saveAndFlush(ErpDirectMessage.create(
@@ -93,8 +146,10 @@ class ErpDirectMessageService {
                 cleanedMediaMimeType,
                 cleanedMediaData,
                 cleanedDurationMs,
+                cleanedClientMessageId,
                 now));
         notifyRecipient(message, now);
+        publishDirectMessageEvents(message);
         activityRecorder.record(
                 principal,
                 "DIRECT_MESSAGE_SENT",
@@ -123,6 +178,117 @@ class ErpDirectMessageService {
                 null,
                 null);
         return message;
+    }
+
+    @Transactional(readOnly = true)
+    MessageMediaStorage.StoredContent readMessageMedia(ErpPrincipal principal, long messageId) {
+        ErpDirectMessage message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Message media not found"));
+        long userId = principal.admin() ? 0 : principal.requireUserId();
+        String actorKey = actorKey(principal);
+        if (!message.visibleTo(principal.admin(), userId)
+                || hiddenReceiptRepository.existsByMessageIdAndActorKey(messageId, actorKey)) {
+            throw new ErpExceptions.NotFound("Message media not found");
+        }
+        return mediaStorage.storedContent(message.getMediaData(), message.getMediaMimeType());
+    }
+
+    @Transactional
+    void deleteMessage(ErpPrincipal principal, long messageId, String scope) {
+        ErpDirectMessage message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Message not found"));
+        long userId = principal.admin() ? 0 : principal.requireUserId();
+        if (!message.visibleTo(principal.admin(), userId)) {
+            throw new ErpExceptions.NotFound("Message not found");
+        }
+        if (deleteForMe(scope)) {
+            String actorKey = actorKey(principal);
+            if (!hiddenReceiptRepository.existsByMessageIdAndActorKey(messageId, actorKey)) {
+                hiddenReceiptRepository.save(ErpDirectMessageHiddenReceipt.create(
+                        messageId,
+                        actorKey,
+                        clock.instant()));
+            }
+            activityRecorder.record(
+                    principal,
+                    "DIRECT_MESSAGE_HIDDEN",
+                    "DIRECT_MESSAGE",
+                    Long.toString(messageId),
+                    null,
+                    null);
+            return;
+        }
+        messageRepository.delete(message);
+        publishDirectMessageDeletedEvents(message);
+        activityRecorder.record(
+                principal,
+                "DIRECT_MESSAGE_DELETED",
+                "DIRECT_MESSAGE",
+                Long.toString(messageId),
+                null,
+                null);
+    }
+
+    private String actorKey(ErpPrincipal principal) {
+        if (principal.admin()) {
+            return "admin";
+        }
+        return "user:" + principal.requireUserId();
+    }
+
+    private String actorKey(String actorType, Long userId) {
+        if (ErpDirectMessage.ACTOR_ADMIN.equals(actorType)) {
+            return "admin";
+        }
+        return userId == null ? null : "user:" + userId;
+    }
+
+    private void publishDirectMessageEvents(ErpDirectMessage message) {
+        for (String actorKey : directMessageActorKeys(message)) {
+            afterCommit(() -> chatEventPublisher.publishDirectMessage(actorKey, message.getId()));
+        }
+    }
+
+    private void publishDirectMessageDeletedEvents(ErpDirectMessage message) {
+        for (String actorKey : directMessageActorKeys(message)) {
+            afterCommit(() -> chatEventPublisher.publishDirectMessageDeleted(actorKey, message.getId()));
+        }
+    }
+
+    private Set<String> directMessageActorKeys(ErpDirectMessage message) {
+        Set<String> actorKeys = new LinkedHashSet<>();
+        String senderKey = actorKey(message.getSenderType(), message.getSenderUserId());
+        String recipientKey = actorKey(message.getRecipientType(), message.getRecipientUserId());
+        if (senderKey != null) actorKeys.add(senderKey);
+        if (recipientKey != null) actorKeys.add(recipientKey);
+        return actorKeys;
+    }
+
+    private void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
+    }
+
+    private boolean deleteForMe(String scope) {
+        if (scope == null || scope.isBlank()) {
+            return false;
+        }
+        String normalized = scope.trim().toLowerCase(Locale.ROOT);
+        if (List.of("me", "mine", "self", "benden").contains(normalized)) {
+            return true;
+        }
+        if (List.of("everyone", "all", "herkesten").contains(normalized)) {
+            return false;
+        }
+        throw new ErpExceptions.BadRequest("Unsupported delete scope");
     }
 
     private Actor sender(ErpPrincipal principal) {
@@ -157,7 +323,7 @@ class ErpDirectMessageService {
     }
 
     private void notifyRecipient(ErpDirectMessage message, Instant now) {
-        String title = "New direct message";
+        String title = "Yeni direkt mesaj";
         String body = "voice".equals(message.getMessageKind())
                 ? message.getSenderName() + " · Ses mesajı"
                 : message.getSenderName();
@@ -209,7 +375,18 @@ class ErpDirectMessageService {
         return normalized;
     }
 
-    private String normalizeMediaData(String kind, String value) {
+    private String normalizeClientMessageId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 128) {
+            throw new ErpExceptions.BadRequest("Client message id is too long");
+        }
+        return normalized;
+    }
+
+    private String normalizeMediaData(String kind, String mediaMimeType, String value) {
         if ("text".equals(kind)) {
             return null;
         }
@@ -217,6 +394,9 @@ class ErpDirectMessageService {
             throw new ErpExceptions.BadRequest("Message media data is required");
         }
         String normalized = value.trim();
+        if (normalized.startsWith("media:")) {
+            return mediaStorage.storeDataUrl("direct", kind, normalized, mediaMimeType);
+        }
         if ("voice".equals(kind) && !normalized.startsWith("data:audio/")) {
             throw new ErpExceptions.BadRequest("Voice message must be audio data");
         }
@@ -229,7 +409,7 @@ class ErpDirectMessageService {
         if (normalized.length() > 8_000_000) {
             throw new ErpExceptions.BadRequest("Message media is too large");
         }
-        return normalized;
+        return mediaStorage.storeDataUrl("direct", kind, normalized, mediaMimeType);
     }
 
     private Integer normalizeDuration(String kind, Integer value) {

@@ -35,6 +35,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -306,6 +307,26 @@ class ErpDomainIntegrationTest {
     }
 
     @Test
+    void employeeCanRequestAccountDeletionAndAdminSeesNotification() throws Exception {
+        String adminToken = loginAdmin();
+        Employee employee = createApprovedEmployee(adminToken, "Silme Talebi", "delete.request@example.com");
+
+        mockMvc.perform(post("/erp/me/account-deletion-request")
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isAccepted());
+
+        mockMvc.perform(get("/erp/overview")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications[?(@.type == 'account_deletion_request')]").isNotEmpty())
+                .andExpect(jsonPath("$.notifications[?(@.title == 'Hesap silme talebi')]").isNotEmpty());
+
+        mockMvc.perform(post("/erp/me/account-deletion-request")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void taskCreationValidatesAssigneesAndDeduplicatesTargets() throws Exception {
         String adminToken = loginAdmin();
         Employee employee = createApprovedEmployee(adminToken, "Emre Celik", "emre.erp@example.com");
@@ -324,12 +345,106 @@ class ErpDomainIntegrationTest {
                 .andExpect(jsonPath("$.message").value(
                         "One or more assignee users do not exist"));
 
+        mockMvc.perform(post("/erp/tasks")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title":"Invalid responsible assignment",
+                                  "assignee_user_ids":[%d],
+                                  "responsible_user_id":999999,
+                                  "priority":"normal"
+                                }
+                                """.formatted(employee.id())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Responsible user must be assigned to the task"));
+
         long taskId = createTaskWithDuplicateAssignee(adminToken, employee.id());
         mockMvc.perform(get("/erp/overview")
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tasks[?(@.id == %s)]".formatted(taskId)).isNotEmpty())
                 .andExpect(jsonPath("$.assignments.length()").value(1));
+    }
+
+    @Test
+    void multiAssigneeTaskIsVisibleToAssignedEmployeesWithFullAssignmentTree() throws Exception {
+        String adminToken = loginAdmin();
+        Employee lead = createApprovedEmployee(adminToken, "Gorev Lideri", "task.lead@example.com");
+        Employee member = createApprovedEmployee(adminToken, "Gorev Uyesi", "task.member@example.com");
+        Employee outsider = createApprovedEmployee(adminToken, "Gorev Disi", "task.outsider@example.com");
+
+        String taskResponse = mockMvc.perform(post("/erp/tasks")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title":"Coklu saha kontrolu",
+                                  "description":"Sorumlu: Gorev Lideri\\n\\nBolge evraklarini birlikte kontrol edin.",
+                                  "assignee_user_ids":[%d,%d],
+                                  "responsible_user_id":%d,
+                                  "priority":"urgent",
+                                  "deadline_at":"2026-07-10T09:00:00Z"
+                                }
+                                """.formatted(lead.id(), member.id(), lead.id())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Coklu saha kontrolu"))
+                .andExpect(jsonPath("$.deadline_at").value(startsWith("2026-07-10T09:00:00")))
+                .andReturn().getResponse().getContentAsString();
+        long taskId = ((Number) JsonPath.read(taskResponse, "$.id")).longValue();
+
+        mockMvc.perform(get("/erp/overview")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks[?(@.id == %s)]".formatted(taskId)).isNotEmpty())
+                .andExpect(jsonPath("$.assignments[?(@.task_id == %d && @.assignee_user_id == %d)]"
+                        .formatted(taskId, lead.id())).isNotEmpty())
+                .andExpect(jsonPath("$.assignments[?(@.task_id == %d && @.assignee_user_id == %d)]"
+                        .formatted(taskId, member.id())).isNotEmpty())
+                .andExpect(jsonPath("$.assignments[?(@.task_id == %d && @.assignee_user_id == %d)].role"
+                        .formatted(taskId, lead.id())).value(hasItem("responsible")))
+                .andExpect(jsonPath("$.assignments[?(@.task_id == %d && @.assignee_user_id == %d)].role"
+                        .formatted(taskId, member.id())).value(hasItem("participant")));
+
+        mockMvc.perform(get("/erp/overview")
+                        .header("Authorization", bearer(lead.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks.length()").value(1))
+                .andExpect(jsonPath("$.tasks[0].id").value(taskId))
+                .andExpect(jsonPath("$.assignments.length()").value(2))
+                .andExpect(jsonPath("$.assignments[?(@.task_id == %d && @.assignee_user_id == %d)]"
+                        .formatted(taskId, lead.id())).isNotEmpty())
+                .andExpect(jsonPath("$.assignments[?(@.task_id == %d && @.assignee_user_id == %d)]"
+                        .formatted(taskId, member.id())).isNotEmpty())
+                .andExpect(jsonPath("$.assignments[?(@.task_id == %d && @.assignee_user_id == %d)].role"
+                        .formatted(taskId, lead.id())).value(hasItem("responsible")));
+
+        mockMvc.perform(get("/erp/overview")
+                        .header("Authorization", bearer(member.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks.length()").value(1))
+                .andExpect(jsonPath("$.tasks[0].id").value(taskId))
+                .andExpect(jsonPath("$.assignments.length()").value(2));
+
+        mockMvc.perform(get("/erp/overview")
+                        .header("Authorization", bearer(outsider.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks.length()").value(0))
+                .andExpect(jsonPath("$.assignments.length()").value(0));
+
+        mockMvc.perform(post("/erp/tasks/{taskId}/completion-request", taskId)
+                        .header("Authorization", bearer(outsider.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"note\":\"Ben tamamladim.\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/erp/tasks/{taskId}/completion-request", taskId)
+                        .header("Authorization", bearer(member.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"note\":\"Ekip kontrolu tamamlandi.\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("pending_approval"));
     }
 
     @Test
@@ -662,7 +777,9 @@ class ErpDomainIntegrationTest {
                 "Unread Employee",
                 "unread.employee@example.com");
         createTask(adminToken, employee.id());
-        org.assertj.core.api.Assertions.assertThat(notificationDeliveryRepository.count()).isEqualTo(1);
+        org.assertj.core.api.Assertions
+                .assertThat(notificationRepository.countByUserIdAndReadAtIsNull(employee.id()))
+                .isEqualTo(1);
 
         mockMvc.perform(get("/erp/notifications/unread-count")
                         .header("Authorization", bearer(employee.token())))
@@ -692,6 +809,26 @@ class ErpDomainIntegrationTest {
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/erp/notifications/stream")
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        "Content-Type",
+                        org.hamcrest.Matchers.startsWith(MediaType.TEXT_EVENT_STREAM_VALUE)))
+                .andExpect(request().asyncStarted());
+    }
+
+    @Test
+    void directMessageStreamRequiresAuthenticationAndStartsSse() throws Exception {
+        String adminToken = loginAdmin();
+        Employee employee = createApprovedEmployee(
+                adminToken,
+                "Message Stream Employee",
+                "message.stream.employee@example.com");
+
+        mockMvc.perform(get("/erp/messages/stream"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/erp/messages/stream")
                         .header("Authorization", bearer(employee.token())))
                 .andExpect(status().isOk())
                 .andExpect(header().string(
@@ -1012,6 +1149,178 @@ class ErpDomainIntegrationTest {
     }
 
     @Test
+    void adminEditsTaskDetailsAndAssigneeIsNotified() throws Exception {
+        String adminToken = loginAdmin();
+        Employee employee = createApprovedEmployee(
+                adminToken,
+                "Edit Employee",
+                "edit.employee@example.com");
+        long taskId = createTask(adminToken, employee.id());
+        Instant newDeadline = Instant.now().plusSeconds(7 * 24 * 3600);
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title":"BEDAS sartname revize kontrolu",
+                                  "description":"Revize maddeleri kontrol et.",
+                                  "priority":"urgent",
+                                  "deadline_at":"%s"
+                                }
+                                """.formatted(newDeadline)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("BEDAS sartname revize kontrolu"))
+                .andExpect(jsonPath("$.description").value("Revize maddeleri kontrol et."))
+                .andExpect(jsonPath("$.priority").value("urgent"))
+                .andExpect(jsonPath("$.deadline_at").value(newDeadline.toString()))
+                .andExpect(jsonPath("$.status").value("todo"));
+
+        mockMvc.perform(get("/erp/notifications")
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.type == 'task_updated')]").isNotEmpty());
+
+        org.assertj.core.api.Assertions.assertThat(activityRepository.findAll())
+                .anySatisfy(event -> {
+                    org.assertj.core.api.Assertions.assertThat(event.getEventType()).isEqualTo("TASK_UPDATED");
+                    org.assertj.core.api.Assertions.assertThat(event.getDetails())
+                            .contains("title", "description", "priority", "deadline");
+                });
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clear_deadline\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deadline_at").value(nullValue()));
+    }
+
+    @Test
+    void taskEditRejectsEmployeesClosedTasksAndEmptyPatches() throws Exception {
+        String adminToken = loginAdmin();
+        Employee employee = createApprovedEmployee(
+                adminToken,
+                "Edit Forbidden Employee",
+                "edit.forbidden@example.com");
+        long taskId = createTask(adminToken, employee.id());
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(employee.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Employee edit attempt\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("No task fields to update"));
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"deadline_at":"%s","clear_deadline":true}
+                                """.formatted(Instant.now().plusSeconds(3600))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("deadline_at cannot be combined with clear_deadline"));
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"cancelled\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Edit after close\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Closed tasks cannot be edited"));
+    }
+
+    @Test
+    void deadlineChangeRearmsDueSoonAlerts() throws Exception {
+        String adminToken = loginAdmin();
+        Employee employee = createApprovedEmployee(
+                adminToken,
+                "Rearm Employee",
+                "rearm.employee@example.com");
+        String taskResponse = mockMvc.perform(post("/erp/tasks")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title":"Rearm deadline task",
+                                  "assignee_user_ids":[%d],
+                                  "deadline_at":"%s"
+                                }
+                                """.formatted(
+                                employee.id(),
+                                Instant.now().plusSeconds(1800))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long taskId = ((Number) JsonPath.read(taskResponse, "$.id")).longValue();
+
+        org.assertj.core.api.Assertions.assertThat(deadlineService.processDueSoonTasks()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(deadlineService.processDueSoonTasks()).isZero();
+
+        // Moving the deadline detaches the spent event keys, so the same threshold can alert again.
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"deadline_at":"%s"}
+                                """.formatted(Instant.now().plusSeconds(2700))))
+                .andExpect(status().isOk());
+
+        org.assertj.core.api.Assertions.assertThat(deadlineService.processDueSoonTasks()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(deadlineService.processDueSoonTasks()).isZero();
+    }
+
+    @Test
+    void extendingDeadlineOfOverdueTaskReopensIt() throws Exception {
+        String adminToken = loginAdmin();
+        Employee employee = createApprovedEmployee(
+                adminToken,
+                "Reopen Employee",
+                "reopen.employee@example.com");
+        String taskResponse = mockMvc.perform(post("/erp/tasks")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title":"Reopen overdue task",
+                                  "assignee_user_ids":[%d],
+                                  "deadline_at":"%s"
+                                }
+                                """.formatted(
+                                employee.id(),
+                                Instant.now().minusSeconds(3600))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long taskId = ((Number) JsonPath.read(taskResponse, "$.id")).longValue();
+
+        org.assertj.core.api.Assertions.assertThat(deadlineService.processOverdueTasks()).isEqualTo(1);
+
+        mockMvc.perform(patch("/erp/tasks/{taskId}", taskId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"deadline_at":"%s"}
+                                """.formatted(Instant.now().plusSeconds(1800))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("todo"));
+
+        // Not overdue anymore for the new deadline, but the due-soon ladder starts over.
+        org.assertj.core.api.Assertions.assertThat(deadlineService.processOverdueTasks()).isZero();
+        org.assertj.core.api.Assertions.assertThat(deadlineService.processDueSoonTasks()).isEqualTo(1);
+    }
+
+    @Test
     void workflowSlaEscalatesBlockedAndApprovalPendingTasks() throws Exception {
         String adminToken = loginAdmin();
         Employee employee = createApprovedEmployee(
@@ -1077,13 +1386,33 @@ class ErpDomainIntegrationTest {
         String employeeMessage = mockMvc.perform(post("/erp/messages")
                         .header("Authorization", bearer(sender.token()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"body\":\"Admin tarafindan kontrol rica ederim.\"}"))
+                        .content("""
+                                {
+                                  "body":"Admin tarafindan kontrol rica ederim.",
+                                  "client_message_id":"direct-retry-1"
+                                }
+                                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sender_type").value("user"))
                 .andExpect(jsonPath("$.sender_user_id").value(sender.id()))
                 .andExpect(jsonPath("$.recipient_type").value("admin"))
+                .andExpect(jsonPath("$.client_message_id").value("direct-retry-1"))
+                .andExpect(jsonPath("$.delivered_at").isNotEmpty())
+                .andExpect(jsonPath("$.delivery_status").value("delivered"))
                 .andReturn().getResponse().getContentAsString();
         long employeeMessageId = ((Number) JsonPath.read(employeeMessage, "$.id")).longValue();
+
+        mockMvc.perform(post("/erp/messages")
+                        .header("Authorization", bearer(sender.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "body":"Admin tarafindan kontrol rica ederim.",
+                                  "client_message_id":"direct-retry-1"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(employeeMessageId));
 
         mockMvc.perform(get("/erp/messages")
                         .header("Authorization", bearer(adminToken)))
@@ -1099,6 +1428,19 @@ class ErpDomainIntegrationTest {
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.read_at").isNotEmpty());
+
+        mockMvc.perform(delete("/erp/messages/{messageId}", employeeMessageId)
+                        .header("Authorization", bearer(outsider.token())))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/erp/messages/{messageId}", employeeMessageId)
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/erp/messages")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %s)]".formatted(employeeMessageId)).isEmpty());
 
         String adminMessage = mockMvc.perform(post("/erp/messages")
                         .header("Authorization", bearer(adminToken))
@@ -1149,7 +1491,175 @@ class ErpDomainIntegrationTest {
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[?(@.event_type == 'DIRECT_MESSAGE_SENT')]").isNotEmpty())
-                .andExpect(jsonPath("$.items[?(@.event_type == 'DIRECT_MESSAGE_READ')]").isNotEmpty());
+                .andExpect(jsonPath("$.items[?(@.event_type == 'DIRECT_MESSAGE_READ')]").isNotEmpty())
+                .andExpect(jsonPath("$.items[?(@.event_type == 'DIRECT_MESSAGE_DELETED')]").isNotEmpty());
+    }
+
+    @Test
+    void directMessagesCanBeDeletedOnlyForCurrentViewer() throws Exception {
+        String adminToken = loginAdmin();
+        Employee recipient = createApprovedEmployee(
+                adminToken,
+                "Hidden Direct Recipient",
+                "hidden.direct.recipient@example.com");
+
+        long messageId = sendDirectText(adminToken, recipient.id(), "Bu mesaj sadece alıcıdan gizlenecek.");
+
+        mockMvc.perform(delete("/erp/messages/{messageId}", messageId)
+                        .queryParam("scope", "me")
+                        .header("Authorization", bearer(recipient.token())))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/erp/messages")
+                        .header("Authorization", bearer(recipient.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(messageId)).isEmpty());
+
+        mockMvc.perform(get("/erp/messages")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(messageId)).isNotEmpty());
+
+        mockMvc.perform(get("/erp/activity")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.event_type == 'DIRECT_MESSAGE_HIDDEN')]").isNotEmpty());
+    }
+
+    @Test
+    void directMessagesPreserveMediaPayloadsAndRejectInvalidMedia() throws Exception {
+        String adminToken = loginAdmin();
+        Employee recipient = createApprovedEmployee(
+                adminToken,
+                "Media Recipient",
+                "media.recipient@example.com");
+        Employee outsider = createApprovedEmployee(
+                adminToken,
+                "Media Outsider",
+                "media.outsider@example.com");
+
+        String imageData = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+        String imageResponse = mockMvc.perform(post("/erp/messages")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "recipient_user_id":%d,
+                                  "body":"İletilen doküman: saha-foto.png",
+                                  "message_kind":"image",
+                                  "media_mime_type":"image/png",
+                                  "media_data":"%s"
+                                }
+                                """.formatted(recipient.id(), imageData)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message_kind").value("image"))
+                .andExpect(jsonPath("$.media_mime_type").value("image/png"))
+                .andExpect(jsonPath("$.media_data").value(nullValue()))
+                .andExpect(jsonPath("$.media_url").value(startsWith("/erp/messages/")))
+                .andExpect(jsonPath("$.media_ref").value(startsWith("media:direct/")))
+                .andExpect(jsonPath("$.body").value("İletilen doküman: saha-foto.png"))
+                .andReturn().getResponse().getContentAsString();
+        long imageMessageId = ((Number) JsonPath.read(imageResponse, "$.id")).longValue();
+        org.assertj.core.api.Assertions.assertThat(directMessageRepository.findById(imageMessageId).orElseThrow().getMediaData())
+                .startsWith("media:direct/");
+
+        mockMvc.perform(get("/erp/messages")
+                        .header("Authorization", bearer(recipient.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(imageMessageId)).isNotEmpty());
+
+        mockMvc.perform(get("/erp/messages/{messageId}/media", imageMessageId)
+                        .header("Authorization", bearer(recipient.token())))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("image/png"));
+
+        mockMvc.perform(get("/erp/messages")
+                        .header("Authorization", bearer(outsider.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(imageMessageId)).isEmpty());
+
+        mockMvc.perform(get("/erp/messages/{messageId}/media", imageMessageId)
+                        .header("Authorization", bearer(outsider.token())))
+                .andExpect(status().isNotFound());
+
+        String voiceData = "data:audio/webm;base64,GkXfo59ChoEBQveBAULygQ";
+        mockMvc.perform(post("/erp/messages")
+                        .header("Authorization", bearer(recipient.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "body":"Ses mesajı",
+                                  "message_kind":"voice",
+                                  "media_mime_type":"audio/webm",
+                                  "media_data":"%s",
+                                  "media_duration_ms":1250
+                                }
+                                """.formatted(voiceData)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recipient_type").value("admin"))
+                .andExpect(jsonPath("$.message_kind").value("voice"))
+                .andExpect(jsonPath("$.media_mime_type").value("audio/webm"))
+                .andExpect(jsonPath("$.media_data").value(nullValue()))
+                .andExpect(jsonPath("$.media_url").value(startsWith("/erp/messages/")))
+                .andExpect(jsonPath("$.media_ref").value(startsWith("media:direct/")))
+                .andExpect(jsonPath("$.media_duration_ms").value(1250));
+
+        mockMvc.perform(post("/erp/messages")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "recipient_user_id":%d,
+                                  "body":"Bozuk görsel",
+                                  "message_kind":"image",
+                                  "media_mime_type":"image/png",
+                                  "media_data":"data:audio/webm;base64,AAAA"
+                                }
+                                """.formatted(recipient.id())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Image message must be image data"));
+
+        mockMvc.perform(post("/erp/messages")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "recipient_user_id":%d,
+                                  "body":"Eksik medya",
+                                  "message_kind":"file"
+                                }
+                                """.formatted(recipient.id())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Message media data is required"));
+    }
+
+    @Test
+    void directMessagesSupportCursorPagination() throws Exception {
+        String adminToken = loginAdmin();
+        Employee recipient = createApprovedEmployee(
+                adminToken,
+                "Paged Direct Recipient",
+                "paged.direct.recipient@example.com");
+
+        long firstId = sendDirectText(adminToken, recipient.id(), "Birinci mesaj");
+        long secondId = sendDirectText(adminToken, recipient.id(), "İkinci mesaj");
+        long thirdId = sendDirectText(adminToken, recipient.id(), "Üçüncü mesaj");
+
+        mockMvc.perform(get("/erp/messages")
+                        .queryParam("limit", "2")
+                        .header("Authorization", bearer(recipient.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(thirdId))
+                .andExpect(jsonPath("$[1].id").value(secondId));
+
+        mockMvc.perform(get("/erp/messages")
+                        .queryParam("limit", "2")
+                        .queryParam("before_id", Long.toString(secondId))
+                        .header("Authorization", bearer(recipient.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(firstId));
     }
 
     @Test
@@ -1281,6 +1791,21 @@ class ErpDomainIntegrationTest {
                 .andExpect(jsonPath("$.user_id").value(userId))
                 .andReturn().getResponse().getContentAsString();
         return new Employee(userId, JsonPath.read(loginResponse, "$.access_token"));
+    }
+
+    private long sendDirectText(String adminToken, long recipientUserId, String body) throws Exception {
+        String response = mockMvc.perform(post("/erp/messages")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "recipient_user_id":%d,
+                                  "body":"%s"
+                                }
+                                """.formatted(recipientUserId, body)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(response, "$.id")).longValue();
     }
 
     private long createTask(String adminToken, long employeeId) throws Exception {

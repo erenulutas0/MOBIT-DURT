@@ -53,6 +53,12 @@ public class ErpDirectMessage {
     @Column(name = "media_duration_ms")
     private Integer mediaDurationMs;
 
+    @Column(name = "client_message_id", length = 128)
+    private String clientMessageId;
+
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
     @Column(name = "read_at")
     private Instant readAt;
 
@@ -74,6 +80,7 @@ public class ErpDirectMessage {
             String mediaMimeType,
             String mediaData,
             Integer mediaDurationMs,
+            String clientMessageId,
             Instant createdAt
     ) {
         ErpDirectMessage message = new ErpDirectMessage();
@@ -88,6 +95,8 @@ public class ErpDirectMessage {
         message.mediaMimeType = mediaMimeType;
         message.mediaData = mediaData;
         message.mediaDurationMs = mediaDurationMs;
+        message.clientMessageId = clientMessageId;
+        message.deliveredAt = createdAt;
         message.createdAt = createdAt;
         return message;
     }
@@ -159,6 +168,14 @@ public class ErpDirectMessage {
 
     public Integer getMediaDurationMs() {
         return mediaDurationMs;
+    }
+
+    public String getClientMessageId() {
+        return clientMessageId;
+    }
+
+    public Instant getDeliveredAt() {
+        return deliveredAt;
     }
 
     public Instant getReadAt() {

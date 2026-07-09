@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { Preferences } from "@capacitor/preferences";
 
 export type BackendRole = "admin" | "user";
 
@@ -51,6 +52,7 @@ export type ERPTaskAssignment = {
   task_id: number;
   assignee_user_id: number | null;
   assignee_team_id: number | null;
+  role?: "responsible" | "participant" | string;
   created_at: string;
 };
 
@@ -94,6 +96,7 @@ export type ERPNotificationPreference = {
   completion_updates_enabled: boolean;
   deadline_alerts_enabled: boolean;
   browser_push_enabled: boolean;
+  mobile_push_enabled: boolean;
   email_enabled: boolean;
   updated_at: string;
 };
@@ -105,8 +108,25 @@ export type ERPNotificationPreferenceUpdate = Partial<{
   completion_updates_enabled: boolean;
   deadline_alerts_enabled: boolean;
   browser_push_enabled: boolean;
+  mobile_push_enabled: boolean;
   email_enabled: boolean;
 }>;
+
+export type MobileAppUpdateInfo = {
+  current_version: string;
+  latest_version: string;
+  minimum_version: string;
+  update_available: boolean;
+  required: boolean;
+  title: string;
+  message: string;
+  play_store_url: string;
+};
+
+export type ChatStreamEvent = {
+  eventName: string;
+  data: unknown;
+};
 
 export type ERPDirectMessage = {
   id: number;
@@ -120,8 +140,13 @@ export type ERPDirectMessage = {
   message_kind?: "text" | "voice" | string;
   media_mime_type?: string | null;
   media_data?: string | null;
+  media_url?: string | null;
+  media_ref?: string | null;
   media_duration_ms?: number | null;
+  client_message_id?: string | null;
+  delivered_at?: string | null;
   read_at: string | null;
+  delivery_status?: "sent" | "delivered" | "read" | string | null;
   created_at: string;
 };
 
@@ -133,6 +158,19 @@ export type ERPOverview = {
   documents: ERPTaskDocument[];
   help_messages: ERPTaskComment[];
   notifications: ERPNotification[];
+};
+
+export type ERPAccountRequest = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  status: "pending" | "approved" | "rejected" | string;
+  requested_role: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_user_id: number | null;
+  created_at: string;
 };
 
 export type ApiPageMeta = {
@@ -225,6 +263,7 @@ export type DocumentGroupSummary = {
   updated_at: string;
   member_count: number;
   document_count: number;
+  unread_message_count?: number;
 };
 
 export type DocumentGroupMember = {
@@ -250,6 +289,18 @@ export type DocumentGroupDocument = {
   document: TenderDocument;
 };
 
+export type DocumentGroupDocumentVersion = {
+  id: number | null;
+  group_document_id: number;
+  document_id: number;
+  version_number: number;
+  uploaded_by_user_id: number | null;
+  uploaded_by: string;
+  note: string | null;
+  created_at: string;
+  document: TenderDocument;
+};
+
 export type DocumentGroupMessage = {
   id: number;
   group_id: number;
@@ -259,7 +310,13 @@ export type DocumentGroupMessage = {
   message_kind?: "text" | "voice" | string;
   media_mime_type?: string | null;
   media_data?: string | null;
+  media_url?: string | null;
+  media_ref?: string | null;
   media_duration_ms?: number | null;
+  client_message_id?: string | null;
+  delivered_at?: string | null;
+  sequence_no?: number | null;
+  delivery_status?: "sent" | "delivered" | string | null;
   created_at: string;
 };
 
@@ -283,6 +340,7 @@ type AuthSessionResponse = {
 
 const SESSION_KEY = "docsbot.mobile.auth";
 const API_TIMEOUT_MS = 15_000;
+let sessionCache: BackendAuthUser | null | undefined;
 
 function apiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL;
@@ -291,36 +349,175 @@ function apiBaseUrl() {
 }
 
 export async function loginToBackend(identifier: string, password: string): Promise<BackendAuthUser> {
+  if (isAdminIdentifier(identifier)) {
+    const admin = await tryLogin("/erp/auth/admin-login", {
+      username: adminUsername(identifier),
+      password,
+    });
+    if (admin.ok) return toUser(admin.session);
+    throw new Error(admin.detail || "Admin girişi yapılamadı.");
+  }
+
   const employee = await tryLogin("/erp/auth/login", { email: identifier, password });
   if (employee.ok) return toUser(employee.session);
 
   const username = adminUsername(identifier);
-  const admin = await tryLogin("/erp/auth/admin-login", { username, password });
+  const admin = await tryLogin("/erp/auth/admin-login", {
+    username,
+    password,
+  });
   if (admin.ok) return toUser(admin.session);
 
   throw new Error(employee.detail || admin.detail || "E-posta veya şifre hatalı.");
 }
 
+export async function createERPAccountRequest(payload: {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+}): Promise<ERPAccountRequest> {
+  const response = await fetchWithTimeout(`${apiBaseUrl()}/erp/account-requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: payload.name,
+      email: payload.email,
+      phone: payload.phone || null,
+      password: payload.password,
+    }),
+  });
+  if (!response.ok) throw new Error(await accountRequestErrorText(response));
+  return response.json();
+}
+
+export async function getERPAccountRequests(status = "pending"): Promise<ERPAccountRequest[]> {
+  const response = await apiFetch(`/erp/account-requests?status=${encodeURIComponent(status)}`);
+  if (!response.ok) throw new Error(await errorText(response, "Hesap talepleri yüklenemedi."));
+  return response.json();
+}
+
+export async function approveERPAccountRequest(requestId: number): Promise<ERPUser> {
+  const response = await apiFetch(`/erp/account-requests/${requestId}/approve`, { method: "POST" });
+  if (!response.ok) throw new Error(await errorText(response, "Hesap talebi onaylanamadı."));
+  return response.json();
+}
+
+export async function rejectERPAccountRequest(requestId: number): Promise<ERPAccountRequest> {
+  const response = await apiFetch(`/erp/account-requests/${requestId}/reject`, { method: "POST" });
+  if (!response.ok) throw new Error(await errorText(response, "Hesap talebi reddedilemedi."));
+  return response.json();
+}
+
 export function saveSession(user: BackendAuthUser) {
-  window.localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  const value = JSON.stringify(user);
+  sessionCache = user;
+  if (usesNativeSessionStore()) {
+    window.localStorage.removeItem(SESSION_KEY);
+    void Preferences.set({ key: SESSION_KEY, value });
+    return;
+  }
+  window.localStorage.setItem(SESSION_KEY, value);
 }
 
 export function loadStoredUser(): BackendAuthUser | null {
+  if (sessionCache !== undefined) return sessionCache;
+  if (usesNativeSessionStore()) return null;
   try {
     const raw = window.localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) as BackendAuthUser : null;
+    sessionCache = parseSession(raw);
+    return sessionCache;
   } catch {
+    sessionCache = null;
+    return null;
+  }
+}
+
+export async function loadStoredUserAsync(): Promise<BackendAuthUser | null> {
+  if (!usesNativeSessionStore()) return loadStoredUser();
+  if (sessionCache !== undefined) return sessionCache;
+  try {
+    const [{ value }, legacyRaw] = await Promise.all([
+      Preferences.get({ key: SESSION_KEY }),
+      Promise.resolve(window.localStorage.getItem(SESSION_KEY)),
+    ]);
+    const raw = value || legacyRaw;
+    sessionCache = parseSession(raw);
+    if (sessionCache && !value) {
+      await Preferences.set({ key: SESSION_KEY, value: JSON.stringify(sessionCache) });
+    }
+    if (legacyRaw) {
+      window.localStorage.removeItem(SESSION_KEY);
+    }
+    return sessionCache;
+  } catch {
+    sessionCache = null;
     return null;
   }
 }
 
 export function clearStoredSession() {
+  sessionCache = null;
   window.localStorage.removeItem(SESSION_KEY);
+  if (usesNativeSessionStore()) {
+    void Preferences.remove({ key: SESSION_KEY });
+  }
+}
+
+export async function requestERPAccountDeletion(): Promise<void> {
+  const response = await apiFetch("/erp/me/account-deletion-request", { method: "POST" });
+  if (!response.ok) throw new Error(await errorText(response, "Hesap silme talebi iletilemedi."));
 }
 
 export async function getERPOverview(): Promise<ERPOverview> {
   const response = await apiFetch("/erp/overview");
   if (!response.ok) throw new Error(await errorText(response, "ERP verisi yüklenemedi."));
+  return response.json();
+}
+
+export async function createERPTask(payload: {
+  title: string;
+  description?: string | null;
+  assigneeUserIds: number[];
+  responsibleUserId?: number | null;
+  priority?: "low" | "normal" | "high" | "urgent" | string;
+  deadlineAt?: string | null;
+}): Promise<ERPTask> {
+  const response = await apiFetch("/erp/tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: payload.title,
+      description: payload.description || null,
+      assignee_user_ids: payload.assigneeUserIds,
+      assignee_team_ids: [],
+      responsible_user_id: payload.responsibleUserId || null,
+      priority: payload.priority || "normal",
+      deadline_at: payload.deadlineAt || null,
+    }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Görev oluşturulamadı."));
+  return response.json();
+}
+
+export interface ERPTaskEditPayload {
+  title?: string;
+  description?: string;
+  priority?: string;
+  deadline_at?: string;
+  clear_deadline?: boolean;
+  status?: string;
+}
+
+// Admin-only full edit; omitted fields stay unchanged. Changing the deadline
+// re-arms the backend due-soon/overdue alert ladder for the task.
+export async function updateERPTaskDetails(taskId: number, payload: ERPTaskEditPayload): Promise<ERPTask> {
+  const response = await apiFetch(`/erp/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Görev güncellenemedi."));
   return response.json();
 }
 
@@ -348,6 +545,12 @@ export async function updateERPNotificationPreferences(
   return response.json();
 }
 
+export async function getMobileAppUpdateInfo(currentVersion: string): Promise<MobileAppUpdateInfo> {
+  const response = await apiFetch(`/erp/app-update?current_version=${encodeURIComponent(currentVersion)}`);
+  if (!response.ok) throw new Error(await errorText(response, "Uygulama güncelleme bilgisi alınamadı."));
+  return response.json();
+}
+
 export async function markERPNotificationRead(notificationId: number): Promise<ERPNotification> {
   const response = await apiFetch(`/erp/notifications/${notificationId}/read`, { method: "PATCH" });
   if (!response.ok) throw new Error(await errorText(response, "Bildirim okundu yapılamadı."));
@@ -359,8 +562,16 @@ export async function markAllERPNotificationsRead(): Promise<void> {
   if (!response.ok) throw new Error(await errorText(response, "Bildirimler okundu yapılamadı."));
 }
 
-export async function getERPDirectMessages(limit = 100): Promise<ERPDirectMessage[]> {
-  const response = await apiFetch(`/erp/messages?limit=${encodeURIComponent(String(limit))}`);
+function messagePageQuery(limit: number, beforeId?: number | null) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (beforeId && beforeId > 0) {
+    params.set("before_id", String(beforeId));
+  }
+  return params.toString();
+}
+
+export async function getERPDirectMessages(limit = 100, beforeId?: number | null): Promise<ERPDirectMessage[]> {
+  const response = await apiFetch(`/erp/messages?${messagePageQuery(limit, beforeId)}`);
   if (!response.ok) throw new Error(await errorText(response, "Mesajlar yüklenemedi."));
   return response.json();
 }
@@ -372,6 +583,7 @@ export async function sendERPDirectMessage(payload: {
   mediaMimeType?: string | null;
   mediaData?: string | null;
   mediaDurationMs?: number | null;
+  clientMessageId?: string | null;
 }): Promise<ERPDirectMessage> {
   const response = await apiFetch("/erp/messages", {
     method: "POST",
@@ -383,10 +595,31 @@ export async function sendERPDirectMessage(payload: {
       media_mime_type: payload.mediaMimeType ?? null,
       media_data: payload.mediaData ?? null,
       media_duration_ms: payload.mediaDurationMs ?? null,
+      client_message_id: payload.clientMessageId ?? null,
     }),
   });
   if (!response.ok) throw new Error(await errorText(response, "Mesaj gönderilemedi."));
   return response.json();
+}
+
+export async function markERPDirectMessageRead(messageId: number): Promise<ERPDirectMessage> {
+  const response = await apiFetch(`/erp/messages/${messageId}/read`, { method: "PATCH" });
+  if (!response.ok) throw new Error(await errorText(response, "Mesaj okundu yapılamadı."));
+  return response.json();
+}
+
+export type MessageDeleteScope = "me" | "everyone";
+
+function deleteScopeQuery(scope?: MessageDeleteScope) {
+  return scope ? `?scope=${encodeURIComponent(scope)}` : "";
+}
+
+export async function deleteERPDirectMessage(
+  messageId: number,
+  scope: MessageDeleteScope = "everyone"
+): Promise<void> {
+  const response = await apiFetch(`/erp/messages/${messageId}${deleteScopeQuery(scope)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await errorText(response, "Mesaj silinemedi."));
 }
 
 export async function getTenderDocumentsPage(offset = 0, limit = 25): Promise<TenderDocumentPage> {
@@ -395,6 +628,14 @@ export async function getTenderDocumentsPage(offset = 0, limit = 25): Promise<Te
   );
   if (!response.ok) throw new Error(await errorText(response, "Belgeler yüklenemedi."));
   return response.json();
+}
+
+export async function getTenderDocumentBlob(documentId: number, download = false): Promise<Blob> {
+  const response = await apiFetch(
+    download ? `/dashboard/files/${documentId}` : `/dashboard/files/${documentId}/view`
+  );
+  if (!response.ok) throw new Error(await errorText(response, "Belge içeriği alınamadı."));
+  return response.blob();
 }
 
 export async function getTendersPage(offset = 0, limit = 25): Promise<TenderPage> {
@@ -540,6 +781,23 @@ export async function uploadDocumentGroupFile(payload: {
   return response.json();
 }
 
+export async function replaceDocumentGroupFile(payload: {
+  groupId: number;
+  groupDocumentId: number;
+  file: File;
+  note?: string;
+}): Promise<DocumentGroupDocument> {
+  const form = new FormData();
+  form.append("file", payload.file);
+  if (payload.note?.trim()) form.append("note", payload.note.trim());
+  const response = await apiFetch(`/document-groups/${payload.groupId}/documents/${payload.groupDocumentId}/versions`, {
+    method: "POST",
+    body: form,
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Doküman revizyonu yüklenemedi."));
+  return response.json();
+}
+
 export async function updateERPUserDocumentNetworkVisibility(
   userId: number,
   visible: boolean
@@ -553,27 +811,40 @@ export async function updateERPUserDocumentNetworkVisibility(
   return response.json();
 }
 
-export async function getDocumentGroupMessages(groupId: number): Promise<DocumentGroupMessage[]> {
-  const response = await apiFetch(`/document-groups/${groupId}/messages`);
+export async function getDocumentGroupMessages(
+  groupId: number,
+  limit?: number,
+  beforeId?: number | null
+): Promise<DocumentGroupMessage[]> {
+  const query = limit ? `?${messagePageQuery(limit, beforeId)}` : "";
+  const response = await apiFetch(`/document-groups/${groupId}/messages${query}`);
   if (!response.ok) throw new Error(await errorText(response, "Alan mesajları yüklenemedi."));
   return response.json();
 }
 
+export async function getAuthenticatedMediaBlob(path: string): Promise<Blob> {
+  const response = await apiFetch(path);
+  if (!response.ok) throw new Error(await errorText(response, "Medya dosyası alınamadı."));
+  return response.blob();
+}
+
 export async function sendDocumentGroupMessage(groupId: number, payload: string | {
   body: string;
-  messageKind?: "text" | "voice";
+  messageKind?: "text" | "voice" | "image" | "file";
   mediaMimeType?: string | null;
   mediaData?: string | null;
   mediaDurationMs?: number | null;
+  clientMessageId?: string | null;
 }): Promise<DocumentGroupMessage> {
   const body = typeof payload === "string"
-    ? { body: payload }
+    ? { body: payload, client_message_id: null }
     : {
         body: payload.body,
         message_kind: payload.messageKind || "text",
         media_mime_type: payload.mediaMimeType || null,
         media_data: payload.mediaData || null,
         media_duration_ms: payload.mediaDurationMs || null,
+        client_message_id: payload.clientMessageId || null,
       };
   const response = await apiFetch(`/document-groups/${groupId}/messages`, {
     method: "POST",
@@ -584,8 +855,64 @@ export async function sendDocumentGroupMessage(groupId: number, payload: string 
   return response.json();
 }
 
-export async function deleteDocumentGroupMessage(groupId: number, messageId: number): Promise<void> {
-  const response = await apiFetch(`/document-groups/${groupId}/messages/${messageId}`, { method: "DELETE" });
+export async function markDocumentGroupMessagesRead(
+  groupId: number,
+  throughMessageId: number
+): Promise<{ updated_count: number }> {
+  const response = await apiFetch(`/document-groups/${groupId}/messages/read-through`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ through_message_id: throughMessageId }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Oda mesajları okundu yapılamadı."));
+  return response.json();
+}
+
+export async function openChatEventStream(
+  onEvent: (event: ChatStreamEvent) => void,
+  onError?: (error: unknown) => void
+): Promise<() => void> {
+  const session = await loadStoredUserAsync();
+  if (!session?.accessToken) {
+    throw new Error("Oturum bulunamadı.");
+  }
+  const controller = new AbortController();
+  const response = await fetch(`${apiBaseUrl()}/erp/messages/stream`, {
+    headers: {
+      Accept: "text/event-stream",
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    signal: controller.signal,
+  });
+  if (!response.ok) {
+    throw new Error(await errorText(response, "Canlı mesaj bağlantısı kurulamadı."));
+  }
+  if (!response.body) {
+    throw new Error("Bu cihaz canlı mesaj bağlantısını desteklemiyor.");
+  }
+  void readSseStream(response.body, onEvent, controller.signal)
+    .then(() => {
+      if (!controller.signal.aborted) {
+        onError?.(new Error("Canlı mesaj bağlantısı kapandı."));
+      }
+    })
+    .catch(error => {
+      if (!controller.signal.aborted) {
+        onError?.(error);
+      }
+    });
+  return () => controller.abort();
+}
+
+export async function deleteDocumentGroupMessage(
+  groupId: number,
+  messageId: number,
+  scope: MessageDeleteScope = "everyone"
+): Promise<void> {
+  const response = await apiFetch(
+    `/document-groups/${groupId}/messages/${messageId}${deleteScopeQuery(scope)}`,
+    { method: "DELETE" }
+  );
   if (!response.ok) throw new Error(await errorText(response, "Mesaj silinemedi."));
 }
 
@@ -603,6 +930,28 @@ export async function getDocumentGroupFileBlob(
     `/document-groups/${groupId}/documents/${groupDocumentId}/content?download=${download ? "true" : "false"}`
   );
   if (!response.ok) throw new Error(await errorText(response, "Doküman indirilemedi."));
+  return response.blob();
+}
+
+export async function getDocumentGroupFileVersions(
+  groupId: number,
+  groupDocumentId: number
+): Promise<DocumentGroupDocumentVersion[]> {
+  const response = await apiFetch(`/document-groups/${groupId}/documents/${groupDocumentId}/versions`);
+  if (!response.ok) throw new Error(await errorText(response, "Doküman geçmişi yüklenemedi."));
+  return response.json();
+}
+
+export async function getDocumentGroupFileVersionBlob(
+  groupId: number,
+  groupDocumentId: number,
+  versionId: number,
+  download = true
+): Promise<Blob> {
+  const response = await apiFetch(
+    `/document-groups/${groupId}/documents/${groupDocumentId}/versions/${versionId}/content?download=${download ? "true" : "false"}`
+  );
+  if (!response.ok) throw new Error(await errorText(response, "Doküman versiyonu indirilemedi."));
   return response.blob();
 }
 
@@ -666,7 +1015,7 @@ async function tryLogin(
 }
 
 async function refreshSession(): Promise<BackendAuthUser | null> {
-  const session = loadStoredUser();
+  const session = await loadStoredUserAsync();
   if (!session?.refreshToken) return null;
 
   const response = await fetchWithTimeout(`${apiBaseUrl()}/erp/auth/refresh`, {
@@ -681,9 +1030,12 @@ async function refreshSession(): Promise<BackendAuthUser | null> {
   return next;
 }
 
+/** Fired when the access token is rejected and the refresh token cannot revive the session. */
+export const SESSION_EXPIRED_EVENT = "docsbot:session-expired";
+
 async function apiFetch(path: string, init: RequestInit = {}, retryOnUnauthorized = true): Promise<Response> {
   const headers = new Headers(init.headers);
-  const token = loadStoredUser()?.accessToken;
+  const token = (await loadStoredUserAsync())?.accessToken;
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetchWithTimeout(`${apiBaseUrl()}${path}`, { ...init, headers });
@@ -695,15 +1047,96 @@ async function apiFetch(path: string, init: RequestInit = {}, retryOnUnauthorize
       return fetchWithTimeout(`${apiBaseUrl()}${path}`, { ...init, headers: retryHeaders });
     }
     clearStoredSession();
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   }
   return response;
 }
 
+/** Unauthenticated backend reachability probe for the home-screen status card. */
+export async function getBackendHealth(): Promise<boolean> {
+  try {
+    const response = await fetchWithTimeout(`${apiBaseUrl()}/health`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function errorText(response: Response, fallback: string): Promise<string> {
+  if (response.status === 401) {
+    return "Oturumunuz doğrulanamadı. Lütfen tekrar giriş yapın.";
+  }
   const payload = await response.json().catch(() => null);
   if (payload && typeof payload.detail === "string") return payload.detail;
   if (payload && typeof payload.message === "string") return payload.message;
   return fallback;
+}
+
+async function accountRequestErrorText(response: Response): Promise<string> {
+  const payload = await response.json().catch(() => null);
+  const message = typeof payload?.message === "string"
+    ? payload.message
+    : typeof payload?.detail === "string"
+      ? payload.detail
+      : "";
+  const fieldErrors = payload?.fieldErrors && typeof payload.fieldErrors === "object"
+    ? payload.fieldErrors
+    : {};
+  if (fieldErrors.password) return "Şifre en az 10 karakter olmalıdır.";
+  if (fieldErrors.email) return "Geçerli bir e-posta adresi yazın.";
+  if (fieldErrors.name) return "Ad soyad zorunludur.";
+  if (message.includes("already exists")) return "Bu e-posta adresiyle kayıt veya bekleyen talep zaten var.";
+  if (message.includes("pending request")) return "Bu e-posta adresi için bekleyen bir talep zaten var.";
+  return message || "Hesap talebi oluşturulamadı.";
+}
+
+async function readSseStream(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: ChatStreamEvent) => void,
+  signal: AbortSignal
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let eventName = "message";
+  let dataLines: string[] = [];
+
+  const dispatch = () => {
+    if (dataLines.length === 0) {
+      eventName = "message";
+      return;
+    }
+    const raw = dataLines.join("\n");
+    let data: unknown = raw;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      // SSE can legally carry plain text; keep it as-is.
+    }
+    onEvent({ eventName, data });
+    eventName = "message";
+    dataLines = [];
+  };
+
+  while (!signal.aborted) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (line === "") {
+        dispatch();
+      } else if (line.startsWith("event:")) {
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart());
+      }
+    }
+  }
+  if (buffer.trim() || dataLines.length > 0) {
+    dispatch();
+  }
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
@@ -735,4 +1168,22 @@ function adminUsername(identifier: string) {
   const trimmed = identifier.trim();
   if (trimmed.toLowerCase() === "admin@mobit.com.tr") return "admin";
   return trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
+}
+
+function isAdminIdentifier(identifier: string) {
+  const trimmed = identifier.trim().toLowerCase();
+  return trimmed === "admin" || trimmed === "admin@mobit.com.tr";
+}
+
+function usesNativeSessionStore() {
+  return typeof window !== "undefined" && Capacitor.isNativePlatform();
+}
+
+function parseSession(raw: string | null): BackendAuthUser | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as BackendAuthUser;
+  } catch {
+    return null;
+  }
 }

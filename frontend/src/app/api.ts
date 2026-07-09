@@ -805,6 +805,27 @@ export async function updateERPTaskStatus(taskId: number, status: string): Promi
   return response.json();
 }
 
+export interface ERPTaskEditPayload {
+  title?: string;
+  description?: string;
+  priority?: string;
+  deadline_at?: string;
+  clear_deadline?: boolean;
+  status?: string;
+}
+
+// Admin-only full edit; omitted fields stay unchanged. Changing the deadline
+// re-arms the backend due-soon/overdue alert ladder for the task.
+export async function updateERPTaskDetails(taskId: number, payload: ERPTaskEditPayload): Promise<ERPTask> {
+  const response = await apiFetch(`/api/erp/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
 export async function uploadERPTaskDocument(taskId: number, file: File): Promise<ERPTaskDocument> {
   const body = new FormData();
   body.append("file", file);

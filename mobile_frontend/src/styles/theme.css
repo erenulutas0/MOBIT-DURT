@@ -13,7 +13,8 @@
   --secondary: #1E1E2B;
   --secondary-foreground: #CBD5E1;
   --muted: #1A1A25;
-  --muted-foreground: #64748B;
+  /* one step lighter than slate-500 for AA-friendly contrast on the dark surfaces */
+  --muted-foreground: #8494AB;
   --accent: #1A2E2E;
   --accent-foreground: #5EEAD4;
   --destructive: #EF4444;
@@ -191,4 +192,46 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+}
+
+/* ── Motion & surface primitives (dark-gray design language) ─────────────── */
+
+@keyframes docsbot-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes docsbot-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* replays whenever the element re-enters layout (display:none → block), so
+   the hidden-tab pattern gets a soft entrance for free */
+.tab-enter {
+  animation: docsbot-fade-up 0.22s ease-out;
+}
+
+.skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(
+    100deg,
+    #1A1A25 40%,
+    #232330 50%,
+    #1A1A25 60%
+  );
+  background-size: 200% 100%;
+  animation: docsbot-shimmer 1.4s linear infinite;
+}
+
+/* one shared elevation step: faint inner top light + soft drop shadow */
+.surface-elevated {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 28px -18px rgba(0, 0, 0, 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter { animation: none; }
+  .skeleton { animation: none; }
 }

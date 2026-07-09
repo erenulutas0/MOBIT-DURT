@@ -39,7 +39,12 @@ PHONE_HASH_SALT=<random-secret-at-least-16-characters>
 TELEGRAM_MODE=webhook
 TELEGRAM_WEBHOOK_URL=https://ops.example.com/webhook/telegram
 TELEGRAM_WEBHOOK_SECRET=<random-secret-at-least-16-characters>
+SPRINGDOC_ENABLED=false
 ```
+
+`SPRINGDOC_ENABLED=false` turns off the public `/v3/api-docs` and `/swagger-ui`
+endpoints in production. Leave them enabled only in local development, where the
+generated OpenAPI spec is the reference for the Java API surface.
 
 Do not place FCM, APNs, Telegram, database, VAPID, or JWT secrets in the Nginx
 configuration or frontend build.

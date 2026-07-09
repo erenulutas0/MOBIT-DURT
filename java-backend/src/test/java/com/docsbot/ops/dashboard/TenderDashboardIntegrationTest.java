@@ -24,12 +24,16 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,6 +52,7 @@ class TenderDashboardIntegrationTest {
     void clean() throws Exception {
         jdbcTemplate.update("delete from erp_task_documents");
         jdbcTemplate.update("delete from document_group_messages");
+        jdbcTemplate.update("delete from document_group_document_versions");
         jdbcTemplate.update("delete from document_group_documents");
         jdbcTemplate.update("delete from document_group_members");
         jdbcTemplate.update("delete from document_groups");
@@ -75,6 +80,9 @@ class TenderDashboardIntegrationTest {
         EmployeeLogin employee = createApprovedEmployee(
                 "Tender Employee",
                 "tender.employee@example.com");
+        EmployeeLogin reviewer = createApprovedEmployee(
+                "Tender Reviewer",
+                "tender.reviewer@example.com");
         EmployeeLogin outsider = createApprovedEmployee(
                 "Outside Employee",
                 "outside.employee@example.com");
@@ -86,13 +94,14 @@ class TenderDashboardIntegrationTest {
                                 {
                                   "name":"Patron Evrak Odası",
                                   "description":"Patrona hazırlanacak haftalık dokümanlar",
-                                  "member_user_ids":[%d]
+                                  "member_user_ids":[%d,%d]
                                 }
-                                """.formatted(employee.userId())))
+                                """.formatted(employee.userId(), reviewer.userId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.group.name").value("Patron Evrak Odası"))
-                .andExpect(jsonPath("$.group.member_count").value(1))
-                .andExpect(jsonPath("$.members[0].user_id").value(employee.userId()))
+                .andExpect(jsonPath("$.group.member_count").value(2))
+                .andExpect(jsonPath("$.members[?(@.user_id == %d)]".formatted(employee.userId())).isNotEmpty())
+                .andExpect(jsonPath("$.members[?(@.user_id == %d)]".formatted(reviewer.userId())).isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
         long groupId = ((Number) JsonPath.read(createResponse, "$.group.id")).longValue();
 
@@ -124,6 +133,14 @@ class TenderDashboardIntegrationTest {
         long groupDocumentId = ((Number) JsonPath.read(uploadResponse, "$.id")).longValue();
         long documentId = ((Number) JsonPath.read(uploadResponse, "$.document_id")).longValue();
 
+        mockMvc.perform(get("/erp/notifications")
+                        .header("Authorization", bearer(reviewer.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.type == 'document_group_document_uploaded')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.title == 'Yeni doküman paylaşıldı')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.event_key == 'document-group-document-uploaded:%d:%d:user:%d')]"
+                        .formatted(groupId, groupDocumentId, reviewer.userId())).isNotEmpty());
+
         mockMvc.perform(get("/document-groups/{groupId}/documents", groupId)
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
@@ -135,17 +152,109 @@ class TenderDashboardIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(content));
 
+        byte[] revisedContent = "Boss review packet revision two".getBytes(StandardCharsets.UTF_8);
+        MockMultipartFile revisedFile = new MockMultipartFile(
+                "file",
+                "patron-paketi-v2.txt",
+                MediaType.TEXT_PLAIN_VALUE,
+                revisedContent);
+        mockMvc.perform(multipart("/document-groups/{groupId}/documents/{groupDocumentId}/versions", groupId, groupDocumentId)
+                        .file(revisedFile)
+                        .param("note", "Revizyon 2")
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(groupDocumentId))
+                .andExpect(jsonPath("$.document.original_filename").value("patron-paketi-v2.txt"));
+
+        String versionsResponse = mockMvc.perform(get("/document-groups/{groupId}/documents/{groupDocumentId}/versions", groupId, groupDocumentId)
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].version_number").value(2))
+                .andExpect(jsonPath("$[0].document.original_filename").value("patron-paketi-v2.txt"))
+                .andExpect(jsonPath("$[1].version_number").value(1))
+                .andExpect(jsonPath("$[1].document.original_filename").value("patron-paketi.txt"))
+                .andReturn().getResponse().getContentAsString();
+        long firstVersionId = ((Number) JsonPath.read(versionsResponse, "$[1].id")).longValue();
+
+        mockMvc.perform(get("/document-groups/{groupId}/documents/{groupDocumentId}/versions/{versionId}/content",
+                        groupId,
+                        groupDocumentId,
+                        firstVersionId)
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(content));
+
         String messageResponse = mockMvc.perform(post("/document-groups/{groupId}/messages", groupId)
                         .header("Authorization", bearer(employee.token()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"body":"Patron paketi hazır, kontrol edebilirsiniz."}
+                                {
+                                  "body":"Patron paketi hazır, kontrol edebilirsiniz.",
+                                  "client_message_id":"room-retry-1"
+                                }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.author_user_id").value(employee.userId()))
                 .andExpect(jsonPath("$.body").value("Patron paketi hazır, kontrol edebilirsiniz."))
+                .andExpect(jsonPath("$.client_message_id").value("room-retry-1"))
+                .andExpect(jsonPath("$.delivered_at").isNotEmpty())
+                .andExpect(jsonPath("$.sequence_no").isNotEmpty())
+                .andExpect(jsonPath("$.delivery_status").value("delivered"))
                 .andReturn().getResponse().getContentAsString();
         long messageId = ((Number) JsonPath.read(messageResponse, "$.id")).longValue();
+
+        mockMvc.perform(post("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(employee.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "body":"Patron paketi hazır, kontrol edebilirsiniz.",
+                                  "client_message_id":"room-retry-1"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(messageId));
+
+        mockMvc.perform(get("/document-groups")
+                        .header("Authorization", bearer(reviewer.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].unread_message_count").value(1));
+
+        mockMvc.perform(patch("/document-groups/{groupId}/messages/read-through", groupId)
+                        .header("Authorization", bearer(reviewer.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"through_message_id":%d}
+                                """.formatted(messageId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updated_count").value(1));
+
+        mockMvc.perform(patch("/document-groups/{groupId}/messages/read-through", groupId)
+                        .header("Authorization", bearer(reviewer.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"through_message_id":%d}
+                                """.formatted(messageId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updated_count").value(0));
+
+        mockMvc.perform(get("/document-groups")
+                        .header("Authorization", bearer(reviewer.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].unread_message_count").value(0));
+
+        mockMvc.perform(get("/erp/notifications")
+                        .header("Authorization", bearer(reviewer.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.type == 'document_group_message')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.title == 'Yeni oda mesajı')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.event_key == 'document-group-message:%d:%d:user:%d')]"
+                        .formatted(groupId, messageId, reviewer.userId())).isNotEmpty());
+
+        mockMvc.perform(get("/erp/notifications")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.type == 'document_group_message')]").isNotEmpty());
 
         mockMvc.perform(get("/document-groups/{groupId}/messages", groupId)
                         .header("Authorization", bearer(adminToken)))
@@ -164,6 +273,201 @@ class TenderDashboardIntegrationTest {
                                 {"body":"Gizli odaya yazamam."}
                                 """))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void documentGroupMessagesPreserveMediaPayloadsAndAccessControls() throws Exception {
+        String adminToken = loginAdmin();
+        EmployeeLogin employee = createApprovedEmployee(
+                "Media Room Employee",
+                "media.room.employee@example.com");
+        EmployeeLogin reviewer = createApprovedEmployee(
+                "Media Room Reviewer",
+                "media.room.reviewer@example.com");
+        EmployeeLogin outsider = createApprovedEmployee(
+                "Media Room Outsider",
+                "media.room.outsider@example.com");
+
+        String createResponse = mockMvc.perform(post("/document-groups")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Medya Test Odası",
+                                  "member_user_ids":[%d,%d]
+                                }
+                                """.formatted(employee.userId(), reviewer.userId())))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long groupId = ((Number) JsonPath.read(createResponse, "$.group.id")).longValue();
+
+        String imageData = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD";
+        String imageResponse = mockMvc.perform(post("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(employee.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "body":"İletilen doküman: saha.jpg",
+                                  "message_kind":"image",
+                                  "media_mime_type":"image/jpeg",
+                                  "media_data":"%s"
+                                }
+                                """.formatted(imageData)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.author_user_id").value(employee.userId()))
+                .andExpect(jsonPath("$.message_kind").value("image"))
+                .andExpect(jsonPath("$.media_mime_type").value("image/jpeg"))
+                .andExpect(jsonPath("$.media_data").value(nullValue()))
+                .andExpect(jsonPath("$.media_url").value(startsWith("/document-groups/%d/messages/".formatted(groupId))))
+                .andExpect(jsonPath("$.media_ref").value(startsWith("media:document-group-")))
+                .andReturn().getResponse().getContentAsString();
+        long imageMessageId = ((Number) JsonPath.read(imageResponse, "$.id")).longValue();
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject(
+                        "select media_data from document_group_messages where id = ?",
+                        String.class,
+                        imageMessageId))
+                .startsWith("media:document-group-");
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages/{messageId}/media", groupId, imageMessageId)
+                        .header("Authorization", bearer(reviewer.token())))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("image/jpeg"));
+
+        String voiceData = "data:audio/webm;base64,GkXfo59ChoEBQveBAULygQ";
+        mockMvc.perform(post("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(reviewer.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "body":"Ses mesajı",
+                                  "message_kind":"voice",
+                                  "media_mime_type":"audio/webm",
+                                  "media_data":"%s",
+                                  "media_duration_ms":2200
+                                }
+                                """.formatted(voiceData)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.author_user_id").value(reviewer.userId()))
+                .andExpect(jsonPath("$.body").value("Ses mesajı"))
+                .andExpect(jsonPath("$.message_kind").value("voice"))
+                .andExpect(jsonPath("$.media_mime_type").value("audio/webm"))
+                .andExpect(jsonPath("$.media_data").value(nullValue()))
+                .andExpect(jsonPath("$.media_url").value(startsWith("/document-groups/%d/messages/".formatted(groupId))))
+                .andExpect(jsonPath("$.media_ref").value(startsWith("media:document-group-")))
+                .andExpect(jsonPath("$.media_duration_ms").value(2200));
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(imageMessageId)).isNotEmpty())
+                .andExpect(jsonPath("$[?(@.message_kind == 'voice')]").isNotEmpty());
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(outsider.token())))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages/{messageId}/media", groupId, imageMessageId)
+                        .header("Authorization", bearer(outsider.token())))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(employee.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "body":"Yanlış medya",
+                                  "message_kind":"image",
+                                  "media_mime_type":"image/jpeg",
+                                  "media_data":"data:audio/webm;base64,AAAA"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Image message data is required"));
+
+        mockMvc.perform(delete("/document-groups/{groupId}/messages/{messageId}", groupId, imageMessageId)
+                        .header("Authorization", bearer(outsider.token())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void documentGroupMessagesCanBeDeletedOnlyForCurrentViewer() throws Exception {
+        String adminToken = loginAdmin();
+        EmployeeLogin employee = createApprovedEmployee(
+                "Hidden Room Employee",
+                "hidden.room.employee@example.com");
+        EmployeeLogin reviewer = createApprovedEmployee(
+                "Hidden Room Reviewer",
+                "hidden.room.reviewer@example.com");
+
+        String createResponse = mockMvc.perform(post("/document-groups")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Gizleme Test Odası",
+                                  "member_user_ids":[%d,%d]
+                                }
+                                """.formatted(employee.userId(), reviewer.userId())))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long groupId = ((Number) JsonPath.read(createResponse, "$.group.id")).longValue();
+        long messageId = sendGroupText(employee.token(), groupId, "Bu oda mesajı sadece inceleyenden gizlenecek.");
+
+        mockMvc.perform(delete("/document-groups/{groupId}/messages/{messageId}", groupId, messageId)
+                        .queryParam("scope", "me")
+                        .header("Authorization", bearer(reviewer.token())))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(reviewer.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(messageId)).isEmpty());
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(messageId)).isNotEmpty());
+    }
+
+    @Test
+    void documentGroupMessagesSupportCursorPaginationWithoutBreakingAscendingDisplayOrder() throws Exception {
+        String adminToken = loginAdmin();
+        EmployeeLogin employee = createApprovedEmployee(
+                "Paged Room Employee",
+                "paged.room.employee@example.com");
+
+        String createResponse = mockMvc.perform(post("/document-groups")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Sayfalı Oda",
+                                  "member_user_ids":[%d]
+                                }
+                                """.formatted(employee.userId())))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long groupId = ((Number) JsonPath.read(createResponse, "$.group.id")).longValue();
+
+        long firstId = sendGroupText(employee.token(), groupId, "Birinci oda mesajı");
+        long secondId = sendGroupText(employee.token(), groupId, "İkinci oda mesajı");
+        long thirdId = sendGroupText(employee.token(), groupId, "Üçüncü oda mesajı");
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages", groupId)
+                        .queryParam("limit", "2")
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(secondId))
+                .andExpect(jsonPath("$[1].id").value(thirdId));
+
+        mockMvc.perform(get("/document-groups/{groupId}/messages", groupId)
+                        .queryParam("limit", "2")
+                        .queryParam("before_id", Long.toString(secondId))
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(firstId));
     }
 
     @Test
@@ -785,6 +1089,18 @@ class TenderDashboardIntegrationTest {
         return createApprovedEmployee(
                 "Tender Employee",
                 "tender.employee@example.com").token();
+    }
+
+    private long sendGroupText(String token, long groupId, String body) throws Exception {
+        String response = mockMvc.perform(post("/document-groups/{groupId}/messages", groupId)
+                        .header("Authorization", bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"body":"%s"}
+                                """.formatted(body)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(response, "$.id")).longValue();
     }
 
     private record EmployeeLogin(long userId, String token) {

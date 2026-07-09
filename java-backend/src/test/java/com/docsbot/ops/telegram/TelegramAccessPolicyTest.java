@@ -41,6 +41,12 @@ class TelegramAccessPolicyTest {
                 new DocsBotProperties.WebPush(false, "", "", "", 0),
                 new DocsBotProperties.MobilePush(false, "", "", "", "", "https://fcm.googleapis.com", "", "", "", "", "", "sandbox", "", 10),
                 new DocsBotProperties.Email(false, false, "docsbot@example.com", null, "[DocsBot Ops]"),
+                new DocsBotProperties.AppUpdate(
+                        "1.0.7",
+                        "1.0.6",
+                        "Yeni versiyon geldi",
+                        "Uygulamayı düzgün kullanmanız için güncellemeniz öneriliyor.",
+                        "https://play.google.com/store/apps/details?id=com.mobit.docsbotops"),
                 new DocsBotProperties.Telegram(
                         false,
                         "test-token",

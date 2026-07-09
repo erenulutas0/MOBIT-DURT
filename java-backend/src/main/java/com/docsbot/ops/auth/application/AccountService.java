@@ -18,6 +18,7 @@ import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.infrastructure.ErpAccountRequestRepository;
 import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
 import com.docsbot.ops.erp.application.ErpActivityRecorder;
+import com.docsbot.ops.erp.application.NotificationService;
 
 @Service
 @Profile("postgres")
@@ -28,6 +29,7 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final AuthAuditRecorder auditRecorder;
     private final ErpActivityRecorder activityRecorder;
+    private final NotificationService notificationService;
     private final Clock clock;
 
     @Autowired
@@ -36,9 +38,10 @@ public class AccountService {
             ErpUserRepository userRepository,
             PasswordEncoder passwordEncoder,
             AuthAuditRecorder auditRecorder,
-            ErpActivityRecorder activityRecorder
+            ErpActivityRecorder activityRecorder,
+            NotificationService notificationService
     ) {
-        this(requestRepository, userRepository, passwordEncoder, auditRecorder, activityRecorder, Clock.systemUTC());
+        this(requestRepository, userRepository, passwordEncoder, auditRecorder, activityRecorder, notificationService, Clock.systemUTC());
     }
 
     AccountService(
@@ -47,6 +50,7 @@ public class AccountService {
             PasswordEncoder passwordEncoder,
             AuthAuditRecorder auditRecorder,
             ErpActivityRecorder activityRecorder,
+            NotificationService notificationService,
             Clock clock
     ) {
         this.requestRepository = requestRepository;
@@ -54,6 +58,7 @@ public class AccountService {
         this.passwordEncoder = passwordEncoder;
         this.auditRecorder = auditRecorder;
         this.activityRecorder = activityRecorder;
+        this.notificationService = notificationService;
         this.clock = clock;
     }
 
@@ -77,6 +82,14 @@ public class AccountService {
                 clock.instant());
         try {
             ErpAccountRequest saved = requestRepository.saveAndFlush(request);
+            notificationService.notifyAdmin(
+                    "account_request_created",
+                    "Yeni hesap talebi",
+                    saved.getName() + " hesap açmak istiyor.",
+                    null,
+                    "NORMAL",
+                    "account-request:" + saved.getId(),
+                    saved.getCreatedAt());
             activityRecorder.recordActor(
                     "public",
                     null,

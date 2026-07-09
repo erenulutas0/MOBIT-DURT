@@ -1,207 +1,143 @@
-import { Search, ChevronDown, Bell, Building2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { getERPNotifications, markERPNotificationRead } from "../api";
-import type { ERPNotification, ERPSession } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { Bell, ChevronDown, Search, Building2, AlertTriangle, CheckCircle2, LogOut, Inbox } from "lucide-react";
+import {
+  ERPNotification,
+  ERPSession,
+  markERPNotificationRead,
+  markAllERPNotificationsRead,
+} from "../api";
+import type { Page, LiveData } from "../lib/types";
+import { URGENCY_ICON_CLASSES, URGENCY_DOT_CLASSES, URGENCY_UNREAD_ROW_CLASSES } from "../lib/constants";
+import { isAdmin, notificationUrgency, shortName, relativeTime } from "../lib/helpers";
 
-interface TopBarProps {
-  title: string;
-  onSearch?: (q: string) => void;
-  session: ERPSession | null;
-  activeModule: "home" | "erp" | "tender";
-  onLogout: () => void;
-  onHome: () => void;
-}
-
-export function TopBar({ title, onSearch, session, activeModule, onLogout, onHome }: TopBarProps) {
-  const moduleLabel = activeModule === "erp" ? "ERP-TAKIP" : activeModule === "tender" ? "Tender Hub" : "Ana Sayfa";
-  const userLabel = session ? session.name : "Giris yok";
-  const roleLabel = session?.role === "admin" ? "A" : session ? "U" : "?";
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifications, setNotifications] = useState<ERPNotification[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
+export function TopBar({ title, setPage, session, live, onLogout }: { title: string; setPage: (p: Page) => void; session: ERPSession; live: LiveData; onLogout: () => void }) {
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement | null>(null);
+  const unreadNotifications = live.notifications.filter((item) => !item.read_at).length;
+  const hasUnreadCritical = live.notifications.some(
+    (item) => !item.read_at && notificationUrgency(item.priority) === "critical"
+  );
+  const latestNotifications = live.notifications.slice(0, 6);
 
   useEffect(() => {
-    if (!session) {
-      setUnreadCount(0);
-      setNotifications([]);
-      setShowNotifications(false);
-      return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!notificationRef.current?.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, []);
+
+  const markNotificationRead = async (notification: ERPNotification) => {
+    if (!notification.read_at) {
+      await markERPNotificationRead(notification.id);
+      live.refresh();
     }
-    let alive = true;
-    const notificationUserId = session.role === "admin" ? 0 : session.user_id;
-    const loadNotifications = () => {
-      getERPNotifications(notificationUserId)
-        .then((items) => {
-          if (alive) {
-            setNotifications(items);
-            setUnreadCount(items.filter((item) => !item.read_at).length);
-          }
-        })
-        .catch(() => {
-          if (alive) {
-            setNotifications([]);
-            setUnreadCount(0);
-          }
-        });
-    };
-
-    loadNotifications();
-    const refreshTimer = window.setInterval(loadNotifications, 4000);
-    return () => {
-      alive = false;
-      window.clearInterval(refreshTimer);
-    };
-  }, [session, activeModule]);
-
-  const handleReadNotification = async (notificationId: number) => {
-    await markERPNotificationRead(notificationId);
-    setNotifications((items) => items.map((item) => item.id === notificationId ? { ...item, read_at: new Date().toISOString() } : item));
-    setUnreadCount((count) => Math.max(0, count - 1));
-  };
-
-  const handleReadAll = async () => {
-    const unread = notifications.filter((item) => !item.read_at);
-    await Promise.all(unread.map((item) => markERPNotificationRead(item.id)));
-    const readAt = new Date().toISOString();
-    setNotifications((items) => items.map((item) => ({ ...item, read_at: item.read_at || readAt })));
-    setUnreadCount(0);
+    setPage("notifications");
+    setNotificationsOpen(false);
   };
 
   return (
-    <header
-      className="flex items-center gap-3 px-4"
-      style={{
-        height: 40,
-        background: "var(--card)",
-        borderBottom: "1px solid var(--border)",
-        flexShrink: 0,
-      }}
-    >
-      <h1 style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", minWidth: 260, margin: 0 }}>
-        {title}
-      </h1>
-
+    <header className="h-12 bg-white border-b border-border flex items-center px-4 gap-3 shrink-0">
+      <h1 className="text-sm font-semibold text-foreground">{title}</h1>
       <div className="flex-1" />
-      <div className="flex items-center gap-2 rounded px-3 py-1.5" style={{ width: 260, background: "var(--input-background)", border: "1px solid var(--border)" }}>
-        <Search size={14} style={{ color: "var(--muted-foreground)" }} />
-        <input
-          type="text"
-          placeholder="Ara... (Ctrl+K)"
-          onChange={(e) => onSearch?.(e.target.value)}
-          style={{
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            fontSize: 13,
-            color: "var(--foreground)",
-            width: "100%",
-            fontFamily: "Inter, sans-serif",
-          }}
-        />
+      <div className="flex items-center gap-1.5 bg-slate-50 border border-border rounded px-2.5 py-1.5 w-56">
+        <Search className="w-3.5 h-3.5 text-slate-400" />
+        <input placeholder="Ara... (Ctrl+K)" className="text-xs bg-transparent outline-none flex-1 text-slate-600 placeholder:text-slate-400" />
       </div>
-      <button
-        onClick={onHome}
-        className="rounded px-3 py-1.5"
-        style={{ border: "1px solid var(--border)", background: "var(--card)", color: "var(--foreground)", fontSize: 12, cursor: "pointer", fontWeight: 700 }}
-      >
-        {moduleLabel}
-      </button>
-
-      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded cursor-pointer" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: 12, fontFamily: "Inter, sans-serif", color: "var(--foreground)" }}>
-        <Building2 size={13} style={{ color: "var(--muted-foreground)" }} />
-        <div className="w-2 h-2 rounded-full" style={{ background: "var(--primary)", flexShrink: 0 }} />
-        <span style={{ fontWeight: 500 }}>MOBIT</span>
-        <ChevronDown size={12} style={{ color: "var(--muted-foreground)" }} />
+      <div className="flex items-center gap-1.5 text-xs text-slate-600 border border-border rounded px-2.5 py-1.5 bg-slate-50">
+        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+        <span>Mobit</span>
+        <ChevronDown className="w-3 h-3 text-slate-400" />
       </div>
-
-      {/* Bot status */}
-      <div className="flex items-center gap-1.5 px-3 py-1 rounded" style={{ background: "var(--success-bg)", border: "1px solid #a7f3d0", fontSize: 12, fontFamily: "Inter, sans-serif" }}>
-        <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--success)" }} />
-        <span style={{ color: "var(--success)", fontWeight: 500 }}>Bot online</span>
-      </div>
-
-      {/* Notifications */}
-      <div style={{ position: "relative" }}>
+      <div ref={notificationRef} className="relative">
         <button
-          onClick={() => setShowNotifications((value) => !value)}
-          className="flex items-center justify-center rounded p-1.5"
-          style={{ background: showNotifications ? "var(--secondary)" : "transparent", border: "1px solid var(--border)", cursor: "pointer", color: "var(--muted-foreground)", position: "relative" }}
-          title={`${unreadCount} okunmamis bildirim`}
+          title="Bildirimler"
+          onClick={() => setNotificationsOpen((value) => !value)}
+          className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500"
         >
-          <Bell size={15} />
-          {unreadCount > 0 && (
-            <span className="flex items-center justify-center rounded-full" style={{ position: "absolute", top: -6, right: -6, minWidth: 16, height: 16, padding: "0 4px", background: "var(--destructive)", color: "#fff", fontSize: 10, fontWeight: 700 }}>
-              {unreadCount > 9 ? "9+" : unreadCount}
+          <Bell className="w-4 h-4" />
+          {unreadNotifications > 0 && (
+            <span className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ${
+              hasUnreadCritical ? "animate-pulse ring-2 ring-red-300" : ""
+            }`}>
+              {unreadNotifications > 9 ? "9+" : unreadNotifications}
             </span>
           )}
         </button>
-        {showNotifications && (
-          <div
-            className="rounded"
-            style={{
-              position: "absolute",
-              right: 0,
-              top: 38,
-              width: 340,
-              maxHeight: 420,
-              overflow: "auto",
-              background: "var(--card)",
-              border: "1px solid var(--border)",
-              boxShadow: "0 14px 35px rgba(15, 23, 42, 0.16)",
-              zIndex: 20,
-            }}
-          >
-            <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: "1px solid var(--border)" }}>
+        {notificationsOpen && (
+          <div className="absolute right-0 top-9 z-40 w-80 overflow-hidden rounded border border-border bg-white shadow-lg">
+            <div className="flex items-center justify-between border-b border-border bg-slate-50 px-3 py-2">
               <div>
-                <div style={{ fontSize: 13, fontWeight: 650, color: "var(--foreground)" }}>Bildirimler</div>
-                <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{unreadCount} okunmamis</div>
+                <p className="text-xs font-semibold text-foreground">Bildirimler</p>
+                <p className="text-[10px] text-muted-foreground">{unreadNotifications} okunmamış</p>
               </div>
-              {unreadCount > 0 && (
-                <button onClick={handleReadAll} className="rounded px-2 py-1" style={{ border: "1px solid var(--border)", background: "var(--card)", fontSize: 11, cursor: "pointer" }}>
-                  Tumunu okundu yap
-                </button>
-              )}
-            </div>
-            {notifications.length === 0 ? (
-              <div className="px-3 py-4" style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Bildirim yok.</div>
-            ) : notifications.map((item) => (
               <button
-                key={item.id}
-                onClick={() => !item.read_at && handleReadNotification(item.id)}
-                className="w-full text-left px-3 py-3"
-                style={{
-                  display: "block",
-                  border: "none",
-                  borderBottom: "1px solid var(--border)",
-                  background: item.read_at ? "var(--card)" : "var(--secondary)",
-                  cursor: item.read_at ? "default" : "pointer",
+                title="Tümünü okundu işaretle"
+                disabled={unreadNotifications === 0}
+                onClick={async () => {
+                  await markAllERPNotificationsRead();
+                  live.refresh();
                 }}
+                className="rounded p-1 text-slate-400 hover:bg-white hover:text-teal-600 disabled:opacity-40"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span style={{ fontSize: 12, fontWeight: 650, color: "var(--foreground)" }}>{item.title}</span>
-                  {!item.read_at && <span className="rounded-full" style={{ width: 7, height: 7, background: "var(--destructive)", flexShrink: 0, marginTop: 4 }} />}
-                </div>
-                {item.body && <div style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 4 }}>{item.body}</div>}
-                <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 6 }}>
-                  {new Date(item.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                </div>
+                <CheckCircle2 className="h-4 w-4" />
               </button>
-            ))}
+            </div>
+            <div className="max-h-80 overflow-y-auto divide-y divide-border">
+              {latestNotifications.length === 0 ? (
+                <div className="px-3 py-6 text-center text-xs text-muted-foreground">Bildirim yok.</div>
+              ) : latestNotifications.map((notification) => {
+                const urgency = notificationUrgency(notification.priority);
+                return (
+                  <button
+                    key={notification.id}
+                    onClick={() => markNotificationRead(notification)}
+                    className={`flex w-full items-start gap-2 px-3 py-2.5 text-left hover:bg-slate-50 ${
+                      notification.read_at ? "" : URGENCY_UNREAD_ROW_CLASSES[urgency]
+                    }`}
+                  >
+                    <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded ${URGENCY_ICON_CLASSES[urgency]}`}>
+                      {urgency === "critical" ? <AlertTriangle className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-foreground">
+                        {urgency === "critical" && (
+                          <span className="mr-1 rounded bg-red-100 px-1 py-px text-[9px] font-bold uppercase text-red-700">Kritik</span>
+                        )}
+                        {notification.title}
+                      </p>
+                      {notification.body && <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{notification.body}</p>}
+                      <p className="mt-1 text-[10px] text-slate-400">{relativeTime(notification.created_at)}</p>
+                    </div>
+                    {!notification.read_at && (
+                      <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${URGENCY_DOT_CLASSES[urgency]}`} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => {
+                setPage("notifications");
+                setNotificationsOpen(false);
+              }}
+              className="flex w-full items-center justify-center gap-1.5 border-t border-border px-3 py-2 text-xs font-medium text-teal-700 hover:bg-slate-50"
+            >
+              <Inbox className="h-3.5 w-3.5" />
+              Tüm bildirimler
+            </button>
           </div>
         )}
       </div>
-
-      {/* User */}
-      <button
-        onClick={session ? onLogout : onHome}
-        className="flex items-center gap-2 px-2 py-1 rounded"
-        style={{ border: "1px solid var(--border)", background: "var(--card)", cursor: "pointer" }}
-        title={session ? "Cikis yap" : "Giris ekranina git"}
-      >
-        <div className="flex items-center justify-center rounded-full" style={{ width: 24, height: 24, background: "var(--primary)", color: "#fff", fontSize: 11, fontWeight: 600 }}>
-          {roleLabel}
+      <button onClick={onLogout} className="flex items-center gap-2 border border-border rounded px-2 py-1 hover:bg-slate-50">
+        <div className="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold">{shortName(session.name)}</div>
+        <div className="leading-tight">
+          <p className="text-xs font-semibold text-foreground">{session.name}</p>
+          <p className="text-[10px] text-muted-foreground">{isAdmin(session) ? "Admin" : "Çalışan"}</p>
         </div>
-        <span style={{ fontSize: 13, fontFamily: "Inter, sans-serif", fontWeight: 500, color: "var(--foreground)" }}>{userLabel}</span>
+        <LogOut className="w-3.5 h-3.5 text-slate-400" />
       </button>
     </header>
   );

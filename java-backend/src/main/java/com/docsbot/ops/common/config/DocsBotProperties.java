@@ -12,6 +12,7 @@ public record DocsBotProperties(
         WebPush webPush,
         MobilePush mobilePush,
         Email email,
+        AppUpdate appUpdate,
         Telegram telegram,
         Admin admin,
         Jwt jwt
@@ -74,6 +75,15 @@ public record DocsBotProperties(
             String from,
             String adminTo,
             String subjectPrefix
+    ) {
+    }
+
+    public record AppUpdate(
+            String latestVersion,
+            String minimumVersion,
+            String title,
+            String message,
+            String playStoreUrl
     ) {
     }
 

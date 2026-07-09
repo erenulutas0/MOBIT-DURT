@@ -1,6 +1,8 @@
 package com.docsbot.ops.migration;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -64,6 +66,28 @@ class PostgresMigrationIntegrationTest {
                 """,
                 Boolean.class)));
 
+        // hot-path indexes for the 60-second scheduled scans (V33, V35)
+        assertTrue(Boolean.TRUE.equals(jdbc.queryForObject(
+                """
+                select exists (
+                    select 1
+                    from pg_indexes
+                    where tablename = 'erp_tasks'
+                      and indexname = 'ix_erp_tasks_deadline_status'
+                )
+                """,
+                Boolean.class)));
+        assertTrue(Boolean.TRUE.equals(jdbc.queryForObject(
+                """
+                select exists (
+                    select 1
+                    from pg_indexes
+                    where tablename = 'erp_activity_events'
+                      and indexname = 'ix_erp_activity_events_task_type_created'
+                )
+                """,
+                Boolean.class)));
+
         jdbc.update(
                 """
                 insert into documents (
@@ -76,7 +100,7 @@ class PostgresMigrationIntegrationTest {
                 "msg-1",
                 "sender-hash",
                 "telegram",
-                Instant.parse("2026-06-23T12:00:00Z"),
+                OffsetDateTime.ofInstant(Instant.parse("2026-06-23T12:00:00Z"), ZoneOffset.UTC),
                 "media-1",
                 "teknik-sartname.pdf",
                 "stored.pdf",

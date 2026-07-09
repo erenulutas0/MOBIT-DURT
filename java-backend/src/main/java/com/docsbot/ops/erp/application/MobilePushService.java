@@ -107,7 +107,7 @@ public class MobilePushService {
 
     private boolean pushAllowed(long userId) {
         return preferenceRepository.findById(userId)
-                .map(preference -> preference.isBrowserPushEnabled())
+                .map(preference -> preference.isMobilePushEnabled())
                 .orElse(true);
     }
 

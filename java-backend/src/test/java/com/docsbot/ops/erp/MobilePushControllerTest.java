@@ -13,6 +13,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,6 +33,7 @@ class MobilePushControllerTest {
     void clean() {
         jdbcTemplate.update("delete from erp_notification_deliveries");
         jdbcTemplate.update("delete from erp_notifications");
+        jdbcTemplate.update("delete from erp_mobile_push_outbox");
         jdbcTemplate.update("delete from erp_mobile_push_tokens");
         jdbcTemplate.update("delete from erp_task_assignments");
         jdbcTemplate.update("delete from erp_tasks");
@@ -98,7 +100,7 @@ class MobilePushControllerTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/erp/notification-preferences")
                         .header("Authorization", bearer(employee.token()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"browser_push_enabled\":true}"))
+                        .content("{\"mobile_push_enabled\":true}"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/erp/tasks")
@@ -119,8 +121,16 @@ class MobilePushControllerTest {
                 employee.id());
         org.junit.jupiter.api.Assertions.assertEquals(1, notifications);
         Integer inAppDeliveries = jdbcTemplate.queryForObject(
-                "select count(*) from erp_notification_deliveries where channel='IN_APP' and status='ACCEPTED'",
-                Integer.class);
+                """
+                        select count(*)
+                          from erp_notification_deliveries delivery
+                          join erp_notifications notification on notification.id = delivery.notification_id
+                         where delivery.channel='IN_APP'
+                           and delivery.status='ACCEPTED'
+                           and notification.user_id=?
+                        """,
+                Integer.class,
+                employee.id());
         org.junit.jupiter.api.Assertions.assertEquals(1, inAppDeliveries);
         Integer deliveries = waitForMobilePushDeliveries();
         org.junit.jupiter.api.Assertions.assertEquals(1, deliveries);
@@ -128,6 +138,66 @@ class MobilePushControllerTest {
                 "select count(*) from erp_mobile_push_outbox where status='PENDING'",
                 Integer.class);
         org.junit.jupiter.api.Assertions.assertEquals(1, outboxItems);
+    }
+
+    @Test
+    void appUpdateInfoAndBroadcastUseRegisteredMobileDevices() throws Exception {
+        String adminToken = loginAdmin();
+        Employee employee = createEmployee("update-user@example.com", adminToken);
+
+        mockMvc.perform(post("/erp/mobile-push/tokens")
+                        .header("Authorization", bearer(employee.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "platform":"android",
+                                  "device_id":"employee-phone",
+                                  "token":"employee-fcm-token",
+                                  "app_version":"1.0.6"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/erp/mobile-push/tokens")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "platform":"android",
+                                  "device_id":"admin-phone",
+                                  "token":"admin-fcm-token",
+                                  "app_version":"1.0.6"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/erp/app-update?current_version=1.0.6")
+                        .header("Authorization", bearer(employee.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latest_version").value("1.0.7"))
+                .andExpect(jsonPath("$.update_available").value(true))
+                .andExpect(jsonPath("$.required").value(true))
+                .andExpect(jsonPath("$.title").value("Yeni versiyon geldi"));
+
+        mockMvc.perform(post("/erp/app-update/broadcast")
+                        .header("Authorization", bearer(employee.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/erp/app-update/broadcast")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latest_version").value("1.0.7"))
+                .andExpect(jsonPath("$.active_device_users").value(2))
+                .andExpect(jsonPath("$.notifications_created").value(2));
+
+        Integer appUpdateNotifications = jdbcTemplate.queryForObject(
+                "select count(*) from erp_notifications where type='app_update_available'",
+                Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(2, appUpdateNotifications);
     }
 
     private Integer waitForMobilePushDeliveries() throws InterruptedException {

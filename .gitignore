@@ -24,3 +24,4 @@ data/originals/*
 !data/originals/.gitkeep
 vault/ihaleler/*
 !vault/ihaleler/.gitkeep
+vault_backup_*/

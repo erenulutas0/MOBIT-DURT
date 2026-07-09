@@ -60,15 +60,24 @@ public class FcmMobilePushGateway implements MobilePushGateway {
             return Result.retry("Mobile push gateway is not configured");
         }
         try {
+            boolean critical = "CRITICAL".equalsIgnoreCase(notification.getPriority());
+            boolean elevated = critical || "HIGH".equalsIgnoreCase(notification.getPriority());
             String body = objectMapper.writeValueAsString(Map.of(
                     "message", Map.of(
                             "token", token.getToken(),
                             "notification", Map.of(
                                     "title", notification.getTitle(),
                                     "body", notification.getBody() == null ? "" : notification.getBody()),
+                            "android", Map.of(
+                                    "priority", elevated ? "HIGH" : "NORMAL",
+                                    "notification", Map.of(
+                                            "channel_id", critical ? "tasks_critical" : "tasks_normal")),
                             "data", Map.of(
                                     "notification_id", String.valueOf(notification.getId()),
                                     "task_id", notification.getTaskId() == null ? "" : String.valueOf(notification.getTaskId()),
+                                    "event_key", notification.getEventKey() == null ? "" : notification.getEventKey(),
+                                    "type", notification.getType(),
+                                    "priority", notification.getPriority(),
                                     "url", "/"))));
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint()))

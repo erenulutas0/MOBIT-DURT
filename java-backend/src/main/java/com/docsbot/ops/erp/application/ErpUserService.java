@@ -105,6 +105,31 @@ class ErpUserService {
     }
 
     @Transactional
+    void requestAccountDeletion(ErpPrincipal principal) {
+        if (principal.admin()) {
+            throw new ErpExceptions.BadRequest("Admin account deletion must be handled by the system owner");
+        }
+        long userId = principal.requireUserId();
+        ErpUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("User not found"));
+        notificationService.notifyAdmin(
+                "account_deletion_request",
+                "Hesap silme talebi",
+                user.getName() + " hesabının silinmesini talep etti.",
+                null,
+                "HIGH",
+                "account-deletion-request:user:" + userId,
+                clock.instant());
+        activityRecorder.record(
+                principal,
+                "ACCOUNT_DELETION_REQUESTED",
+                "USER",
+                String.valueOf(userId),
+                null,
+                "email=" + (user.getEmail() == null ? "" : user.getEmail()));
+    }
+
+    @Transactional
     ErpUser updatePresence(ErpPrincipal principal, long userId, String status) {
         if (!principal.admin() && principal.requireUserId() != userId) {
             throw new ErpExceptions.Forbidden("Employees can update only their own presence");
