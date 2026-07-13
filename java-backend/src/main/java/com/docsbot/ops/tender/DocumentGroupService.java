@@ -571,8 +571,8 @@ public class DocumentGroupService {
                 group,
                 principal,
                 "document_group_message",
-                "Yeni oda mesajı",
-                group.getName() + " · " + messagePreview(message),
+                group.getName(),
+                messagePreview(message),
                 "document-group-message:" + group.getId() + ":" + message.getId(),
                 now);
         publishDocumentGroupMessageEvents(group, message.getId());
@@ -886,14 +886,25 @@ public class DocumentGroupService {
     }
 
     private String messagePreview(DocumentGroupMessage message) {
-        if ("voice".equals(message.getMessageKind())) {
-            return message.getAuthorName() + ": Ses mesajı";
+        String author = message.getAuthorName();
+        String kind = message.getMessageKind();
+        if ("voice".equals(kind)) {
+            return author + ": 🎤 Ses mesajı";
         }
-        String body = message.getBody();
+        if ("image".equals(kind)) {
+            return author + ": 📷 Fotoğraf";
+        }
+        String body = message.getBody() == null ? "" : message.getBody().strip();
+        if ("file".equals(kind)) {
+            return author + ": 📎 " + (body.isEmpty() ? "Doküman" : body);
+        }
+        if (body.isEmpty()) {
+            return author + ": Yeni mesaj";
+        }
         if (body.length() <= 80) {
-            return message.getAuthorName() + ": " + body;
+            return author + ": " + body;
         }
-        return message.getAuthorName() + ": " + body.substring(0, 77) + "...";
+        return author + ": " + body.substring(0, 77) + "…";
     }
 
     private DocumentGroup group(long groupId) {

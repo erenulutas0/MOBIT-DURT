@@ -124,8 +124,8 @@ public class WorkflowSlaEscalationService {
                     + (rung == 0 ? "" : ":r" + rung);
             String urgency = rung == 0 ? "HIGH" : "CRITICAL";
             String title = rung == 0
-                    ? "Task remains blocked"
-                    : "Task is still blocked (escalation " + rung + ")";
+                    ? "Görev hâlâ bloke"
+                    : "Görev hâlâ bloke (yükseltme " + rung + ")";
             int created = notificationService.notifyAdmin(
                     "task_blocked_escalation",
                     title,
@@ -164,8 +164,8 @@ public class WorkflowSlaEscalationService {
                     + (rung == 0 ? "" : ":r" + rung);
             String urgency = rung == 0 ? "HIGH" : "CRITICAL";
             String title = rung == 0
-                    ? "Task approval is waiting"
-                    : "Task approval is still waiting (escalation " + rung + ")";
+                    ? "Tamamlanma onayı bekliyor"
+                    : "Tamamlanma onayı hâlâ bekliyor (yükseltme " + rung + ")";
             int created = notificationService.notifyAdmin(
                     "task_completion_approval_escalation",
                     title,

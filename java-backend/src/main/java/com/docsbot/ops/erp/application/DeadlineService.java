@@ -116,7 +116,7 @@ public class DeadlineService {
             notificationService.notifyUsers(
                     assignees.getOrDefault(task.getId(), Set.of()),
                     "task_overdue",
-                    "Task deadline exceeded",
+                    "Görev termini aşıldı",
                     task.getTitle(),
                     task.getId(),
                     "CRITICAL",
@@ -124,7 +124,7 @@ public class DeadlineService {
                     now);
             notificationService.notifyAdmin(
                     "manager_overdue_digest",
-                    "Task deadline exceeded",
+                    "Görev termini aşıldı",
                     task.getTitle(),
                     task.getId(),
                     "HIGH",
@@ -167,7 +167,7 @@ public class DeadlineService {
             int created = notificationService.notifyUsers(
                     assignees.getOrDefault(task.getId(), Set.of()),
                     "task_due_soon",
-                    "Task deadline is approaching",
+                    "Görev termini yaklaşıyor",
                     task.getTitle(),
                     task.getId(),
                     urgency,
@@ -175,7 +175,7 @@ public class DeadlineService {
                     now);
             created += notificationService.notifyAdmin(
                     "manager_due_soon_digest",
-                    "Task deadline is approaching",
+                    "Görev termini yaklaşıyor",
                     task.getTitle(),
                     task.getId(),
                     "NORMAL",
@@ -208,11 +208,11 @@ public class DeadlineService {
                 .limit(WEEKLY_DIGEST_MAX_TITLES)
                 .map(ErpTask::getTitle)
                 .collect(Collectors.joining(", "));
-        String body = due.size() + " task(s) are due within the next 7 days: " + titles
+        String body = "Önümüzdeki 7 gün içinde termini dolan " + due.size() + " görev: " + titles
                 + (due.size() > WEEKLY_DIGEST_MAX_TITLES ? ", …" : "");
         return notificationService.notifyAdmin(
                 "manager_weekly_digest",
-                "Weekly deadline digest",
+                "Haftalık termin özeti",
                 body,
                 null,
                 "NORMAL",

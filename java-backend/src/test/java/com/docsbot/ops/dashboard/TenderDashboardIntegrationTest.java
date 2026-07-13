@@ -247,7 +247,7 @@ class TenderDashboardIntegrationTest {
                         .header("Authorization", bearer(reviewer.token())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.type == 'document_group_message')]").isNotEmpty())
-                .andExpect(jsonPath("$[?(@.title == 'Yeni oda mesajı')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.title == 'Patron Evrak Odası')]").isNotEmpty())
                 .andExpect(jsonPath("$[?(@.event_key == 'document-group-message:%d:%d:user:%d')]"
                         .formatted(groupId, messageId, reviewer.userId())).isNotEmpty());
 

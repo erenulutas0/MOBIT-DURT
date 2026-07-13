@@ -76,13 +76,13 @@ class DeadlineServiceTest {
         ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(notificationService).notifyAdmin(
                 eq("manager_weekly_digest"),
-                eq("Weekly deadline digest"),
+                eq("Haftalık termin özeti"),
                 bodyCaptor.capture(),
                 isNull(),
                 eq("NORMAL"),
                 keyCaptor.capture(),
                 eq(NOW));
-        assertThat(bodyCaptor.getValue()).startsWith("2 task(s) are due within the next 7 days: Contract review");
+        assertThat(bodyCaptor.getValue()).startsWith("Önümüzdeki 7 gün içinde termini dolan 2 görev: Contract review");
         // 2026-07-09 is in ISO week 28 of 2026.
         assertThat(keyCaptor.getValue()).isEqualTo("admin_week_digest:2026-W28");
     }
@@ -110,7 +110,7 @@ class DeadlineServiceTest {
         verify(notificationService).notifyUsers(
                 anyCollection(),
                 eq("task_due_soon"),
-                eq("Task deadline is approaching"),
+                eq("Görev termini yaklaşıyor"),
                 eq("Example task"),
                 eq(7L),
                 eq(expectedUrgency),
@@ -118,7 +118,7 @@ class DeadlineServiceTest {
                 eq(NOW));
         verify(notificationService).notifyAdmin(
                 eq("manager_due_soon_digest"),
-                eq("Task deadline is approaching"),
+                eq("Görev termini yaklaşıyor"),
                 eq("Example task"),
                 eq(7L),
                 eq("NORMAL"),

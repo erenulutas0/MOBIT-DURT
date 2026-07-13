@@ -50,7 +50,7 @@ class ErpTaskCommentService {
             notificationService.notifyUsers(
                     accessService.assignedUserIds(taskId),
                     "manager_message",
-                    "Manager sent a message",
+                    "Yöneticiden görev mesajı",
                     task.getTitle(),
                     task.getId(),
                     "NORMAL",
@@ -64,7 +64,7 @@ class ErpTaskCommentService {
             kind = "help".equalsIgnoreCase(requestedKind) ? "help" : "message";
             notificationService.notifyAdmin(
                     "employee_help_message",
-                    "Employee sent a task message",
+                    "Çalışandan görev mesajı",
                     task.getTitle(),
                     task.getId(),
                     "NORMAL",

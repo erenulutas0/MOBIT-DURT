@@ -370,10 +370,10 @@ class ErpDirectMessageService {
     }
 
     private void notifyRecipient(ErpDirectMessage message, Instant now) {
-        String title = "Yeni direkt mesaj";
-        String body = "voice".equals(message.getMessageKind())
-                ? message.getSenderName() + " · Ses mesajı"
-                : message.getSenderName();
+        // WhatsApp-style: the sender is the title so the recipient sees who wrote at a glance,
+        // and the body carries a content preview (or a media label).
+        String title = message.getSenderName();
+        String body = directMessagePreview(message);
         if (ErpDirectMessage.ACTOR_ADMIN.equals(message.getRecipientType())) {
             notificationService.notifyAdmin(
                     "direct_message",
@@ -394,6 +394,24 @@ class ErpDirectMessageService {
                 "NORMAL",
                 "direct-message:" + message.getId(),
                 now);
+    }
+
+    private String directMessagePreview(ErpDirectMessage message) {
+        String kind = message.getMessageKind();
+        if ("voice".equals(kind)) {
+            return "🎤 Ses mesajı";
+        }
+        if ("image".equals(kind)) {
+            return "📷 Fotoğraf";
+        }
+        if ("file".equals(kind)) {
+            return "📎 Doküman gönderdi";
+        }
+        String text = message.getBody() == null ? "" : message.getBody().strip();
+        if (text.isEmpty()) {
+            return "Yeni mesaj";
+        }
+        return text.length() <= 120 ? text : text.substring(0, 117) + "…";
     }
 
     private String fallback(String value, String fallback) {

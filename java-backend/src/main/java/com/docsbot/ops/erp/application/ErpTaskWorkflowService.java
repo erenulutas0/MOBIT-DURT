@@ -173,7 +173,7 @@ class ErpTaskWorkflowService {
         notificationService.notifyUsers(
                 notificationRecipients,
                 "task_assigned",
-                "New task assigned",
+                "Yeni görev atandı",
                 task.getTitle(),
                 task.getId(),
                 "NORMAL",
@@ -318,8 +318,8 @@ class ErpTaskWorkflowService {
             notificationService.notifyUsers(
                     accessService.assignedUserIds(successorId),
                     "task_unblocked",
-                    "Predecessor task completed",
-                    successor.getTitle(),
+                    "Önceki görev tamamlandı",
+                    successor.getTitle() + " · Artık başlayabilirsiniz",
                     successorId,
                     "NORMAL",
                     "task_unblocked:" + successorId + ":" + completedTask.getId(),
@@ -368,7 +368,7 @@ class ErpTaskWorkflowService {
         notificationService.notifyUsers(
                 notificationRecipients,
                 "task_assigned",
-                "Recurring task assigned",
+                "Yinelenen görev atandı",
                 task.getTitle(),
                 task.getId(),
                 "NORMAL",
@@ -462,7 +462,7 @@ class ErpTaskWorkflowService {
             notificationService.notifyUsers(
                     accessService.assignedUserIds(taskId),
                     "task_updated",
-                    "Task updated",
+                    "Görev güncellendi",
                     task.getTitle(),
                     task.getId(),
                     newPriority == TaskPriority.URGENT ? "HIGH" : "NORMAL",
@@ -644,7 +644,7 @@ class ErpTaskWorkflowService {
                 now));
         notificationService.notifyAdmin(
                 "task_completion_requested",
-                "Task completion approval is pending",
+                "Tamamlanma onayı bekliyor",
                 task.getTitle(),
                 task.getId(),
                 "HIGH",
@@ -680,7 +680,7 @@ class ErpTaskWorkflowService {
         notificationService.notifyUsers(
                 accessService.assignedUserIds(taskId),
                 "task_completion_approved",
-                "Your task was approved",
+                "Göreviniz onaylandı",
                 task.getTitle(),
                 task.getId(),
                 "NORMAL",
@@ -716,7 +716,7 @@ class ErpTaskWorkflowService {
         notificationService.notifyUsers(
                 accessService.assignedUserIds(taskId),
                 "task_completion_rejected",
-                "Task returned for further work",
+                "Görev revizyona döndü",
                 task.getTitle(),
                 task.getId(),
                 "HIGH",

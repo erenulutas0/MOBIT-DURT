@@ -70,7 +70,7 @@ class WorkflowSlaEscalationServiceTest {
         assertThat(service.processEscalations()).isEqualTo(1);
         verify(notificationService).notifyAdmin(
                 eq("task_blocked_escalation"),
-                eq("Task remains blocked"),
+                eq("Görev hâlâ bloke"),
                 eq("Blocked task"),
                 eq(TASK_ID),
                 eq("HIGH"),
@@ -85,7 +85,7 @@ class WorkflowSlaEscalationServiceTest {
         assertThat(service.processEscalations()).isEqualTo(1);
         verify(notificationService).notifyAdmin(
                 eq("task_blocked_escalation"),
-                eq("Task is still blocked (escalation 1)"),
+                eq("Görev hâlâ bloke (yükseltme 1)"),
                 eq("Blocked task"),
                 eq(TASK_ID),
                 eq("CRITICAL"),
@@ -94,7 +94,7 @@ class WorkflowSlaEscalationServiceTest {
         verify(notificationService).notifyUsers(
                 anyCollection(),
                 eq("task_blocked_escalation"),
-                eq("Task is still blocked (escalation 1)"),
+                eq("Görev hâlâ bloke (yükseltme 1)"),
                 eq("Blocked task"),
                 eq(TASK_ID),
                 eq("CRITICAL"),
@@ -109,7 +109,7 @@ class WorkflowSlaEscalationServiceTest {
         assertThat(service.processEscalations()).isEqualTo(1);
         verify(notificationService).notifyAdmin(
                 anyString(),
-                eq("Task is still blocked (escalation 2)"),
+                eq("Görev hâlâ bloke (yükseltme 2)"),
                 anyString(),
                 eq(TASK_ID),
                 eq("CRITICAL"),
@@ -134,7 +134,7 @@ class WorkflowSlaEscalationServiceTest {
         assertThat(service.processEscalations()).isEqualTo(1);
         verify(notificationService).notifyAdmin(
                 eq("task_completion_approval_escalation"),
-                eq("Task approval is still waiting (escalation 1)"),
+                eq("Tamamlanma onayı hâlâ bekliyor (yükseltme 1)"),
                 eq("Blocked task"),
                 eq(TASK_ID),
                 eq("CRITICAL"),
@@ -160,7 +160,7 @@ class WorkflowSlaEscalationServiceTest {
         assertThat(singleRung.processEscalations()).isEqualTo(1);
         verify(notificationService).notifyAdmin(
                 anyString(),
-                eq("Task remains blocked"),
+                eq("Görev hâlâ bloke"),
                 anyString(),
                 eq(TASK_ID),
                 eq("HIGH"),
