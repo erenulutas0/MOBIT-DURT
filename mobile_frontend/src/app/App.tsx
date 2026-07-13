@@ -1496,7 +1496,7 @@ function ERPTab({
                   <select
                     value={editPriority}
                     onChange={event => setEditPriority(event.target.value as typeof editPriority)}
-                    className="bg-muted rounded-xl px-3 py-3 text-sm text-foreground outline-none"
+                    className="w-full min-w-0 bg-muted rounded-xl px-3 py-3 text-sm text-foreground outline-none"
                   >
                     <option value="low">Düşük</option>
                     <option value="normal">Normal</option>
@@ -1508,7 +1508,7 @@ function ERPTab({
                     value={editDeadlineLocal}
                     disabled={editClearDeadline}
                     onChange={event => setEditDeadlineLocal(event.target.value)}
-                    className={`bg-muted rounded-xl px-3 py-3 text-sm text-foreground outline-none ${editClearDeadline ? "opacity-40" : ""}`}
+                    className={`w-full min-w-0 bg-muted rounded-xl px-2 py-3 text-sm text-foreground outline-none ${editClearDeadline ? "opacity-40" : ""}`}
                   />
                 </div>
                 <button
@@ -1596,7 +1596,7 @@ function ERPTab({
             <select
               value={taskPriority}
               onChange={event => setTaskPriority(event.target.value as typeof taskPriority)}
-              className="bg-muted rounded-xl px-3 py-3 text-sm text-foreground outline-none"
+              className="w-full min-w-0 bg-muted rounded-xl px-3 py-3 text-sm text-foreground outline-none"
             >
               <option value="low">Düşük</option>
               <option value="normal">Normal</option>
@@ -1607,7 +1607,7 @@ function ERPTab({
               type="datetime-local"
               value={taskDeadlineLocal}
               onChange={event => setTaskDeadlineLocal(event.target.value)}
-              className="bg-muted rounded-xl px-3 py-3 text-sm text-foreground outline-none"
+              className="w-full min-w-0 bg-muted rounded-xl px-2 py-3 text-sm text-foreground outline-none"
             />
           </div>
           {taskDeadlineLocal && (
@@ -2669,7 +2669,13 @@ function KnowledgeGraph({
 }
 
 // ─── TENDER TAB ───────────────────────────────────────────────────────────────
-function TenderTab({ user }: { user: AuthUser }) {
+function TenderTab({
+  user,
+  onOpenRoom,
+}: {
+  user: AuthUser;
+  onOpenRoom: (groupId: number, view: "chat" | "documents") => void;
+}) {
   const [screen, setScreen] = useState<TenderScreen>("dashboard");
   const [showGraph, setShowGraph] = useState(false);
   const [obsidianNote, setObsidianNote] = useState("BEDAS-2026-20260601-001");
@@ -3201,7 +3207,7 @@ function TenderTab({ user }: { user: AuthUser }) {
             .slice()
             .sort((left, right) => left.name.localeCompare(right.name, "tr"))
             .map(group => (
-            <Card key={group.id} className="p-4">
+            <Card key={group.id} className="p-4" onPress={() => onOpenRoom(group.id, "documents")}>
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
                   <Users className="w-5 h-5 text-primary" />
@@ -3839,7 +3845,7 @@ export default function App() {
                     <TabErrorBoundary tabKey={tab}>
                       {t === "home"     && <HomeTab     user={authUser} setTab={setTab} />}
                       {t === "erp"      && <ERPTab      user={authUser} onOpenDirectMessage={openDirectMessageFromNotification} onOpenDocumentRoom={openDocumentRoomFromNotification} openRequest={erpOpenRequest} />}
-                      {t === "tender"   && <TenderTab   user={authUser} />}
+                      {t === "tender"   && <TenderTab   user={authUser} onOpenRoom={openDocumentRoomFromNotification} />}
                       {t === "messages" && <MessagesTab user={authUser} openRequest={directMessageOpenRequest} roomOpenRequest={roomOpenRequest} profilePhotoVersion={profilePhotoVersion} />}
                       {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} />}
                     </TabErrorBoundary>

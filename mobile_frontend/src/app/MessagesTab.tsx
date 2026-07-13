@@ -433,6 +433,10 @@ function MessagesTab({
   const voiceChunksRef = useRef<Blob[]>([]);
   const recordStartedAtRef = useRef(0);
   const recordCancelRef = useRef(false);
+  // Guards the forward handlers: media forwards await a blob fetch + upload, during which the
+  // action sheet used to stay open — a second tap fired a second real send (duplicate). This
+  // ref makes forwarding single-flight regardless of how fast the user taps.
+  const forwardingRef = useRef(false);
   const recordingTargetRef = useRef<RecordingTarget>("direct");
   const recordStreamRef = useRef<MediaStream | null>(null);
   const recordTimerRef = useRef<number | null>(null);
@@ -1550,9 +1554,11 @@ function MessagesTab({
   };
 
   const forwardDirectMessageToPerson = async (person: ERPUser) => {
-    if (!directActionTarget) return;
+    if (forwardingRef.current || !directActionTarget) return;
     const message = directMessages.find(item => item.id === directActionTarget.messageId);
     if (!message) return;
+    forwardingRef.current = true;
+    setDirectActionTarget(null); // close the sheet up front so a second tap can't re-send
     setRoomError("");
     try {
       const sent = await sendERPDirectMessage({
@@ -1568,18 +1574,21 @@ function MessagesTab({
         mediaDurationMs: message.media_duration_ms || null,
         clientMessageId: createClientMessageId(),
       });
-      setDirectMessages(prev => [...prev, sent]);
-      setDirectActionTarget(null);
+      setDirectMessages(prev => reconcileNewestWindow(prev, [sent]));
       setRoomNotice(`${person.name} kişisine başarıyla iletildi.`);
     } catch (exception) {
       setRoomError(exception instanceof Error ? exception.message : "İletme işlemi tamamlanamadı.");
+    } finally {
+      forwardingRef.current = false;
     }
   };
 
   const forwardDirectMessageToRoom = async (room: DocumentGroupSummary) => {
-    if (!directActionTarget) return;
+    if (forwardingRef.current || !directActionTarget) return;
     const message = directMessages.find(item => item.id === directActionTarget.messageId);
     if (!message) return;
+    forwardingRef.current = true;
+    setDirectActionTarget(null);
     setRoomError("");
     try {
       await sendDocumentGroupMessage(room.id, {
@@ -1595,10 +1604,11 @@ function MessagesTab({
         clientMessageId: createClientMessageId(),
       });
       setGroups(await getDocumentGroups());
-      setDirectActionTarget(null);
       setRoomNotice(`${room.name} odasına başarıyla iletildi.`);
     } catch (exception) {
       setRoomError(exception instanceof Error ? exception.message : "İletme işlemi tamamlanamadı.");
+    } finally {
+      forwardingRef.current = false;
     }
   };
 
@@ -1706,11 +1716,14 @@ function MessagesTab({
   };
 
   const forwardRoomItemToPerson = async (person: ERPUser) => {
-    if (!selectedGroup || !roomActionTarget) return;
+    if (forwardingRef.current || !selectedGroup || !roomActionTarget) return;
+    const target = roomActionTarget;
+    forwardingRef.current = true;
+    setRoomActionTarget(null); // close the sheet up front so a second tap can't re-send
     setRoomError("");
     try {
-      if (roomActionTarget.kind === "message") {
-        const message = roomMessages.find(item => item.id === roomActionTarget.id);
+      if (target.kind === "message") {
+        const message = roomMessages.find(item => item.id === target.id);
         if (!message) return;
         const sent = await sendERPDirectMessage({
           body: message.message_kind === "text" || !message.message_kind
@@ -1725,9 +1738,9 @@ function MessagesTab({
           mediaDurationMs: message.media_duration_ms || null,
           clientMessageId: createClientMessageId(),
         });
-        setDirectMessages(prev => [...prev, sent]);
+        setDirectMessages(prev => reconcileNewestWindow(prev, [sent]));
       } else {
-        const document = selectedGroup.documents.find(item => item.id === roomActionTarget.id);
+        const document = selectedGroup.documents.find(item => item.id === target.id);
         const filename = document?.document.original_filename || document?.document.stored_filename || "Doküman";
         if (!document) return;
         const blob = await getDocumentGroupFileBlob(selectedGroup.group.id, document.id, false);
@@ -1741,21 +1754,25 @@ function MessagesTab({
           mediaData,
           clientMessageId: createClientMessageId(),
         });
-        setDirectMessages(prev => [...prev, sent]);
+        setDirectMessages(prev => reconcileNewestWindow(prev, [sent]));
       }
-      setRoomActionTarget(null);
       setRoomNotice(`${person.name} kişisine başarıyla iletildi.`);
     } catch (exception) {
       setRoomError(exception instanceof Error ? exception.message : "İletme işlemi tamamlanamadı.");
+    } finally {
+      forwardingRef.current = false;
     }
   };
 
   const forwardRoomItemToRoom = async (room: DocumentGroupSummary) => {
-    if (!selectedGroup || !roomActionTarget) return;
+    if (forwardingRef.current || !selectedGroup || !roomActionTarget) return;
+    const target = roomActionTarget;
+    forwardingRef.current = true;
+    setRoomActionTarget(null);
     setRoomError("");
     try {
-      if (roomActionTarget.kind === "message") {
-        const message = roomMessages.find(item => item.id === roomActionTarget.id);
+      if (target.kind === "message") {
+        const message = roomMessages.find(item => item.id === target.id);
         if (!message) return;
         await sendDocumentGroupMessage(room.id, {
           body: message.message_kind === "text" || !message.message_kind
@@ -1770,7 +1787,7 @@ function MessagesTab({
           clientMessageId: createClientMessageId(),
         });
       } else {
-        const document = selectedGroup.documents.find(item => item.id === roomActionTarget.id);
+        const document = selectedGroup.documents.find(item => item.id === target.id);
         if (!document) return;
         const blob = await getDocumentGroupFileBlob(selectedGroup.group.id, document.id, false);
         const filename = document.document.original_filename || document.document.stored_filename || "dokuman";
@@ -1782,11 +1799,12 @@ function MessagesTab({
           year: room.year || document.year || undefined,
         });
       }
-      setRoomActionTarget(null);
       setGroups(await getDocumentGroups());
       setRoomNotice(`${room.name} odasına başarıyla iletildi.`);
     } catch (exception) {
       setRoomError(exception instanceof Error ? exception.message : "İletme işlemi tamamlanamadı.");
+    } finally {
+      forwardingRef.current = false;
     }
   };
 
