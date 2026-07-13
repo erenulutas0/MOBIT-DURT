@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.docsbot.ops.erp.domain.ErpMobilePushToken;
 import com.docsbot.ops.erp.domain.ErpNotification;
 import com.docsbot.ops.erp.domain.ErpNotificationDelivery;
+import com.docsbot.ops.erp.domain.ErpNotificationPreference;
 import com.docsbot.ops.erp.infrastructure.ErpMobilePushTokenRepository;
 import com.docsbot.ops.erp.infrastructure.ErpNotificationDeliveryRepository;
 import com.docsbot.ops.erp.infrastructure.ErpNotificationPreferenceRepository;
@@ -64,7 +65,7 @@ public class MobilePushService {
         String normalizedToken = normalizeRequired(token, "Push token is required");
         String normalizedAppVersion = normalizeOptional(appVersion);
         Instant now = clock.instant();
-        return tokenRepository.findByPlatformAndDeviceId(normalizedPlatform, normalizedDeviceId)
+        ErpMobilePushToken registered = tokenRepository.findByPlatformAndDeviceId(normalizedPlatform, normalizedDeviceId)
                 .map(existing -> {
                     existing.refresh(userId, normalizedToken, normalizedAppVersion, now);
                     return existing;
@@ -76,6 +77,21 @@ public class MobilePushService {
                         normalizedToken,
                         normalizedAppVersion,
                         now)));
+        // Registering a token means the user granted the OS notification permission, so opt them
+        // into mobile push. Without this the per-user preference defaults to off and the phone
+        // would never receive anything, even with FCM configured.
+        enableMobilePushPreference(userId, now);
+        return registered;
+    }
+
+    private void enableMobilePushPreference(long userId, Instant now) {
+        preferenceRepository.findById(userId).ifPresentOrElse(
+                preference -> preference.enableMobilePush(now),
+                () -> {
+                    ErpNotificationPreference preference = ErpNotificationPreference.defaults(userId, now);
+                    preference.enableMobilePush(now);
+                    preferenceRepository.save(preference);
+                });
     }
 
     @Transactional

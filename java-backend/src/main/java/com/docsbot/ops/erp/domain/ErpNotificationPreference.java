@@ -108,6 +108,19 @@ public class ErpNotificationPreference {
         updatedAt = now;
     }
 
+    /**
+     * Turns mobile push on because the device just registered a token, which only happens after
+     * the user granted the OS notification permission. Returns true if the flag actually changed.
+     */
+    public boolean enableMobilePush(Instant now) {
+        if (mobilePushEnabled) {
+            return false;
+        }
+        mobilePushEnabled = true;
+        updatedAt = now;
+        return true;
+    }
+
     public Long getUserId() {
         return userId;
     }

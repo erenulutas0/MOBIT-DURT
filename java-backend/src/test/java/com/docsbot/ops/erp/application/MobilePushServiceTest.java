@@ -18,11 +18,15 @@ import com.docsbot.ops.erp.infrastructure.ErpNotificationPreferenceRepository;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import org.mockito.ArgumentCaptor;
 
 class MobilePushServiceTest {
 
@@ -84,6 +88,35 @@ class MobilePushServiceTest {
         int queued = service.deliver(notification());
 
         assertEquals(1, queued);
+    }
+
+    @Test
+    void registerTurnsOnMobilePushForExistingPreference() {
+        ErpNotificationPreference preference = ErpNotificationPreference.defaults(USER_ID, NOW);
+        when(preferenceRepository.findById(USER_ID)).thenReturn(Optional.of(preference));
+        when(tokenRepository.findByPlatformAndDeviceId("android", "device-1")).thenReturn(Optional.empty());
+        when(tokenRepository.save(any(ErpMobilePushToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.register(principal(), "android", "device-1", "fcm-token", "1.0.15");
+
+        assertTrue(preference.isMobilePushEnabled());
+    }
+
+    @Test
+    void registerCreatesEnabledPreferenceWhenNoneExists() {
+        when(preferenceRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(tokenRepository.findByPlatformAndDeviceId("android", "device-1")).thenReturn(Optional.empty());
+        when(tokenRepository.save(any(ErpMobilePushToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.register(principal(), "android", "device-1", "fcm-token", "1.0.15");
+
+        ArgumentCaptor<ErpNotificationPreference> captor = ArgumentCaptor.forClass(ErpNotificationPreference.class);
+        verify(preferenceRepository).save(captor.capture());
+        assertTrue(captor.getValue().isMobilePushEnabled());
+    }
+
+    private ErpPrincipal principal() {
+        return new ErpPrincipal(false, java.util.OptionalLong.of(USER_ID), "sub-" + USER_ID, "Test User");
     }
 
     private void stubPreference(java.util.function.Consumer<ErpNotificationPreference> customizer) {
