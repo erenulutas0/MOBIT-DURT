@@ -3,6 +3,7 @@ import { Capacitor } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
+import { AssistantPanel } from "./components/AssistantPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
 import { MessagesTab } from "./MessagesTab";
@@ -98,7 +99,7 @@ import {
   Filter, Clock, Shield,
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
-  Image as ImageIcon, Trash2, Loader2, RefreshCw,
+  Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -647,6 +648,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
 // ─── HOME TAB ─────────────────────────────────────────────────────────────────
 function HomeTab({ user, setTab }: { user: AuthUser; setTab: (t: Tab) => void }) {
   const isAdmin = user.role === "admin";
+  const [showAssistant, setShowAssistant] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
   // null = probe in flight; the status card must reflect reality, not wishful constants
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
@@ -704,6 +706,25 @@ function HomeTab({ user, setTab }: { user: AuthUser; setTab: (t: Tab) => void })
         {appUpdate && <AppUpdateBanner update={appUpdate} />}
 
         <div className="space-y-3">
+          {/* Mobit-Asistan — the personal briefing entry point */}
+          <div className="rounded-2xl p-px bg-gradient-to-br from-violet-500/40 via-violet-500/10 to-transparent surface-elevated">
+          <button onClick={() => setShowAssistant(true)}
+            className="w-full bg-gradient-to-br from-[#1B1330] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-violet-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-foreground">Mobit-Asistan</p>
+                <p className="text-xs text-muted-foreground">
+                  Günün özeti: görevler, teslim tarihleri, hatırlatmalar
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </button>
+          </div>
+
           <div className="rounded-2xl p-px bg-gradient-to-br from-blue-500/40 via-blue-500/10 to-transparent surface-elevated">
           <button onClick={() => setTab("erp")}
             className="w-full bg-gradient-to-br from-[#131B2E] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
@@ -806,6 +827,21 @@ function HomeTab({ user, setTab }: { user: AuthUser; setTab: (t: Tab) => void })
         )}
         <div className="h-4" />
       </div>
+
+      {showAssistant && (
+        <AssistantPanel
+          userName={user.name}
+          onClose={() => setShowAssistant(false)}
+          onOpenTasks={() => {
+            setShowAssistant(false);
+            setTab("erp");
+          }}
+          onOpenMessages={() => {
+            setShowAssistant(false);
+            setTab("messages");
+          }}
+        />
+      )}
     </div>
   );
 }

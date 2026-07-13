@@ -6,6 +6,7 @@ import {
   createERPTask,
   deleteDocumentGroupMessage,
   deleteERPDirectMessage,
+  getAssistantBriefing,
   getAuthenticatedMediaBlob,
   getDocumentGroupFileBlob,
   getDocumentGroupFileVersionBlob,
@@ -276,6 +277,39 @@ describe("mobil API istemcisi", () => {
       client_message_id: "client-direct-1",
       reply_to_message_id: null,
     });
+  });
+
+  it("asistan özetini doğru endpoint'ten yetkili başlıkla çeker", async () => {
+    saveSession({
+      id: 2,
+      name: "Test User",
+      email: "user@mobit.com.tr",
+      role: "user",
+      dept: "Operasyon",
+      accessToken: "user-access",
+      refreshToken: "user-refresh",
+      expiresIn: 3600,
+      refreshExpiresIn: 86400,
+    });
+    const briefing = {
+      assistant_name: "Mobit-Asistan",
+      display_name: "Test User",
+      generated_at: "2026-07-13T08:30:00Z",
+      overdue: [{ id: 1, title: "Geciken", status: "todo", deadline_at: "2026-07-11T09:00:00Z" }],
+      due_today: [],
+      due_this_week: [],
+      ready_to_start: [],
+      blocked: [],
+      unread_messages: 3,
+      unread_notifications: 1,
+    };
+    const fetchMock = stubFetch(jsonResponse(briefing));
+
+    const result = await getAssistantBriefing();
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${API_BASE}/erp/assistant/briefing`);
+    expect(requestHeader(fetchMock.mock.calls[0], "Authorization")).toBe("Bearer user-access");
+    expect(result).toEqual(briefing);
   });
 
   it("oda mesajı gönderirken medya payload'ını snake_case backend sözleşmesine çevirir", async () => {

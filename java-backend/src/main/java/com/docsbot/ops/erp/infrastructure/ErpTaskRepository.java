@@ -37,4 +37,8 @@ public interface ErpTaskRepository extends JpaRepository<ErpTask, Long> {
     boolean existsByParentTaskIdAndStatusIn(
             long parentTaskId,
             Collection<com.docsbot.ops.erp.domain.TaskStatus> statuses);
+
+    /** All open tasks ordered by urgency (nearest deadline first, undated last). */
+    List<ErpTask> findAllByStatusInOrderByDeadlineAtAscIdAsc(
+            Collection<com.docsbot.ops.erp.domain.TaskStatus> statuses);
 }

@@ -84,6 +84,15 @@ docsbot:
     title: ${DOCSBOT_APP_UPDATE_TITLE:Yeni versiyon geldi}
     message: ${DOCSBOT_APP_UPDATE_MESSAGE:Uygulamayı düzgün kullanmanız için güncellemeniz öneriliyor.}
     play-store-url: ${DOCSBOT_APP_PLAY_STORE_URL:https://play.google.com/store/apps/details?id=com.mobit.docsbotops}
+  assistant:
+    briefing-cron: ${DOCSBOT_ASSISTANT_BRIEFING_CRON:0 30 8 * * MON-FRI}
+    briefing-zone: ${DOCSBOT_ASSISTANT_BRIEFING_ZONE:Europe/Istanbul}
+    zone: ${DOCSBOT_ASSISTANT_BRIEFING_ZONE:Europe/Istanbul}
+  retention:
+    activity-event-days: ${DOCSBOT_RETENTION_ACTIVITY_EVENT_DAYS:180}
+    push-outbox-days: ${DOCSBOT_RETENTION_PUSH_OUTBOX_DAYS:30}
+    cron: ${DOCSBOT_RETENTION_CRON:0 30 3 * * *}
+    zone: ${DOCSBOT_RETENTION_ZONE:Europe/Istanbul}
   rate-limit:
     enabled: ${DOCSBOT_RATE_LIMIT_ENABLED:true}
     auth-limit: ${DOCSBOT_RATE_LIMIT_AUTH_LIMIT:120}

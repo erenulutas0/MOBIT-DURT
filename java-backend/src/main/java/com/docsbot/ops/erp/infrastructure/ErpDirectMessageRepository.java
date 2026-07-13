@@ -100,4 +100,10 @@ public interface ErpDirectMessageRepository extends JpaRepository<ErpDirectMessa
             @Param("actorKey") String actorKey,
             @Param("term") String term,
             Pageable pageable);
+
+    /** Unread inbox size for an employee (assistant briefing). */
+    long countByRecipientTypeAndRecipientUserIdAndReadAtIsNull(String recipientType, long recipientUserId);
+
+    /** Unread inbox size for the admin actor (assistant briefing). */
+    long countByRecipientTypeAndReadAtIsNull(String recipientType);
 }

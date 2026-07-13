@@ -657,6 +657,33 @@ export async function sendCompanyChatMessage(body: string): Promise<CompanyChatM
   return response.json();
 }
 
+export type AssistantTaskItem = {
+  id: number;
+  title: string;
+  status: string;
+  deadline_at: string | null;
+};
+
+export type AssistantBriefing = {
+  assistant_name: string;
+  display_name: string;
+  generated_at: string;
+  overdue: AssistantTaskItem[];
+  due_today: AssistantTaskItem[];
+  due_this_week: AssistantTaskItem[];
+  ready_to_start: AssistantTaskItem[];
+  blocked: AssistantTaskItem[];
+  unread_messages: number;
+  unread_notifications: number;
+};
+
+/** Mobit-Asistan: the caller's personal workload briefing (admin sees the whole board). */
+export async function getAssistantBriefing(): Promise<AssistantBriefing> {
+  const response = await apiFetch("/erp/assistant/briefing");
+  if (!response.ok) throw new Error(await errorText(response, "Asistan özeti yüklenemedi."));
+  return response.json();
+}
+
 export async function sendERPDirectMessage(payload: {
   body: string;
   recipientUserId?: number | null;

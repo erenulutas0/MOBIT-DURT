@@ -180,7 +180,8 @@ public class SecurityConfig {
                                 "/erp/notification-preferences",
                                 "/erp/web-push/vapid-public-key",
                                 "/erp/search",
-                                "/erp/company-chat/messages")
+                                "/erp/company-chat/messages",
+                                "/erp/assistant/briefing")
                         .authenticated()
                         .requestMatchers(
                                 HttpMethod.POST,
