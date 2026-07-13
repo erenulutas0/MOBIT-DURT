@@ -4,14 +4,21 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.docsbot.ops.erp.application.AssistantService;
 import com.docsbot.ops.erp.application.ErpPrincipal;
+import com.docsbot.ops.erp.application.assistant.AssistantChatService;
 import com.docsbot.ops.erp.domain.ErpTask;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -21,14 +28,38 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class AssistantController {
 
     private final AssistantService assistantService;
+    private final AssistantChatService assistantChatService;
 
-    public AssistantController(AssistantService assistantService) {
+    public AssistantController(
+            AssistantService assistantService,
+            AssistantChatService assistantChatService) {
         this.assistantService = assistantService;
+        this.assistantChatService = assistantChatService;
     }
 
     @GetMapping("/briefing")
     BriefingResponse briefing(JwtAuthenticationToken authentication) {
         return BriefingResponse.from(assistantService.briefingFor(ErpPrincipal.from(authentication)));
+    }
+
+    @PostMapping("/chat")
+    ChatResponse chat(
+            JwtAuthenticationToken authentication,
+            @Valid @RequestBody ChatRequest request
+    ) {
+        AssistantChatService.Reply reply = assistantChatService.chat(
+                ErpPrincipal.from(authentication), request.message());
+        return new ChatResponse(reply.assistantName(), reply.provider(), reply.reply());
+    }
+
+    record ChatRequest(@NotBlank @Size(max = 2000) String message) {
+    }
+
+    record ChatResponse(
+            @JsonProperty("assistant_name") String assistantName,
+            @JsonProperty("provider") String provider,
+            @JsonProperty("reply") String reply
+    ) {
     }
 
     record BriefingResponse(

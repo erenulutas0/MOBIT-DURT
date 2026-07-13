@@ -28,6 +28,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -161,6 +162,43 @@ class AssistantBriefingIntegrationTest {
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.overdue[0].id").value(overdueId));
+    }
+
+    @Test
+    void chatAnswersFromRetrievedBriefingWithoutAnLlm() throws Exception {
+        String adminToken = loginAdmin();
+        Employee cem = createApprovedEmployee(adminToken, "Cem Sohbet", "cem.sohbet@example.com");
+
+        long overdueId = createTask(adminToken, "Vergi beyani", cem.id(), Instant.now().plus(1, ChronoUnit.HOURS));
+        jdbcTemplate.update(
+                "update erp_tasks set deadline_at = ? where id = ?",
+                java.sql.Timestamp.from(Instant.now().minus(2, ChronoUnit.DAYS)),
+                overdueId);
+
+        // "overdue" intent -> lists the overdue task, served by the zero-cost rule-based provider.
+        mockMvc.perform(post("/erp/assistant/chat")
+                        .header("Authorization", bearer(cem.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"geciken görevlerim neler?\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provider").value("rule-based"))
+                .andExpect(jsonPath("$.assistant_name").value("Mobit-Asistan"))
+                .andExpect(jsonPath("$.reply", containsString("Vergi beyani")));
+
+        // Title keyword search finds a task by name.
+        mockMvc.perform(post("/erp/assistant/chat")
+                        .header("Authorization", bearer(cem.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"vergi\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reply", containsString("Vergi beyani")));
+
+        // Blank message is rejected by validation.
+        mockMvc.perform(post("/erp/assistant/chat")
+                        .header("Authorization", bearer(cem.token()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"   \"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

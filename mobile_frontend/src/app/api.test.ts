@@ -7,6 +7,7 @@ import {
   deleteDocumentGroupMessage,
   deleteERPDirectMessage,
   getAssistantBriefing,
+  sendAssistantMessage,
   getAuthenticatedMediaBlob,
   getDocumentGroupFileBlob,
   getDocumentGroupFileVersionBlob,
@@ -310,6 +311,32 @@ describe("mobil API istemcisi", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`${API_BASE}/erp/assistant/briefing`);
     expect(requestHeader(fetchMock.mock.calls[0], "Authorization")).toBe("Bearer user-access");
     expect(result).toEqual(briefing);
+  });
+
+  it("asistana sohbet mesajını doğru endpoint'e POST eder ve yanıtı döndürür", async () => {
+    saveSession({
+      id: 2,
+      name: "Test User",
+      email: "user@mobit.com.tr",
+      role: "user",
+      dept: "Operasyon",
+      accessToken: "user-access",
+      refreshToken: "user-refresh",
+      expiresIn: 3600,
+      refreshExpiresIn: 86400,
+    });
+    const fetchMock = stubFetch(jsonResponse({
+      assistant_name: "Mobit-Asistan",
+      provider: "rule-based",
+      reply: "1 geciken görevin var.",
+    }));
+
+    const result = await sendAssistantMessage("geciken görevlerim");
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${API_BASE}/erp/assistant/chat`);
+    expect(requestBody(fetchMock.mock.calls[0])).toEqual({ message: "geciken görevlerim" });
+    expect(result.reply).toBe("1 geciken görevin var.");
+    expect(result.provider).toBe("rule-based");
   });
 
   it("oda mesajı gönderirken medya payload'ını snake_case backend sözleşmesine çevirir", async () => {

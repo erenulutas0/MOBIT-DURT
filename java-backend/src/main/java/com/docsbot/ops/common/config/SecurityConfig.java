@@ -187,6 +187,7 @@ public class SecurityConfig {
                                 HttpMethod.POST,
                                 "/erp/messages",
                                 "/erp/company-chat/messages",
+                                "/erp/assistant/chat",
                                 "/erp/me/account-deletion-request")
                         .authenticated()
                         .requestMatchers(

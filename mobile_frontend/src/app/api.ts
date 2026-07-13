@@ -684,6 +684,23 @@ export async function getAssistantBriefing(): Promise<AssistantBriefing> {
   return response.json();
 }
 
+export type AssistantChatReply = {
+  assistant_name: string;
+  provider: string;
+  reply: string;
+};
+
+/** Ask Mobit-Asistan a question. Answered from the user's own data; provider-agnostic. */
+export async function sendAssistantMessage(message: string): Promise<AssistantChatReply> {
+  const response = await apiFetch("/erp/assistant/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Asistan yanıt veremedi."));
+  return response.json();
+}
+
 export async function sendERPDirectMessage(payload: {
   body: string;
   recipientUserId?: number | null;

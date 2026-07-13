@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -6,13 +6,22 @@ import {
   CalendarClock,
   CalendarDays,
   CheckCircle2,
+  Loader2,
   Lock,
   MessageSquare,
   RefreshCw,
+  Send,
   Sparkles,
 } from "lucide-react";
 
-import { getAssistantBriefing, type AssistantBriefing, type AssistantTaskItem } from "../api";
+import {
+  getAssistantBriefing,
+  sendAssistantMessage,
+  type AssistantBriefing,
+  type AssistantTaskItem,
+} from "../api";
+
+type ChatTurn = { role: "user" | "assistant"; text: string };
 
 /**
  * Mobit-Asistan — the personal briefing screen. Renders the caller's workload the way an
@@ -34,6 +43,11 @@ export function AssistantPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -49,6 +63,29 @@ export function AssistantPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [turns, sending]);
+
+  const send = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setDraft("");
+    setTurns(prev => [...prev, { role: "user", text }]);
+    setSending(true);
+    try {
+      const reply = await sendAssistantMessage(text);
+      setTurns(prev => [...prev, { role: "assistant", text: reply.reply }]);
+    } catch (exception) {
+      setTurns(prev => [
+        ...prev,
+        { role: "assistant", text: exception instanceof Error ? exception.message : "Yanıt alınamadı." },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }, [draft, sending]);
 
   const total = briefing
     ? briefing.overdue.length + briefing.due_today.length + briefing.due_this_week.length
@@ -172,6 +209,73 @@ export function AssistantPanel({
             </button>
           </>
         )}
+
+        {/* Chat thread — ask the assistant about your own tasks */}
+        <div className="pt-2">
+          <div className="flex items-center gap-2 mb-2">
+            <MessageSquare className="w-4 h-4 text-violet-300" />
+            <span className="text-sm font-semibold text-foreground">Asistana sor</span>
+          </div>
+          {turns.length === 0 && (
+            <p className="text-xs text-muted-foreground mb-2">
+              Örnek: “geciken görevlerim”, “bugün ne teslim”, “okunmamış mesajlarım”.
+            </p>
+          )}
+          <div className="space-y-2">
+            {turns.map((turn, i) => (
+              <div
+                key={i}
+                className={turn.role === "user" ? "flex justify-end" : "flex justify-start"}
+              >
+                <div
+                  className={
+                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap " +
+                    (turn.role === "user"
+                      ? "bg-violet-500/25 text-violet-50 rounded-br-sm"
+                      : "bg-card border border-border text-foreground rounded-bl-sm")
+                  }
+                >
+                  {turn.text}
+                </div>
+              </div>
+            ))}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="bg-card border border-border rounded-2xl rounded-bl-sm px-3 py-2">
+                  <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+                </div>
+              </div>
+            )}
+            <div ref={threadEndRef} />
+          </div>
+        </div>
+      </div>
+
+      {/* Compose bar — pinned */}
+      <div className="border-t border-border bg-background px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-center gap-2">
+          <input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+            placeholder="Bir şey sor…"
+            maxLength={2000}
+            className="flex-1 bg-card border border-border rounded-full px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-violet-500/50"
+          />
+          <button
+            onClick={() => void send()}
+            disabled={sending || draft.trim().length === 0}
+            aria-label="Gönder"
+            className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center disabled:opacity-40 active:scale-95 transition-transform"
+          >
+            <Send className="w-4 h-4 text-white" />
+          </button>
+        </div>
       </div>
     </div>
   );

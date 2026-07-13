@@ -88,6 +88,9 @@ docsbot:
     briefing-cron: ${DOCSBOT_ASSISTANT_BRIEFING_CRON:0 30 8 * * MON-FRI}
     briefing-zone: ${DOCSBOT_ASSISTANT_BRIEFING_ZONE:Europe/Istanbul}
     zone: ${DOCSBOT_ASSISTANT_BRIEFING_ZONE:Europe/Istanbul}
+    # Conversational-assistant answer provider. "rule-based" = zero-cost, no LLM (default).
+    # Switch to an LLM-backed responder (e.g. "claude") once an API key + budget are in place.
+    provider: ${DOCSBOT_ASSISTANT_PROVIDER:rule-based}
   retention:
     activity-event-days: ${DOCSBOT_RETENTION_ACTIVITY_EVENT_DAYS:180}
     push-outbox-days: ${DOCSBOT_RETENTION_PUSH_OUTBOX_DAYS:30}
