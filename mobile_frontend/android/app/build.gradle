@@ -13,8 +13,10 @@ android {
         applicationId "com.mobit.docsbotops"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 11
-        versionName "1.0.11"
+        // CI passes -PversionCodeOverride / -PversionNameOverride to stamp a release; a plain
+        // local build falls back to these committed defaults.
+        versionCode (project.hasProperty('versionCodeOverride') ? project.versionCodeOverride.toString().toInteger() : 12)
+        versionName (project.hasProperty('versionNameOverride') ? project.versionNameOverride.toString() : "1.0.12")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [usesCleartextTraffic: "false"]
         aaptOptions {

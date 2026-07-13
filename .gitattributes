@@ -1,0 +1,5 @@
+# Shell scripts and the Gradle wrapper must stay LF so they run on Linux (the VPS and CI runners),
+# regardless of the committer's platform or core.autocrlf setting.
+*.sh text eol=lf
+gradlew text eol=lf
+mvnw text eol=lf
