@@ -106,6 +106,8 @@ docsbot:
     message-window-seconds: ${DOCSBOT_RATE_LIMIT_MESSAGE_WINDOW_SECONDS:60}
     upload-limit: ${DOCSBOT_RATE_LIMIT_UPLOAD_LIMIT:60}
     upload-window-seconds: ${DOCSBOT_RATE_LIMIT_UPLOAD_WINDOW_SECONDS:300}
+    assistant-limit: ${DOCSBOT_RATE_LIMIT_ASSISTANT_LIMIT:30}
+    assistant-window-seconds: ${DOCSBOT_RATE_LIMIT_ASSISTANT_WINDOW_SECONDS:60}
   telegram:
     enabled: ${TELEGRAM_POLLING_ENABLED:false}
     token: ${TELEGRAM_BOT_TOKEN:}

@@ -87,6 +87,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     properties.getAccountRequestLimit(),
                     properties.getAccountRequestWindowSeconds());
         }
+        if (path.equals("/erp/assistant/chat")) {
+            return Rule.of("assistant", properties.getAssistantLimit(), properties.getAssistantWindowSeconds());
+        }
         if (path.equals("/erp/messages")
                 || path.equals("/erp/company-chat/messages")
                 || path.matches("^/document-groups/\\d+/messages$")) {

@@ -21,6 +21,10 @@ public class RateLimitProperties {
     private int messageWindowSeconds = 60;
     private int uploadLimit = 60;
     private int uploadWindowSeconds = 300;
+    // Deliberately tighter than chat messaging: the assistant runs DB retrieval per call today and
+    // will call a paid LLM later, so an unbounded client is a cost/abuse vector.
+    private int assistantLimit = 30;
+    private int assistantWindowSeconds = 60;
 
     public boolean isEnabled() {
         return enabled;
@@ -100,5 +104,21 @@ public class RateLimitProperties {
 
     public void setUploadWindowSeconds(int uploadWindowSeconds) {
         this.uploadWindowSeconds = uploadWindowSeconds;
+    }
+
+    public int getAssistantLimit() {
+        return assistantLimit;
+    }
+
+    public void setAssistantLimit(int assistantLimit) {
+        this.assistantLimit = assistantLimit;
+    }
+
+    public int getAssistantWindowSeconds() {
+        return assistantWindowSeconds;
+    }
+
+    public void setAssistantWindowSeconds(int assistantWindowSeconds) {
+        this.assistantWindowSeconds = assistantWindowSeconds;
     }
 }

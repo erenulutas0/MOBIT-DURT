@@ -22,6 +22,9 @@ import com.docsbot.ops.erp.domain.ErpTask;
 public class RuleBasedAssistantResponder implements AssistantResponder {
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMM", new Locale("tr"));
+    private static final int MAX_LIST_ITEMS = 15;
+    private static final int MAX_TITLE_LEN = 140;
+    private static final int MAX_REPLY_LEN = 4000;
     private final ZoneId zone;
 
     public RuleBasedAssistantResponder(
@@ -36,6 +39,10 @@ public class RuleBasedAssistantResponder implements AssistantResponder {
 
     @Override
     public String respond(String message, AssistantService.Briefing briefing) {
+        return AssistantSafety.capReply(answer(message, briefing), MAX_REPLY_LEN);
+    }
+
+    private String answer(String message, AssistantService.Briefing briefing) {
         String text = message == null ? "" : message.trim().toLowerCase(new Locale("tr"));
         AssistantService.Sections s = briefing.sections();
 
@@ -96,13 +103,16 @@ public class RuleBasedAssistantResponder implements AssistantResponder {
     }
 
     private String search(String text, AssistantService.Sections s) {
+        if (text.length() < 3) {
+            return null;
+        }
         for (List<ErpTask> bucket : List.of(
                 s.overdue(), s.dueToday(), s.dueThisWeek(), s.readyToStart(), s.blocked())) {
             for (ErpTask task : bucket) {
                 String title = task.getTitle();
-                if (title != null && title.toLowerCase(new Locale("tr")).contains(text) && text.length() >= 3) {
-                    return "“" + title + "” — durum: " + statusLabel(task)
-                            + deadlineSuffix(task) + ".";
+                if (title != null && title.toLowerCase(new Locale("tr")).contains(text)) {
+                    return "“" + AssistantSafety.inline(title, MAX_TITLE_LEN) + "” — durum: "
+                            + statusLabel(task) + deadlineSuffix(task) + ".";
                 }
             }
         }
@@ -114,8 +124,14 @@ public class RuleBasedAssistantResponder implements AssistantResponder {
             return emptyText;
         }
         StringBuilder sb = new StringBuilder(header).append(" (").append(tasks.size()).append("):\n");
-        for (ErpTask t : tasks) {
-            sb.append("• ").append(t.getTitle()).append(deadlineSuffix(t)).append('\n');
+        int shown = Math.min(tasks.size(), MAX_LIST_ITEMS);
+        for (int i = 0; i < shown; i++) {
+            ErpTask t = tasks.get(i);
+            sb.append("• ").append(AssistantSafety.inline(t.getTitle(), MAX_TITLE_LEN))
+                    .append(deadlineSuffix(t)).append('\n');
+        }
+        if (tasks.size() > shown) {
+            sb.append("… ve ").append(tasks.size() - shown).append(" tane daha.\n");
         }
         return sb.toString().stripTrailing();
     }

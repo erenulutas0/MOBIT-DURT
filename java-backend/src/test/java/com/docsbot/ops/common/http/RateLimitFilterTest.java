@@ -16,6 +16,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "docsbot.rate-limit.auth-limit=2",
         "docsbot.rate-limit.auth-window-seconds=60",
+        "docsbot.rate-limit.assistant-limit=2",
+        "docsbot.rate-limit.assistant-window-seconds=60",
         // Simulate running behind a single trusted reverse proxy (the production topology), so the
         // real client is the rightmost X-Forwarded-For entry.
         "docsbot.rate-limit.trusted-proxy-hops=1"
@@ -96,6 +98,24 @@ class RateLimitFilterTest {
 
         mockMvc.perform(post("/erp/auth/admin-login")
                         .header("X-Forwarded-For", "7.7.7.7, 203.0.113.30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void assistantChatEndpointIsRateLimited() throws Exception {
+        // The rate filter runs before security, so unauthenticated calls still consume the budget.
+        String ip = "203.0.113.99";
+        String body = "{\"message\":\"merhaba\"}";
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(post("/erp/assistant/chat")
+                    .header("X-Forwarded-For", ip)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(body));
+        }
+        mockMvc.perform(post("/erp/assistant/chat")
+                        .header("X-Forwarded-For", ip)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isTooManyRequests());
