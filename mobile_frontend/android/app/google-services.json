@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "817163380404",
+    "project_id": "durt-72b44",
+    "storage_bucket": "durt-72b44.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:817163380404:android:34109e2397bc20645d59e1",
+        "android_client_info": {
+          "package_name": "com.mobit.docsbotops"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhyrq9H2bzQGqeQv3SOOUitM5od9z3UVg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

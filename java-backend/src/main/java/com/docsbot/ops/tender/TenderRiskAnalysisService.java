@@ -23,16 +23,19 @@ public class TenderRiskAnalysisService {
     private final TenderDocumentRepository documentRepository;
     private final TenderFactExtractionService factExtractionService;
     private final TenderMissingDocumentService missingDocumentService;
+    private final TenderVaultWriter vaultWriter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TenderRiskAnalysisService(
             TenderDocumentRepository documentRepository,
             TenderFactExtractionService factExtractionService,
-            TenderMissingDocumentService missingDocumentService
+            TenderMissingDocumentService missingDocumentService,
+            TenderVaultWriter vaultWriter
     ) {
         this.documentRepository = documentRepository;
         this.factExtractionService = factExtractionService;
         this.missingDocumentService = missingDocumentService;
+        this.vaultWriter = vaultWriter;
     }
 
     @Transactional
@@ -48,7 +51,9 @@ public class TenderRiskAnalysisService {
         } catch (Exception exception) {
             document.markAiRiskFailed(exception.getMessage(), Instant.now());
         }
-        return documentRepository.saveAndFlush(document);
+        TenderDocument saved = documentRepository.saveAndFlush(document);
+        vaultWriter.writeExtractionResults(saved);
+        return saved;
     }
 
     private Map<String, Object> riskFor(

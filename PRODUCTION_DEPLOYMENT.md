@@ -145,6 +145,13 @@ server {
 Do not proxy `/actuator` publicly. Monitoring should scrape it through loopback,
 a private network, or an authenticated monitoring proxy.
 
+Because this nginx block forwards `X-Forwarded-For` (via `$proxy_add_x_forwarded_for`), the
+app is behind exactly one trusted proxy. Set `DOCSBOT_RATE_LIMIT_TRUSTED_PROXY_HOPS=1` so
+per-client rate limiting reads the real client IP (the rightmost forwarded entry) instead of
+the shared proxy socket address. Leaving it at the default `0` would bucket every request
+behind the proxy under one key (over-limiting); trusting the raw header without a proxy would
+let clients spoof it to bypass limits entirely.
+
 Enable the site and validate before reload:
 
 ```bash
@@ -169,3 +176,44 @@ certificate. Add HSTS only after HTTPS and certificate renewal have been verifie
 
 Rollback uses the previous JAR and a compatible database backup. Never edit an
 already-applied Flyway migration; add a new migration instead.
+
+## Automated Backups
+
+`scripts/backup.sh` dumps PostgreSQL (gzipped, `pg_dump --clean --if-exists`), snapshots the
+`vault/` and `data/` directories, and prunes anything older than the retention window
+(`DOCSBOT_BACKUP_RETENTION_DAYS`, default 14). It targets the Docker Compose layout
+(`docsbot-postgres` container, deploy root resolved from the script location or
+`DOCSBOT_ROOT`). Deploy it to the VPS and schedule it with cron so backups are not a manual
+step:
+
+```bash
+# on the VPS, once:
+chmod +x /opt/docsbot/scripts/backup.sh
+/opt/docsbot/scripts/backup.sh        # verify a first run succeeds and files land in backups/
+crontab -e
+# add:
+30 2 * * * /opt/docsbot/scripts/backup.sh >> /opt/docsbot/backups/backup.log 2>&1
+```
+
+**Restore** (deliberate — stop the backend first, take a fresh backup before overwriting):
+
+```bash
+docker stop docsbot-backend
+gunzip -c backups/db-<ts>.sql.gz | docker exec -i docsbot-postgres psql -U docsbot -d docsbot
+tar xzf backups/vault-<ts>.tar.gz -C /opt/docsbot   # if vault/media must be restored too
+tar xzf backups/data-<ts>.tar.gz  -C /opt/docsbot
+docker start docsbot-backend
+```
+
+Note: the deploy playbook also takes an ad-hoc `pg_dump` + JAR copy into `backups/` with a
+`-predeploy` suffix before each deploy; the cron job above is the *scheduled* safety net that
+covers disk failure and accidental deletion between deploys. Off-site copy of `backups/` (to
+object storage or another host) is still recommended — a single-VPS local backup does not
+survive whole-host loss.
+
+## Health check
+
+`GET /health` now probes the database (2s connection validity check) and returns `503`
+`{"status":"down","detail":"database"}` when Postgres is unreachable, so the systemd/Nginx
+liveness check and the "API health" alert actually detect a DB-down incident rather than
+reporting healthy on a stale stub.

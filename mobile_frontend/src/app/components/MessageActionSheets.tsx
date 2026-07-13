@@ -1,4 +1,4 @@
-import { Send, Trash2, X } from "lucide-react";
+import { Reply, Send, Trash2, X } from "lucide-react";
 
 export function DeleteActionSheet({
   title,
@@ -52,11 +52,13 @@ export function MessageOptionsSheet({
   onClose,
   onDelete,
   onForward,
+  onReply,
 }: {
   title: string;
   onClose: () => void;
   onDelete: () => void;
   onForward: () => void;
+  onReply?: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end px-4 pb-4">
@@ -75,6 +77,15 @@ export function MessageOptionsSheet({
             <X className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
           </button>
         </div>
+        {onReply && (
+          <button
+            type="button"
+            onClick={onReply}
+            className="w-full py-3 rounded-xl bg-muted text-sm font-semibold text-foreground flex items-center justify-center gap-2"
+          >
+            <Reply className="w-4 h-4" aria-hidden="true" /> Yanıtla
+          </button>
+        )}
         <button
           type="button"
           onClick={onForward}

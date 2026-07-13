@@ -15,9 +15,11 @@ import com.docsbot.ops.erp.domain.ErpTask;
 import com.docsbot.ops.erp.domain.ErpTaskAssignment;
 import com.docsbot.ops.erp.domain.ErpTaskComment;
 import com.docsbot.ops.erp.domain.ErpTaskDocument;
+import com.docsbot.ops.erp.domain.ErpTaskDependency;
 import com.docsbot.ops.erp.domain.ErpTeam;
 import com.docsbot.ops.erp.infrastructure.ErpTaskAssignmentRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTaskCommentRepository;
+import com.docsbot.ops.erp.infrastructure.ErpTaskDependencyRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTaskDocumentRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTeamRepository;
 
@@ -29,6 +31,7 @@ class ErpOverviewService {
     private final ErpTaskAssignmentRepository assignmentRepository;
     private final ErpTaskCommentRepository commentRepository;
     private final ErpTaskDocumentRepository documentRepository;
+    private final ErpTaskDependencyRepository dependencyRepository;
     private final NotificationService notificationService;
     private final ErpTaskAccessService accessService;
 
@@ -38,6 +41,7 @@ class ErpOverviewService {
             ErpTaskAssignmentRepository assignmentRepository,
             ErpTaskCommentRepository commentRepository,
             ErpTaskDocumentRepository documentRepository,
+            ErpTaskDependencyRepository dependencyRepository,
             NotificationService notificationService,
             ErpTaskAccessService accessService
     ) {
@@ -46,6 +50,7 @@ class ErpOverviewService {
         this.assignmentRepository = assignmentRepository;
         this.commentRepository = commentRepository;
         this.documentRepository = documentRepository;
+        this.dependencyRepository = dependencyRepository;
         this.notificationService = notificationService;
         this.accessService = accessService;
     }
@@ -69,6 +74,9 @@ class ErpOverviewService {
                 : documentRepository.findAllByTaskIdInOrderByCreatedAtDescIdDesc(taskIds);
         var notifications = notificationService.listNotifications(principal);
         List<ErpTeam> teams = principal.admin() ? teamRepository.findAllByOrderByNameAsc() : List.of();
+        List<ErpTaskDependency> dependencies = taskIds.isEmpty()
+                ? List.of()
+                : dependencyRepository.findAllBySuccessorTaskIdIn(taskIds);
 
         return new ErpDtos.OverviewResponse(
                 users.stream().map(ErpDtos.UserResponse::from).toList(),
@@ -77,6 +85,7 @@ class ErpOverviewService {
                 assignments.stream().map(ErpDtos.AssignmentResponse::from).toList(),
                 documents.stream().map(ErpDtos.TaskDocumentResponse::from).toList(),
                 comments.stream().map(ErpDtos.TaskCommentResponse::from).toList(),
-                notifications.stream().map(ErpDtos.NotificationResponse::from).toList());
+                notifications.stream().map(ErpDtos.NotificationResponse::from).toList(),
+                dependencies.stream().map(ErpDtos.TaskDependencyResponse::from).toList());
     }
 }

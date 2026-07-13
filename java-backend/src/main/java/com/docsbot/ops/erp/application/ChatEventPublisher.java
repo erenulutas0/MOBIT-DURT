@@ -45,6 +45,21 @@ public class ChatEventPublisher {
         publish(actorKey, "document_group_message_deleted", new DocumentGroupMessageEvent(groupId, messageId, Instant.now()));
     }
 
+    /** Company chat has no per-recipient scoping — every connected stream gets the event. */
+    public void publishCompanyChatMessage(long messageId) {
+        CompanyChatMessageEvent payload = new CompanyChatMessageEvent(messageId, Instant.now());
+        for (String actorKey : subscribers.keySet()) {
+            publish(actorKey, "company_chat_message", payload);
+        }
+    }
+
+    public void publishCompanyChatCleared() {
+        Instant now = Instant.now();
+        for (String actorKey : subscribers.keySet()) {
+            publish(actorKey, "company_chat_cleared", new ChatStreamReadyEvent(actorKey, now));
+        }
+    }
+
     int subscriberCount(String actorKey) {
         return subscribers.getOrDefault(actorKey, new CopyOnWriteArrayList<>()).size();
     }
@@ -82,5 +97,8 @@ public class ChatEventPublisher {
     }
 
     public record DocumentGroupMessageEvent(long groupId, long messageId, Instant createdAt) {
+    }
+
+    public record CompanyChatMessageEvent(long messageId, Instant createdAt) {
     }
 }

@@ -35,14 +35,17 @@ public class TenderFactExtractionService {
 
     private final TenderDocumentRepository documentRepository;
     private final TenderTextExtractionService textExtractionService;
+    private final TenderVaultWriter vaultWriter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TenderFactExtractionService(
             TenderDocumentRepository documentRepository,
-            TenderTextExtractionService textExtractionService
+            TenderTextExtractionService textExtractionService,
+            TenderVaultWriter vaultWriter
     ) {
         this.documentRepository = documentRepository;
         this.textExtractionService = textExtractionService;
+        this.vaultWriter = vaultWriter;
     }
 
     @Transactional
@@ -59,7 +62,9 @@ public class TenderFactExtractionService {
         } catch (Exception exception) {
             document.markFactExtractionFailed(exception.getMessage(), Instant.now());
         }
-        return documentRepository.saveAndFlush(document);
+        TenderDocument saved = documentRepository.saveAndFlush(document);
+        vaultWriter.writeExtractionResults(saved);
+        return saved;
     }
 
     Map<String, Object> factsFor(TenderDocument document) {

@@ -31,4 +31,10 @@ public interface ErpTaskRepository extends JpaRepository<ErpTask, Long> {
             Collection<com.docsbot.ops.erp.domain.TaskStatus> statuses);
 
     boolean existsByWorkflowTemplateIdAndScheduledFor(long workflowTemplateId, Instant scheduledFor);
+
+    List<ErpTask> findAllByParentTaskIdOrderByCreatedAtAscIdAsc(long parentTaskId);
+
+    boolean existsByParentTaskIdAndStatusIn(
+            long parentTaskId,
+            Collection<com.docsbot.ops.erp.domain.TaskStatus> statuses);
 }

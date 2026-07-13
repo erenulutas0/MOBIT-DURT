@@ -275,7 +275,8 @@ public class DocumentGroupController {
                 request.mediaMimeType(),
                 request.mediaData(),
                 request.mediaDurationMs(),
-                request.clientMessageId()));
+                request.clientMessageId(),
+                request.replyToMessageId()));
     }
 
     @PatchMapping("/{groupId}/messages/read-through")
@@ -312,14 +313,17 @@ public class DocumentGroupController {
                 ErpPrincipal.from(authentication),
                 groupId,
                 messageId);
-        ContentDisposition disposition = (download
-                ? ContentDisposition.attachment()
-                : ContentDisposition.inline())
+        // Only render known-safe types inline; force attachment otherwise (see ErpController.messageMedia).
+        boolean inline = !download && MessageMediaStorage.isInlineSafe(media.contentType());
+        ContentDisposition disposition = (inline
+                ? ContentDisposition.inline()
+                : ContentDisposition.attachment())
                 .filename(media.filename())
                 .build();
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(media.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header("X-Content-Type-Options", "nosniff")
                 .body(new FileSystemResource(media.path()));
     }
 
@@ -366,7 +370,8 @@ public class DocumentGroupController {
             @JsonProperty("media_mime_type") String mediaMimeType,
             @JsonProperty("media_data") String mediaData,
             @JsonProperty("media_duration_ms") Integer mediaDurationMs,
-            @JsonProperty("client_message_id") String clientMessageId
+            @JsonProperty("client_message_id") String clientMessageId,
+            @JsonProperty("reply_to_message_id") Long replyToMessageId
     ) {
     }
 
@@ -497,6 +502,7 @@ public class DocumentGroupController {
             @JsonProperty("media_ref") String mediaRef,
             @JsonProperty("media_duration_ms") Integer mediaDurationMs,
             @JsonProperty("client_message_id") String clientMessageId,
+            @JsonProperty("reply_to_message_id") Long replyToMessageId,
             @JsonProperty("delivered_at") Instant deliveredAt,
             @JsonProperty("sequence_no") Long sequenceNo,
             @JsonProperty("delivery_status") String deliveryStatus,
@@ -521,6 +527,7 @@ public class DocumentGroupController {
                     mediaRef,
                     message.getMediaDurationMs(),
                     message.getClientMessageId(),
+                    message.getReplyToMessageId(),
                     message.getDeliveredAt(),
                     message.getSequenceNo(),
                     message.getDeliveredAt() != null ? "delivered" : "sent",

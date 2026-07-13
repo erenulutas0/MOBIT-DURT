@@ -209,7 +209,7 @@ Turn DocsBot into a two-module operations platform:
 - [ ] Refactor large mobile `App.tsx` into route/view components.
 - [ ] Refactor large web `frontend/src/app/App.tsx` into route/view components.
 - [ ] Add React Query/TanStack Query for web and mobile data fetching.
-- [ ] Add calendar/timeline view for deadlines.
+- [x] Add calendar/timeline view for deadlines (agenda grouped by day: mobile ERP `Görev Takvimi` screen + web TasksPage `Liste/Takvim` toggle, shared `buildTaskAgenda` util with tests).
 - [x] Add recurring task and workflow template model.
 - [x] Add bulk operations for task assignment and status updates.
 - [x] Add direct messages outside task comments.
@@ -222,12 +222,12 @@ Turn DocsBot into a two-module operations platform:
 - [ ] Add document-room activity notifications when files are uploaded or members are changed.
 - [ ] Add document-room read receipts and unread badges.
 - [ ] Add document-room search across messages, filenames, and extracted document text.
-- [ ] Add document versioning/replacement history for revised company documents.
+- [x] Add document versioning/replacement history for revised company documents (superseded by the entry below — backend revision history + mobile revision UI shipped).
 - [x] Add admin global document-network view across every group conversation.
 - [x] Add per-user permission for admin to grant global document-network visibility.
 - [x] Add scalable group-conversation creation wizard with required tender/year metadata.
-- [ ] Bind mobile Obsidian Knowledge Graph nodes to live vault notes, tender documents, and document-room metadata.
-- [ ] Split mobile PDF.js viewer into a lazy-loaded chunk to reduce initial bundle size.
+- [x] Bind mobile Obsidian Knowledge Graph nodes to live vault notes, tender documents, and document-room metadata (superseded by the two checked KG entries above — real-metadata edge rules shipped 2026-07-12).
+- [x] Split mobile PDF.js viewer into a lazy-loaded chunk to reduce initial bundle size (dynamic `import("pdfjs-dist")` in `PdfCanvasPreview`; confirmed as its own build chunk, not in the main bundle).
 - [x] Add production reverse proxy/TLS deployment guide.
 - [x] Add production monitoring/metrics dashboard plan.
 
@@ -284,14 +284,17 @@ Turn DocsBot into a two-module operations platform:
 - [x] Add per-person unread badges and latest-message previews to the mobile people/conversation lists.
 - [x] Auto-scroll message threads to the latest message on open and after send/receive events.
 - [x] Add foreground auto-refresh for open direct chats and document-room conversations as a bridge toward real-time messaging.
-- [ ] Add searchable message/document history across room messages, direct messages, filenames, and extracted document text.
+- [x] Add searchable message/document history across room messages, direct messages, filenames, and extracted document text (`GET /erp/search`, `CommunicationSearchService`, mobile in-inbox results with tap-to-open; Tender Hub's own extracted-text document search was already separately covered).
 - [x] Add in-thread mobile search for loaded direct messages, room messages, and room document filenames/metadata.
 - [x] Add mobile communication list search across conversations, rooms, companies, people, and latest message previews.
 - [x] Add backend assignment roles (`responsible`, `participant`) and expose them in task responses instead of storing the responsible person inside the description text.
-- [ ] Add durable task-to-room relation so optional task rooms can be reopened from task detail and audited with the original task.
+- [x] Add durable task-to-room relation so optional task rooms can be reopened from task detail and audited with the original task (`erp_tasks.document_group_id`, `POST /erp/tasks/{id}/document-group`, mobile task-detail "Görev odası" card).
 - [ ] Make Knowledge Graph node actions functional: open, preview/download, share/forward, and show linked items.
   - [x] Wire live Knowledge Graph document, note, and room nodes to open the related mobile screen.
   - [x] Add mobile document-detail preview/download actions for graph-opened document nodes.
+- [x] Write AI-extracted facts/summary/risk into vault document notes instead of leaving them DB-only (`TenderVaultWriter.writeExtractionResults`, `AUTO:EXTRACTION` managed block, called from all three extraction services).
+- [x] Move Knowledge Graph edge rules from name/string approximation to real metadata: doc—doc edges by shared tender + document_type, note—company edges from frontmatter tag matching, edge strength from shared-tag count.
+- [x] Port the Knowledge Graph to web (`frontend/src/app/lib/knowledgeGraph.ts` + `KnowledgeGraphPanel` with mouse pan/zoom) replacing ObsidianPage's static SVG mockup.
 - [ ] Add mobile frontend smoke/integration tests for login, messaging, room upload, forwarding, preview/download, and notification navigation.
   - [x] Add API-level mobile smoke coverage for chat send/read, room unread counts, media preview/download URLs, and SSE parsing.
   - [ ] Add rendered App flow tests for login, messaging, upload, forwarding, preview/download, and notification navigation.
@@ -305,16 +308,18 @@ Turn DocsBot into a two-module operations platform:
 ### Medium
 
 - [x] Lazy-load PDF.js preview code so the initial mobile bundle stays smaller.
-- [ ] Add loading skeletons, pull-to-refresh, and upload progress states for mobile data-heavy screens.
+- [x] Add loading skeletons, pull-to-refresh, and upload progress states for mobile data-heavy screens (`Skeleton`-based conversation/thread placeholders, touch-driven pull-to-refresh on all three communication tabs, real XHR upload-percentage bar for room file uploads).
   - [x] Add visible mobile busy states and manual refresh controls for communication/document-room screens.
-- [ ] Add message reply, date separators, and long-press message actions.
+- [x] Add message reply, date separators, and long-press message actions (backend `reply_to_message_id` on direct + room messages with same-thread/same-room validation; mobile+web quote preview above compose bar, inline quoted bubble, tap-to-scroll-and-highlight; "Yanıtla" added to the existing message action sheet).
 - [x] Add date separators to direct and document-room chat timelines.
 - [x] Add direct-message options for delete/forward with backend delete support and media-preserving forwarding.
-- [ ] Add backend-supported document versioning/replacement history in the mobile document-room UI.
+- [x] Add backend-supported document versioning/replacement history in the mobile document-room UI (duplicate of the checked entry below).
 - [x] Add backend-supported document revision history, replacement upload, version preview/download, and mobile revision UI.
-- [ ] Add employee list search/filtering and connect profile notification toggles to backend preferences.
+- [x] Add employee list search/filtering and connect profile notification toggles to backend preferences (duplicate of the two checked entries below).
 - [x] Add employee list search/filtering with Turkish status labels and alphabetical sorting.
 - [x] Connect profile notification toggles to backend notification preferences.
+
+- [x] Add a company-wide "Şirket Geneli" all-chat channel distinct from 1:1/room chat: every authenticated user posts to and reads the same shared feed with a role badge (Admin/Çalışan), styled with a distinct amber accent, and the whole channel is hard-deleted by a nightly scheduled job so it reads fresh each day (`erp_company_chat_messages`, `CompanyChatService.purgeDaily` cron, `GET/POST /erp/company-chat/messages`, broadcast over the existing chat SSE stream, mobile screen + web `CompanyChatPage`).
 
 ### Low
 

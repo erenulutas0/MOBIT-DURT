@@ -13,6 +13,7 @@ import com.docsbot.ops.tender.domain.DocumentGroupDocument;
 public interface DocumentGroupDocumentRepository extends JpaRepository<DocumentGroupDocument, Long> {
     List<DocumentGroupDocument> findAllByGroupIdOrderByCreatedAtDescIdDesc(long groupId);
     Optional<DocumentGroupDocument> findByIdAndGroupId(long id, long groupId);
+    List<DocumentGroupDocument> findAllByGroupIdInOrderByCreatedAtDescIdDesc(Collection<Long> groupIds);
 
     @Query("""
             select new com.docsbot.ops.tender.infrastructure.GroupCount(document.groupId, count(document.id))

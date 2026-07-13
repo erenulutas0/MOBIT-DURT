@@ -5,6 +5,9 @@ import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.docsbot.ops.erp.domain.ErpMobilePushOutbox;
 
@@ -16,5 +19,16 @@ public interface ErpMobilePushOutboxRepository extends JpaRepository<ErpMobilePu
             Collection<String> statuses,
             Instant now
     );
+
+    /** Prune terminal-state (delivered/dead) rows that settled before the cutoff; retry/pending are kept. */
+    @Modifying
+    @Query("""
+            delete from ErpMobilePushOutbox outbox
+             where outbox.status in :terminalStatuses
+               and outbox.updatedAt < :cutoff
+            """)
+    int deleteTerminalUpdatedBefore(
+            @Param("terminalStatuses") Collection<String> terminalStatuses,
+            @Param("cutoff") Instant cutoff);
 }
 

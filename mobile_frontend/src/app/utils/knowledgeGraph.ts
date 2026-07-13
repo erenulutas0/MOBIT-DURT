@@ -146,6 +146,33 @@ function pushUniqueEdge(edges: KnowledgeGraphEdge[], edge: KnowledgeGraphEdge) {
   edges.push(edge);
 }
 
+/**
+ * Mirrors TenderVaultWriter.vaultSegment/tagSlug on the backend (Turkish transliteration,
+ * then non-alphanumeric runs collapsed) so a note's frontmatter tags — written by that same
+ * Java code — can be matched back to a company/org here without approximating from names.
+ */
+function vaultTagSlug(value: string | null | undefined): string {
+  if (!value || !value.trim()) return "unclassified";
+  const ascii = turkishToAscii(value.trim())
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+  const segment = ascii
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return (segment || "UNCLASSIFIED").toLocaleLowerCase("tr-TR");
+}
+
+function turkishToAscii(value: string): string {
+  return value
+    .replace(/ı/g, "i").replace(/İ/g, "I")
+    .replace(/ş/g, "s").replace(/Ş/g, "S")
+    .replace(/ğ/g, "g").replace(/Ğ/g, "G")
+    .replace(/ü/g, "u").replace(/Ü/g, "U")
+    .replace(/ö/g, "o").replace(/Ö/g, "O")
+    .replace(/ç/g, "c").replace(/Ç/g, "C");
+}
+
 export function buildKnowledgeGraphData(input: {
   documents: TenderDocument[];
   tenders: Tender[];
@@ -163,6 +190,9 @@ export function buildKnowledgeGraphData(input: {
   const nodes = new Map<string, KnowledgeGraphNode>();
   const edges: KnowledgeGraphEdge[] = [];
   const companyIds = new Map<string, string>();
+  const companySlugIds = new Map<string, string>();
+  const companyDocumentTypeSlugsByOrg = new Map<string, Set<string>>();
+  const companyDocumentTypeSlugsById = new Map<string, Set<string>>();
 
   const addNode = (node: KnowledgeGraphNode) => {
     if (!nodes.has(node.id)) nodes.set(node.id, node);
@@ -244,6 +274,9 @@ export function buildKnowledgeGraphData(input: {
     current.latest = !current.latest || document.timestamp > current.latest ? document.timestamp : current.latest;
     current.status = document.status || current.status;
     companies.set(name, current);
+    const docTypeSlugs = companyDocumentTypeSlugsByOrg.get(name) || new Set<string>();
+    docTypeSlugs.add(vaultTagSlug(document.document_type));
+    companyDocumentTypeSlugsByOrg.set(name, docTypeSlugs);
   }
 
   for (const room of input.documentGroups) {
@@ -267,6 +300,8 @@ export function buildKnowledgeGraphData(input: {
   [...companies.values()].slice(0, 12).forEach((company, index, list) => {
     const id = safeId("COMPANY", company.organization);
     companyIds.set(company.organization.toLocaleLowerCase("tr-TR"), id);
+    companySlugIds.set(vaultTagSlug(company.organization), id);
+    companyDocumentTypeSlugsById.set(id, companyDocumentTypeSlugsByOrg.get(company.organization) || new Set<string>());
     const position = nodePosition(index, list.length, 88);
     addNode({
       id,
@@ -335,6 +370,30 @@ export function buildKnowledgeGraphData(input: {
     pushUniqueEdge(edges, { s: companyId || "VAULT", t: id, str: "med" });
   });
 
+  // Doc—doc edges: documents of the same tender are chained together (not fully connected,
+  // to keep edge count linear rather than quadratic). A pair with differing document_type
+  // (e.g. technical_spec ↔ contract) signals a cross-reference worth highlighting, so it
+  // gets "med" strength; same-type siblings (e.g. two invoices) get "weak".
+  const renderedDocuments = input.documents.slice(0, 14);
+  const documentsByTender = new Map<string, TenderDocument[]>();
+  for (const document of renderedDocuments) {
+    const group = documentsByTender.get(document.tender_id) || [];
+    group.push(document);
+    documentsByTender.set(document.tender_id, group);
+  }
+  for (const group of documentsByTender.values()) {
+    for (let index = 1; index < group.length; index += 1) {
+      const previous = group[index - 1];
+      const current = group[index];
+      const sameType = vaultTagSlug(previous.document_type) === vaultTagSlug(current.document_type);
+      pushUniqueEdge(edges, {
+        s: safeId("DOC", previous.id),
+        t: safeId("DOC", current.id),
+        str: sameType ? "weak" : "med",
+      });
+    }
+  }
+
   input.vaultNotes.slice(0, 10).forEach((note, index) => {
     const id = safeId("NOTE", note.path || note.name);
     const position = nodePosition(index, Math.max(1, Math.min(10, input.vaultNotes.length)), 112);
@@ -354,7 +413,24 @@ export function buildKnowledgeGraphData(input: {
       desc: note.tags.length > 0 ? note.tags.join(", ") : note.path,
       entity: { kind: "note", name: note.name },
     });
-    pushUniqueEdge(edges, { s: "VAULT", t: id, str: note.linked_files > 0 ? "strong" : "weak" });
+    // Frontmatter-driven edge: a note's tags are written by TenderVaultWriter as
+    // [tender|document, <doctype-slug>, <unit-slug>, <org-slug>] — matching a tag against a
+    // known company's org slug is a real link, not a name approximation. Shared-tag count
+    // (org match, plus a document_type the same company's own documents also carry) sets
+    // the strength; a note with no company match still connects to VAULT so nothing is orphaned.
+    const matchedCompanyId = note.tags
+      .map(tag => companySlugIds.get(vaultTagSlug(tag)))
+      .find((companyId): companyId is string => Boolean(companyId));
+    if (matchedCompanyId) {
+      const docTypeSlugs = companyDocumentTypeSlugsById.get(matchedCompanyId);
+      const hasSharedDocTypeTag = docTypeSlugs
+        ? note.tags.some(tag => docTypeSlugs.has(vaultTagSlug(tag)))
+        : false;
+      const sharedTagCount = 1 + (hasSharedDocTypeTag ? 1 : 0);
+      pushUniqueEdge(edges, { s: matchedCompanyId, t: id, str: sharedTagCount >= 2 ? "strong" : "med" });
+    } else {
+      pushUniqueEdge(edges, { s: "VAULT", t: id, str: note.linked_files > 0 ? "strong" : "weak" });
+    }
   });
 
   return { nodes: [...nodes.values()], edges, dynamic: true };

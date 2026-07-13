@@ -46,6 +46,15 @@ public class SecurityConfig {
         return http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
+                // Defense-in-depth. nosniff stops content-type sniffing; the CSP blocks framing
+                // (clickjacking) and object/embed plugins without a script restriction — a strict
+                // default-src would break the same-origin Swagger UI, and the media stored-XSS
+                // vector is already closed at the response level (attachment + nosniff for any
+                // non-safe content type) and at upload (active-content types rejected).
+                .headers(headers -> headers
+                        .contentTypeOptions(Customizer.withDefaults())
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "frame-ancestors 'none'; object-src 'none'; base-uri 'none'")))
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(httpBasic -> httpBasic.disable())
@@ -110,6 +119,12 @@ public class SecurityConfig {
                                 "/erp/tasks/*/approve-completion",
                                 "/erp/tasks/*/reject-completion")
                         .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/tasks/*/dependencies")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/erp/tasks/*/dependencies/*")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/tasks/*/document-group")
+                        .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/erp/teams")
                         .hasRole("ADMIN")
                         .requestMatchers(
@@ -163,11 +178,14 @@ public class SecurityConfig {
                                 "/erp/messages/stream",
                                 "/erp/messages/*/media",
                                 "/erp/notification-preferences",
-                                "/erp/web-push/vapid-public-key")
+                                "/erp/web-push/vapid-public-key",
+                                "/erp/search",
+                                "/erp/company-chat/messages")
                         .authenticated()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/erp/messages",
+                                "/erp/company-chat/messages",
                                 "/erp/me/account-deletion-request")
                         .authenticated()
                         .requestMatchers(

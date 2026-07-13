@@ -6,6 +6,7 @@ import java.util.Locale;
 
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.erp.domain.ErpActivityEvent;
+import com.docsbot.ops.erp.domain.ErpCompanyChatMessage;
 import com.docsbot.ops.erp.domain.ErpDirectMessage;
 import com.docsbot.ops.erp.domain.ErpNotification;
 import com.docsbot.ops.erp.domain.ErpNotificationPreference;
@@ -69,6 +70,8 @@ public final class ErpDtos {
             @JsonProperty("completed_at") Instant completedAt,
             @JsonProperty("workflow_template_id") Long workflowTemplateId,
             @JsonProperty("scheduled_for") Instant scheduledFor,
+            @JsonProperty("parent_task_id") Long parentTaskId,
+            @JsonProperty("document_group_id") Long documentGroupId,
             @JsonProperty("created_at") Instant createdAt,
             long version
     ) {
@@ -84,8 +87,25 @@ public final class ErpDtos {
                     task.getCompletedAt(),
                     task.getWorkflowTemplateId(),
                     task.getScheduledFor(),
+                    task.getParentTaskId(),
+                    task.getDocumentGroupId(),
                     task.getCreatedAt(),
                     task.getVersion());
+        }
+    }
+
+    public record TaskDependencyResponse(
+            Long id,
+            @JsonProperty("predecessor_task_id") Long predecessorTaskId,
+            @JsonProperty("successor_task_id") Long successorTaskId,
+            @JsonProperty("created_at") Instant createdAt
+    ) {
+        public static TaskDependencyResponse from(com.docsbot.ops.erp.domain.ErpTaskDependency dependency) {
+            return new TaskDependencyResponse(
+                    dependency.getId(),
+                    dependency.getPredecessorTaskId(),
+                    dependency.getSuccessorTaskId(),
+                    dependency.getCreatedAt());
         }
     }
 
@@ -143,6 +163,7 @@ public final class ErpDtos {
             @JsonProperty("media_ref") String mediaRef,
             @JsonProperty("media_duration_ms") Integer mediaDurationMs,
             @JsonProperty("client_message_id") String clientMessageId,
+            @JsonProperty("reply_to_message_id") Long replyToMessageId,
             @JsonProperty("delivered_at") Instant deliveredAt,
             @JsonProperty("read_at") Instant readAt,
             @JsonProperty("delivery_status") String deliveryStatus,
@@ -178,6 +199,7 @@ public final class ErpDtos {
                     mediaRef,
                     message.getMediaDurationMs(),
                     message.getClientMessageId(),
+                    message.getReplyToMessageId(),
                     message.getDeliveredAt(),
                     message.getReadAt(),
                     message.getReadAt() != null ? "read" : message.getDeliveredAt() != null ? "delivered" : "sent",
@@ -203,6 +225,25 @@ public final class ErpDtos {
                     document.getFilePath(),
                     document.getVisibility(),
                     document.getCreatedAt());
+        }
+    }
+
+    public record CompanyChatMessageResponse(
+            Long id,
+            @JsonProperty("author_user_id") Long authorUserId,
+            @JsonProperty("author_name") String authorName,
+            @JsonProperty("author_role") String authorRole,
+            String body,
+            @JsonProperty("created_at") Instant createdAt
+    ) {
+        public static CompanyChatMessageResponse from(ErpCompanyChatMessage message) {
+            return new CompanyChatMessageResponse(
+                    message.getId(),
+                    message.getAuthorUserId(),
+                    message.getAuthorName(),
+                    message.getAuthorRole(),
+                    message.getBody(),
+                    message.getCreatedAt());
         }
     }
 
@@ -267,7 +308,8 @@ public final class ErpDtos {
             List<AssignmentResponse> assignments,
             List<TaskDocumentResponse> documents,
             @JsonProperty("help_messages") List<TaskCommentResponse> helpMessages,
-            List<NotificationResponse> notifications
+            List<NotificationResponse> notifications,
+            @JsonProperty("task_dependencies") List<TaskDependencyResponse> taskDependencies
     ) {
     }
 

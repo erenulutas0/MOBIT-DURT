@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, ClipboardList, CheckSquare, MessageSquare, Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen, Cpu, TrendingUp, Package, PanelLeftClose, PanelLeftOpen, Settings, BarChart2, Zap } from "lucide-react";
+import { LayoutDashboard, Users, ClipboardList, CheckSquare, MessageSquare, Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen, Cpu, TrendingUp, Package, PanelLeftClose, PanelLeftOpen, Settings, BarChart2, Zap, Megaphone } from "lucide-react";
 import {
   ERPSession,
 } from "../api";
@@ -19,6 +19,7 @@ export const navItems = [
       { label: "Görevler", icon: ClipboardList, page: "tasks" as Page },
       { label: "Tamamlama Onayları", icon: CheckSquare, page: "approvals" as Page },
       { label: "Mesajlar", icon: MessageSquare, page: "messages" as Page, badge: 3 },
+      { label: "Şirket Geneli", icon: Megaphone, page: "company-chat" as Page },
       { label: "Bildirimler", icon: Bell, page: "notifications" as Page, badge: 7 },
       { label: "Hesap Talepleri", icon: UserPlus, page: "account-requests" as Page, badge: 2 },
     ],

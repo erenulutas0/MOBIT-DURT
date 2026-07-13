@@ -33,22 +33,6 @@ public interface DocumentGroupMessageRepository extends JpaRepository<DocumentGr
             select message
             from DocumentGroupMessage message
             where message.groupId = :groupId
-              and not exists (
-                select receipt.id
-                from DocumentGroupMessageHiddenReceipt receipt
-                where receipt.messageId = message.id
-                  and receipt.actorKey = :actorKey
-              )
-            order by message.createdAt asc, message.id asc
-            """)
-    List<DocumentGroupMessage> findVisibleByGroupId(
-            @Param("groupId") long groupId,
-            @Param("actorKey") String actorKey);
-
-    @Query("""
-            select message
-            from DocumentGroupMessage message
-            where message.groupId = :groupId
               and (:beforeId is null or message.id < :beforeId)
               and not exists (
                 select receipt.id
@@ -91,4 +75,23 @@ public interface DocumentGroupMessageRepository extends JpaRepository<DocumentGr
             @Param("actorKey") String actorKey,
             @Param("admin") boolean admin,
             @Param("currentUserId") Long currentUserId);
+
+    @Query("""
+            select message
+            from DocumentGroupMessage message
+            where message.groupId in :groupIds
+              and lower(message.body) like lower(concat('%', :term, '%'))
+              and not exists (
+                select receipt.id
+                from DocumentGroupMessageHiddenReceipt receipt
+                where receipt.messageId = message.id
+                  and receipt.actorKey = :actorKey
+              )
+            order by message.createdAt desc, message.id desc
+            """)
+    List<DocumentGroupMessage> searchVisible(
+            @Param("groupIds") Collection<Long> groupIds,
+            @Param("actorKey") String actorKey,
+            @Param("term") String term,
+            Pageable pageable);
 }

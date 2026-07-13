@@ -1,0 +1,41 @@
+name: Backend Quality Gate
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "java-backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "java-backend/**"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Test (Testcontainers Postgres)
+    # ubuntu-latest ships a running Docker daemon, which the @ActiveProfiles("postgres") suite
+    # needs: it boots a real postgres:17-alpine via Testcontainers and runs every migration.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: java-backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Make the Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Run tests
+        run: ./mvnw -B -ntp test

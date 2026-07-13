@@ -55,6 +55,7 @@ export const PAGE_TITLES: Record<Page, string> = {
   tasks: "Görevler",
   approvals: "Tamamlama Onayları",
   messages: "Mesajlar",
+  "company-chat": "Şirket Geneli",
   notifications: "Bildirimler",
   "account-requests": "Hesap Talepleri",
   "tender-dashboard": "Tender Hub — Dashboard",

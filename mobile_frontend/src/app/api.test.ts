@@ -274,6 +274,7 @@ describe("mobil API istemcisi", () => {
       media_data: "data:audio/webm;base64,AAAA",
       media_duration_ms: 1200,
       client_message_id: "client-direct-1",
+      reply_to_message_id: null,
     });
   });
 
@@ -322,6 +323,7 @@ describe("mobil API istemcisi", () => {
       media_data: "data:image/jpeg;base64,AAAA",
       media_duration_ms: null,
       client_message_id: "client-room-1",
+      reply_to_message_id: null,
     });
   });
 
@@ -485,6 +487,7 @@ describe("mobil API istemcisi", () => {
       responsible_user_id: 2,
       priority: "high",
       deadline_at: "2026-07-10T09:00:00Z",
+      parent_task_id: null,
     });
   });
 

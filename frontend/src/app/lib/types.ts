@@ -17,6 +17,7 @@ export type Page =
   | "tasks"
   | "approvals"
   | "messages"
+  | "company-chat"
   | "notifications"
   | "account-requests"
   | "tender-dashboard"

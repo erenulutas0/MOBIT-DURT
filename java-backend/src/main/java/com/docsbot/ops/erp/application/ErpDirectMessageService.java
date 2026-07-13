@@ -18,7 +18,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
+
 import com.docsbot.ops.common.media.MessageMediaStorage;
+import com.docsbot.ops.common.tx.NewTransactionExecutor;
 import com.docsbot.ops.erp.domain.ErpDirectMessage;
 import com.docsbot.ops.erp.domain.ErpDirectMessageHiddenReceipt;
 import com.docsbot.ops.erp.infrastructure.ErpDirectMessageHiddenReceiptRepository;
@@ -34,6 +37,7 @@ class ErpDirectMessageService {
     private final ErpActivityRecorder activityRecorder;
     private final MessageMediaStorage mediaStorage;
     private final ChatEventPublisher chatEventPublisher;
+    private final NewTransactionExecutor newTransactionExecutor;
     private final Clock clock;
 
     @Autowired
@@ -44,7 +48,8 @@ class ErpDirectMessageService {
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
             MessageMediaStorage mediaStorage,
-            ChatEventPublisher chatEventPublisher
+            ChatEventPublisher chatEventPublisher,
+            NewTransactionExecutor newTransactionExecutor
     ) {
         this(
                 messageRepository,
@@ -54,6 +59,7 @@ class ErpDirectMessageService {
                 activityRecorder,
                 mediaStorage,
                 chatEventPublisher,
+                newTransactionExecutor,
                 Clock.systemUTC());
     }
 
@@ -65,6 +71,7 @@ class ErpDirectMessageService {
             ErpActivityRecorder activityRecorder,
             MessageMediaStorage mediaStorage,
             ChatEventPublisher chatEventPublisher,
+            NewTransactionExecutor newTransactionExecutor,
             Clock clock
     ) {
         this.messageRepository = messageRepository;
@@ -74,6 +81,7 @@ class ErpDirectMessageService {
         this.activityRecorder = activityRecorder;
         this.mediaStorage = mediaStorage;
         this.chatEventPublisher = chatEventPublisher;
+        this.newTransactionExecutor = newTransactionExecutor;
         this.clock = clock;
     }
 
@@ -107,7 +115,8 @@ class ErpDirectMessageService {
             String mediaMimeType,
             String mediaData,
             Integer mediaDurationMs,
-            String clientMessageId
+            String clientMessageId,
+            Long replyToMessageId
     ) {
         String cleanedKind = normalizeKind(messageKind);
         String cleanedBody = switch (cleanedKind) {
@@ -129,25 +138,46 @@ class ErpDirectMessageService {
                 return existing.getFirst();
             }
         }
+        Long cleanedReplyToMessageId = replyToMessageId != null && replyToMessageId > 0 ? replyToMessageId : null;
+        if (cleanedReplyToMessageId != null) {
+            ErpDirectMessage replyTarget = messageRepository.findById(cleanedReplyToMessageId)
+                    .orElseThrow(() -> new ErpExceptions.BadRequest("Replied-to message not found"));
+            requireSameThread(replyTarget, sender, recipient);
+        }
         String cleanedMediaMimeType = normalizeOptional(mediaMimeType, 128);
         String cleanedMediaData = normalizeMediaData(cleanedKind, cleanedMediaMimeType, mediaData);
         Integer cleanedDurationMs = normalizeDuration(cleanedKind, mediaDurationMs);
         Instant now = clock.instant();
 
-        ErpDirectMessage message = messageRepository.saveAndFlush(ErpDirectMessage.create(
-                sender.type(),
-                sender.userId(),
-                sender.name(),
-                recipient.type(),
-                recipient.userId(),
-                recipient.name(),
-                cleanedBody,
-                cleanedKind,
-                cleanedMediaMimeType,
-                cleanedMediaData,
-                cleanedDurationMs,
-                cleanedClientMessageId,
-                now));
+        ErpDirectMessage message;
+        try {
+            message = newTransactionExecutor.call(() -> messageRepository.saveAndFlush(ErpDirectMessage.create(
+                    sender.type(),
+                    sender.userId(),
+                    sender.name(),
+                    recipient.type(),
+                    recipient.userId(),
+                    recipient.name(),
+                    cleanedBody,
+                    cleanedKind,
+                    cleanedMediaMimeType,
+                    cleanedMediaData,
+                    cleanedDurationMs,
+                    cleanedClientMessageId,
+                    cleanedReplyToMessageId,
+                    now)));
+        } catch (DataIntegrityViolationException duplicate) {
+            // Lost a concurrent race on the client_message_id unique index — the winning
+            // insert committed in its own transaction; return that row so the retry is idempotent.
+            if (cleanedClientMessageId != null) {
+                List<ErpDirectMessage> winner = messageRepository.findByClientMessageId(
+                        sender.type(), sender.userId(), cleanedClientMessageId, PageRequest.of(0, 1));
+                if (!winner.isEmpty()) {
+                    return winner.getFirst();
+                }
+            }
+            throw duplicate;
+        }
         notifyRecipient(message, now);
         publishDirectMessageEvents(message);
         activityRecorder.record(
@@ -218,8 +248,11 @@ class ErpDirectMessageService {
                     null);
             return;
         }
+        String mediaData = message.getMediaData();
         messageRepository.delete(message);
         publishDirectMessageDeletedEvents(message);
+        // Reclaim the message's uploaded media file after commit (a rollback would keep the row).
+        afterCommit(() -> mediaStorage.deleteReference(mediaData));
         activityRecorder.record(
                 principal,
                 "DIRECT_MESSAGE_DELETED",
@@ -320,6 +353,20 @@ class ErpDirectMessageService {
             throw new ErpExceptions.BadRequest("Recipient must be different from sender");
         }
         return new Actor(ErpDirectMessage.ACTOR_USER, user.getId(), fallback(user.getName(), "User " + user.getId()));
+    }
+
+    private void requireSameThread(ErpDirectMessage target, Actor sender, Actor recipient) {
+        boolean direct = sameActor(target.getSenderType(), target.getSenderUserId(), sender)
+                && sameActor(target.getRecipientType(), target.getRecipientUserId(), recipient);
+        boolean reverse = sameActor(target.getSenderType(), target.getSenderUserId(), recipient)
+                && sameActor(target.getRecipientType(), target.getRecipientUserId(), sender);
+        if (!direct && !reverse) {
+            throw new ErpExceptions.BadRequest("Replied-to message is not part of this conversation");
+        }
+    }
+
+    private boolean sameActor(String type, Long userId, Actor actor) {
+        return type.equals(actor.type()) && java.util.Objects.equals(userId, actor.userId());
     }
 
     private void notifyRecipient(ErpDirectMessage message, Instant now) {

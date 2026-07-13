@@ -56,6 +56,9 @@ public class ErpDirectMessage {
     @Column(name = "client_message_id", length = 128)
     private String clientMessageId;
 
+    @Column(name = "reply_to_message_id")
+    private Long replyToMessageId;
+
     @Column(name = "delivered_at")
     private Instant deliveredAt;
 
@@ -81,6 +84,7 @@ public class ErpDirectMessage {
             String mediaData,
             Integer mediaDurationMs,
             String clientMessageId,
+            Long replyToMessageId,
             Instant createdAt
     ) {
         ErpDirectMessage message = new ErpDirectMessage();
@@ -96,6 +100,7 @@ public class ErpDirectMessage {
         message.mediaData = mediaData;
         message.mediaDurationMs = mediaDurationMs;
         message.clientMessageId = clientMessageId;
+        message.replyToMessageId = replyToMessageId;
         message.deliveredAt = createdAt;
         message.createdAt = createdAt;
         return message;
@@ -172,6 +177,10 @@ public class ErpDirectMessage {
 
     public String getClientMessageId() {
         return clientMessageId;
+    }
+
+    public Long getReplyToMessageId() {
+        return replyToMessageId;
     }
 
     public Instant getDeliveredAt() {

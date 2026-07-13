@@ -587,6 +587,50 @@ class TenderDashboardIntegrationTest {
     }
 
     @Test
+    void publicShareDownloadRejectsBogusAndExpiredTokens() throws Exception {
+        String adminToken = loginAdmin();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "shared-note.txt",
+                MediaType.TEXT_PLAIN_VALUE,
+                "public share test".getBytes(StandardCharsets.UTF_8));
+        String uploadResponse = mockMvc.perform(multipart("/dashboard/upload")
+                        .file(file)
+                        .param("internal_unit", "Mobit")
+                        .param("organization", "BEDAS")
+                        .param("year", "2026")
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long documentId = ((Number) JsonPath.read(uploadResponse, "$.id")).longValue();
+
+        // A token that was never issued is a 404 (not a 500 / not a leak).
+        mockMvc.perform(get("/shared/documents/{token}", "definitely-not-a-real-token"))
+                .andExpect(status().isNotFound());
+
+        String shareResponse = mockMvc.perform(post("/documents/{documentId}/share-links", documentId)
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expires_in_hours\":1}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long shareLinkId = ((Number) JsonPath.read(shareResponse, "$.share.id")).longValue();
+        String accessUrl = JsonPath.read(shareResponse, "$.access_url");
+
+        // Valid, unexpired link serves the document.
+        mockMvc.perform(get(accessUrl)).andExpect(status().isOk());
+
+        // Backdate expiry to the past (min creation window is 1h, so simulate the clock advancing).
+        jdbcTemplate.update(
+                "update document_share_links set expires_at = ? where id = ?",
+                java.sql.Timestamp.from(java.time.Instant.now().minus(java.time.Duration.ofHours(2))),
+                shareLinkId);
+
+        // The expired link is now rejected as 404.
+        mockMvc.perform(get(accessUrl)).andExpect(status().isNotFound());
+    }
+
+    @Test
     void adminUploadsClassifiesDeduplicatesAndWritesVaultNotes() throws Exception {
         String adminToken = loginAdmin();
         byte[] pdf = "%PDF-1.7\nTender technical specification".getBytes(StandardCharsets.UTF_8);

@@ -29,6 +29,25 @@ describe("MessageActionSheets", () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Delete for/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yanıtla" })).not.toBeInTheDocument();
+  });
+
+  it("onReply verildiğinde Yanıtla butonunu gösterir ve çağırır", async () => {
+    const onReply = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MessageOptionsSheet
+        title="Merhaba"
+        onClose={vi.fn()}
+        onDelete={vi.fn()}
+        onForward={vi.fn()}
+        onReply={onReply}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Yanıtla" }));
+    expect(onReply).toHaveBeenCalledTimes(1);
   });
 
   it("silme seçeneklerini Türkçe gösterir ve iki farklı silme aksiyonunu ayırır", async () => {

@@ -43,8 +43,17 @@ export type ERPTask = {
   priority: "low" | "normal" | "high" | "urgent" | string;
   deadline_at: string | null;
   completed_at: string | null;
+  parent_task_id?: number | null;
+  document_group_id?: number | null;
   created_at: string;
   version?: number;
+};
+
+export type ERPTaskDependency = {
+  id: number;
+  predecessor_task_id: number;
+  successor_task_id: number;
+  created_at: string;
 };
 
 export type ERPTaskAssignment = {
@@ -144,6 +153,7 @@ export type ERPDirectMessage = {
   media_ref?: string | null;
   media_duration_ms?: number | null;
   client_message_id?: string | null;
+  reply_to_message_id?: number | null;
   delivered_at?: string | null;
   read_at: string | null;
   delivery_status?: "sent" | "delivered" | "read" | string | null;
@@ -158,6 +168,7 @@ export type ERPOverview = {
   documents: ERPTaskDocument[];
   help_messages: ERPTaskComment[];
   notifications: ERPNotification[];
+  task_dependencies?: ERPTaskDependency[];
 };
 
 export type ERPAccountRequest = {
@@ -314,6 +325,7 @@ export type DocumentGroupMessage = {
   media_ref?: string | null;
   media_duration_ms?: number | null;
   client_message_id?: string | null;
+  reply_to_message_id?: number | null;
   delivered_at?: string | null;
   sequence_no?: number | null;
   delivery_status?: "sent" | "delivered" | string | null;
@@ -478,6 +490,7 @@ export async function createERPTask(payload: {
   responsibleUserId?: number | null;
   priority?: "low" | "normal" | "high" | "urgent" | string;
   deadlineAt?: string | null;
+  parentTaskId?: number | null;
 }): Promise<ERPTask> {
   const response = await apiFetch("/erp/tasks", {
     method: "POST",
@@ -490,9 +503,37 @@ export async function createERPTask(payload: {
       responsible_user_id: payload.responsibleUserId || null,
       priority: payload.priority || "normal",
       deadline_at: payload.deadlineAt || null,
+      parent_task_id: payload.parentTaskId || null,
     }),
   });
   if (!response.ok) throw new Error(await errorText(response, "Görev oluşturulamadı."));
+  return response.json();
+}
+
+export async function addERPTaskDependency(taskId: number, predecessorTaskId: number): Promise<ERPTaskDependency> {
+  const response = await apiFetch(`/erp/tasks/${taskId}/dependencies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ predecessor_task_id: predecessorTaskId }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Görev bağımlılığı eklenemedi."));
+  return response.json();
+}
+
+export async function removeERPTaskDependency(taskId: number, predecessorTaskId: number): Promise<void> {
+  const response = await apiFetch(`/erp/tasks/${taskId}/dependencies/${predecessorTaskId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Görev bağımlılığı kaldırılamadı."));
+}
+
+export async function linkERPTaskDocumentGroup(taskId: number, documentGroupId: number): Promise<ERPTask> {
+  const response = await apiFetch(`/erp/tasks/${taskId}/document-group`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ document_group_id: documentGroupId }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Görev odaya bağlanamadı."));
   return response.json();
 }
 
@@ -572,6 +613,50 @@ export async function getERPDirectMessages(limit = 100, beforeId?: number | null
   return response.json();
 }
 
+export type CommunicationSearchResult = {
+  type: "direct_message" | "room_message" | "room_document";
+  id: number;
+  group_id: number | null;
+  group_name: string | null;
+  other_user_id: number | null;
+  title: string;
+  snippet: string | null;
+  created_at: string;
+};
+
+/** Searches direct-message bodies, document-room message bodies, and room document filenames the caller can see. */
+export async function searchCommunication(query: string): Promise<CommunicationSearchResult[]> {
+  const response = await apiFetch(`/erp/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) throw new Error(await errorText(response, "Arama yapılamadı."));
+  return response.json();
+}
+
+export type CompanyChatMessage = {
+  id: number;
+  author_user_id: number | null;
+  author_name: string;
+  author_role: "admin" | "employee" | string;
+  body: string;
+  created_at: string;
+};
+
+/** The shared "Şirket Geneli" channel — everyone posts to and reads the same feed; it is hard-reset once a day server-side. */
+export async function getCompanyChatMessages(): Promise<CompanyChatMessage[]> {
+  const response = await apiFetch("/erp/company-chat/messages");
+  if (!response.ok) throw new Error(await errorText(response, "Şirket geneli mesajlar yüklenemedi."));
+  return response.json();
+}
+
+export async function sendCompanyChatMessage(body: string): Promise<CompanyChatMessage> {
+  const response = await apiFetch("/erp/company-chat/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Mesaj gönderilemedi."));
+  return response.json();
+}
+
 export async function sendERPDirectMessage(payload: {
   body: string;
   recipientUserId?: number | null;
@@ -580,6 +665,7 @@ export async function sendERPDirectMessage(payload: {
   mediaData?: string | null;
   mediaDurationMs?: number | null;
   clientMessageId?: string | null;
+  replyToMessageId?: number | null;
 }): Promise<ERPDirectMessage> {
   const response = await apiFetch("/erp/messages", {
     method: "POST",
@@ -592,6 +678,7 @@ export async function sendERPDirectMessage(payload: {
       media_data: payload.mediaData ?? null,
       media_duration_ms: payload.mediaDurationMs ?? null,
       client_message_id: payload.clientMessageId ?? null,
+      reply_to_message_id: payload.replyToMessageId ?? null,
     }),
   });
   if (!response.ok) throw new Error(await errorText(response, "Mesaj gönderilemedi."));
@@ -777,6 +864,55 @@ export async function uploadDocumentGroupFile(payload: {
   return response.json();
 }
 
+/** Same as uploadDocumentGroupFile but reports upload percentage via XHR (fetch has no upload progress event). */
+export async function uploadDocumentGroupFileWithProgress(
+  payload: {
+    groupId: number;
+    file: File;
+    note?: string;
+    tenderId?: string;
+    year?: number | null;
+  },
+  onProgress: (percent: number) => void
+): Promise<DocumentGroupDocument> {
+  const form = new FormData();
+  form.append("file", payload.file);
+  if (payload.note?.trim()) form.append("note", payload.note.trim());
+  if (payload.tenderId?.trim()) form.append("tender_id", payload.tenderId.trim());
+  if (payload.year) form.append("year", String(payload.year));
+  const token = (await loadStoredUserAsync())?.accessToken;
+
+  return new Promise<DocumentGroupDocument>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${apiBaseUrl()}/document-groups/${payload.groupId}/documents`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Doküman yüklenemedi."));
+        }
+      } else {
+        const message = (() => {
+          try {
+            const payload = JSON.parse(xhr.responseText);
+            return payload?.detail || payload?.message;
+          } catch {
+            return null;
+          }
+        })();
+        reject(new Error(message || "Doküman yüklenemedi."));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Doküman yüklenemedi."));
+    xhr.send(form);
+  });
+}
+
 export async function replaceDocumentGroupFile(payload: {
   groupId: number;
   groupDocumentId: number;
@@ -831,6 +967,7 @@ export async function sendDocumentGroupMessage(groupId: number, payload: string 
   mediaData?: string | null;
   mediaDurationMs?: number | null;
   clientMessageId?: string | null;
+  replyToMessageId?: number | null;
 }): Promise<DocumentGroupMessage> {
   const body = typeof payload === "string"
     ? { body: payload, client_message_id: null }
@@ -841,6 +978,7 @@ export async function sendDocumentGroupMessage(groupId: number, payload: string 
         media_data: payload.mediaData || null,
         media_duration_ms: payload.mediaDurationMs || null,
         client_message_id: payload.clientMessageId || null,
+        reply_to_message_id: payload.replyToMessageId || null,
       };
   const response = await apiFetch(`/document-groups/${groupId}/messages`, {
     method: "POST",
@@ -873,13 +1011,26 @@ export async function openChatEventStream(
     throw new Error("Oturum bulunamadı.");
   }
   const controller = new AbortController();
-  const response = await fetch(`${apiBaseUrl()}/erp/messages/stream`, {
-    headers: {
-      Accept: "text/event-stream",
-      Authorization: `Bearer ${session.accessToken}`,
-    },
-    signal: controller.signal,
-  });
+  const connect = (accessToken: string) =>
+    fetch(`${apiBaseUrl()}/erp/messages/stream`, {
+      headers: {
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: controller.signal,
+    });
+  let response = await connect(session.accessToken);
+  // A long-lived SSE connection outlives the short access-token TTL: on a stale token the
+  // stream 401s, so refresh once and reconnect before giving up (mirrors apiFetch).
+  if (response.status === 401) {
+    const refreshed = await refreshSession();
+    if (refreshed?.accessToken) {
+      response = await connect(refreshed.accessToken);
+    } else {
+      clearStoredSession();
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+  }
   if (!response.ok) {
     throw new Error(await errorText(response, "Canlı mesaj bağlantısı kurulamadı."));
   }

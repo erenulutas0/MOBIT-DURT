@@ -2,16 +2,19 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  # Real Postgres via Testcontainers (the jdbc:tc: URL auto-starts and shares a container for
+  # the JVM). Flyway builds the schema from V1..Vn and Hibernate validates the entity mappings
+  # against it, so the whole @ActiveProfiles("postgres") suite exercises the actual migrations
+  # and Postgres-only features (native FTS) instead of an H2 stand-in.
   datasource:
-    url: jdbc:h2:mem:docsbot;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=YEAR,SEQUENCE
-    username: sa
-    password:
+    url: jdbc:tc:postgresql:17-alpine:///docsbot?TC_DAEMON=true
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
   flyway:
-    enabled: false
+    enabled: true
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate
     properties:
       hibernate:
         jdbc:

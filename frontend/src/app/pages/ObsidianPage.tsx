@@ -9,6 +9,8 @@ import {
 } from "../api";
 import type { LiveData } from "../lib/types";
 import { formatDateShort, documentsForTender } from "../lib/helpers";
+import { buildKnowledgeGraphData } from "../lib/knowledgeGraph";
+import { KnowledgeGraphPanel } from "../components/KnowledgeGraphPanel";
 
 // ─── OBSIDIAN DEMO ────────────────────────────────────────────────────────────
 export function ObsidianPage({ live }: { live: LiveData }) {
@@ -43,6 +45,16 @@ export function ObsidianPage({ live }: { live: LiveData }) {
     const blob = await getTenderDocumentBlob(document.id, false);
     openBlob(blob);
   }
+
+  const graphData = useMemo(
+    () => buildKnowledgeGraphData({
+      documents: live.documents,
+      tenders: live.tenders,
+      vaultNotes: live.vaultNotes,
+      documentGroups: [],
+    }),
+    [live.documents, live.tenders, live.vaultNotes]
+  );
   return (
     <div className="flex h-[calc(100vh-48px)] bg-[#1e1e2e] text-slate-200 font-mono text-xs">
       {/* Left: Vault Tree */}
@@ -185,24 +197,8 @@ etiketler: [${noteTags.join(", ")}]
         <div className="px-3 py-2 border-b border-white/5">
           <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600">Graf Görünümü</p>
         </div>
-        <div className="h-40 bg-[#13131f] m-2 rounded border border-white/5 flex items-center justify-center relative overflow-hidden">
-          {!selectedNote && !selectedTender ? (
-            <span className="text-[10px] text-slate-600">Graf için veri yok.</span>
-          ) : (
-          <svg width="100%" height="100%" viewBox="0 0 200 140">
-            <circle cx="100" cy="70" r="18" fill="#0D9488" fillOpacity="0.3" stroke="#0D9488" strokeWidth="1.5" />
-            <text x="100" y="74" textAnchor="middle" fill="#5eead4" fontSize="7">{selectedTenderId.slice(0, 16)}</text>
-            <circle cx="40" cy="30" r="12" fill="#7c3aed" fillOpacity="0.3" stroke="#7c3aed" strokeWidth="1" />
-            <text x="40" y="34" textAnchor="middle" fill="#a78bfa" fontSize="6">{(selectedTender?.internal_unit || "-").slice(0, 10)}</text>
-            <circle cx="160" cy="30" r="12" fill="#2563eb" fillOpacity="0.3" stroke="#2563eb" strokeWidth="1" />
-            <text x="160" y="34" textAnchor="middle" fill="#93c5fd" fontSize="6">{(selectedTender?.organization || "-").slice(0, 10)}</text>
-            <circle cx="100" cy="130" r="9" fill="#059669" fillOpacity="0.3" stroke="#059669" strokeWidth="1" />
-            <text x="100" y="134" textAnchor="middle" fill="#6ee7b7" fontSize="5.5">Belge×{relatedDocuments.length}</text>
-            <line x1="100" y1="52" x2="52" y2="42" stroke="#7c3aed" strokeWidth="0.8" strokeOpacity="0.5" />
-            <line x1="100" y1="52" x2="148" y2="42" stroke="#2563eb" strokeWidth="0.8" strokeOpacity="0.5" />
-            <line x1="100" y1="88" x2="100" y2="121" stroke="#059669" strokeWidth="0.8" strokeOpacity="0.5" />
-          </svg>
-          )}
+        <div className="bg-[#13131f] m-2 rounded border border-white/5 overflow-hidden">
+          <KnowledgeGraphPanel graphData={graphData} />
         </div>
 
         <div className="px-3 py-2 border-b border-white/5 border-t border-white/5">
@@ -240,7 +236,7 @@ etiketler: [${noteTags.join(", ")}]
           <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 mb-2">AI Önerileri</p>
           <div className="bg-teal-600/10 border border-teal-600/20 rounded p-2 text-[10px] text-teal-300">
             <Cpu className="w-3 h-3 mb-1 text-teal-500" />
-            AI çıkarım MVP sonrası bağlanacak. Şimdilik gerçek belge ve not ağacı gösteriliyor.
+Kural tabanlı özet/risk çıkarımı çalıştırıldığında ilgili belge notuna otomatik yazılır (bkz. AUTO:EXTRACTION bölümü). Henüz bir büyük dil modeli bağlı değil.
           </div>
         </div>
       </aside>

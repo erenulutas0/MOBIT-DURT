@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
@@ -24,9 +25,31 @@ public class MessageMediaStorage {
             Map.entry("audio/ogg", "ogg"),
             Map.entry("image/jpeg", "jpg"),
             Map.entry("image/png", "png"),
+            Map.entry("image/gif", "gif"),
             Map.entry("image/webp", "webp"),
             Map.entry("application/pdf", "pdf"),
             Map.entry("text/plain", "txt"));
+
+    // Raster image types only — image/svg+xml is deliberately excluded because SVG can carry script.
+    private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/webp", "image/gif");
+
+    // Content types that execute active content when a browser renders them inline. Blocked
+    // for "file" messages, and never served inline (see isInlineSafe) as defense in depth.
+    private static final Set<String> ACTIVE_CONTENT_TYPES = Set.of(
+            "text/html", "application/xhtml+xml", "image/svg+xml");
+
+    // Only these are ever served with Content-Disposition: inline. Everything else is forced
+    // to attachment so an attacker-chosen content type cannot execute on the API origin.
+    private static final Set<String> INLINE_SAFE_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/webp", "image/gif",
+            "audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg",
+            "application/pdf", "text/plain");
+
+    /** Whether a stored media content type is safe to serve inline (render in the browser). */
+    public static boolean isInlineSafe(String contentType) {
+        return contentType != null && INLINE_SAFE_TYPES.contains(contentType.trim().toLowerCase(Locale.ROOT));
+    }
 
     private final Path root;
     private final long maxMediaBytes;
@@ -92,6 +115,23 @@ public class MessageMediaStorage {
 
     public boolean isReference(String value) {
         return value != null && value.trim().startsWith(REFERENCE_PREFIX);
+    }
+
+    /**
+     * Best-effort deletion of a file-backed media reference. No-op for inline/legacy values or
+     * a null. Each message owns a unique uuid file, so deleting it when the message row is
+     * hard-deleted is safe and prevents unbounded disk growth. Failures are swallowed — a
+     * leftover file is a nuisance, not a correctness problem, and must not fail the delete.
+     */
+    public void deleteReference(String value) {
+        if (!isReference(value)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(pathForReference(value.trim()));
+        } catch (IOException | RuntimeException ignored) {
+            // leave the orphan rather than fail the message deletion
+        }
     }
 
     public String reference(String value) {
@@ -168,14 +208,25 @@ public class MessageMediaStorage {
 
     private void validateKind(String messageKind, String mimeType) {
         String kind = messageKind == null ? "file" : messageKind.trim().toLowerCase(Locale.ROOT);
-        if ("voice".equals(kind) && !mimeType.startsWith("audio/")) {
-            throw new ErpExceptions.BadRequest("Voice message must be audio data");
-        }
-        if ("image".equals(kind) && !mimeType.startsWith("image/")) {
-            throw new ErpExceptions.BadRequest("Image message must be image data");
-        }
-        if ("file".equals(kind) && (mimeType.startsWith("audio/") || mimeType.startsWith("image/"))) {
-            return;
+        switch (kind) {
+            case "voice" -> {
+                if (!mimeType.startsWith("audio/")) {
+                    throw new ErpExceptions.BadRequest("Voice message must be audio data");
+                }
+            }
+            case "image" -> {
+                if (!ALLOWED_IMAGE_TYPES.contains(mimeType)) {
+                    throw new ErpExceptions.BadRequest("Image message must be a JPEG, PNG, WebP or GIF");
+                }
+            }
+            case "file" -> {
+                if (ACTIVE_CONTENT_TYPES.contains(mimeType)) {
+                    throw new ErpExceptions.BadRequest("This file type is not allowed");
+                }
+            }
+            default -> {
+                // unknown kind: no additional constraint beyond the size/base64 checks
+            }
         }
     }
 

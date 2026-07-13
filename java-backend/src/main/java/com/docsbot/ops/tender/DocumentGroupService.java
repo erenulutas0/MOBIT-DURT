@@ -22,7 +22,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
+
 import com.docsbot.ops.common.media.MessageMediaStorage;
+import com.docsbot.ops.common.tx.NewTransactionExecutor;
 import com.docsbot.ops.dashboard.DashboardFileService;
 import com.docsbot.ops.erp.application.ErpExceptions;
 import com.docsbot.ops.erp.application.ErpPrincipal;
@@ -72,6 +75,7 @@ public class DocumentGroupService {
     private final NotificationService notificationService;
     private final MessageMediaStorage mediaStorage;
     private final ChatEventPublisher chatEventPublisher;
+    private final NewTransactionExecutor newTransactionExecutor;
     private final Clock clock;
 
     @Autowired
@@ -90,7 +94,8 @@ public class DocumentGroupService {
             DashboardFileService fileService,
             NotificationService notificationService,
             MessageMediaStorage mediaStorage,
-            ChatEventPublisher chatEventPublisher
+            ChatEventPublisher chatEventPublisher,
+            NewTransactionExecutor newTransactionExecutor
     ) {
         this(
                 groupRepository,
@@ -108,6 +113,7 @@ public class DocumentGroupService {
                 notificationService,
                 mediaStorage,
                 chatEventPublisher,
+                newTransactionExecutor,
                 Clock.systemUTC());
     }
 
@@ -127,6 +133,7 @@ public class DocumentGroupService {
             NotificationService notificationService,
             MessageMediaStorage mediaStorage,
             ChatEventPublisher chatEventPublisher,
+            NewTransactionExecutor newTransactionExecutor,
             Clock clock
     ) {
         this.groupRepository = groupRepository;
@@ -144,6 +151,7 @@ public class DocumentGroupService {
         this.notificationService = notificationService;
         this.mediaStorage = mediaStorage;
         this.chatEventPublisher = chatEventPublisher;
+        this.newTransactionExecutor = newTransactionExecutor;
         this.clock = clock;
     }
 
@@ -461,11 +469,16 @@ public class DocumentGroupService {
                 .toList();
     }
 
+    /**
+     * Default initial-load page size for a room. The no-argument listing used to return the room's
+     * ENTIRE history, so a long-lived room would load thousands of rows into memory and over the
+     * wire on every open. Cap it to the most recent page; clients page older messages via before_id.
+     */
+    private static final int DEFAULT_MESSAGE_PAGE_SIZE = 100;
+
     @Transactional(readOnly = true)
     public List<DocumentGroupMessage> listMessages(ErpPrincipal principal, long groupId) {
-        DocumentGroup group = group(groupId);
-        requireView(principal, group);
-        return messageRepository.findVisibleByGroupId(groupId, actorKey(principal));
+        return listMessages(principal, groupId, DEFAULT_MESSAGE_PAGE_SIZE, null);
     }
 
     @Transactional(readOnly = true)
@@ -489,7 +502,8 @@ public class DocumentGroupService {
             String mediaMimeType,
             String mediaData,
             Integer mediaDurationMs,
-            String clientMessageId
+            String clientMessageId,
+            Long replyToMessageId
     ) {
         DocumentGroup group = group(groupId);
         requireView(principal, group);
@@ -509,18 +523,48 @@ public class DocumentGroupService {
                 return existing.getFirst();
             }
         }
-        DocumentGroupMessage message = messageRepository.saveAndFlush(DocumentGroupMessage.create(
-                group.getId(),
-                authorUserId,
-                principal.displayName(),
-                "voice".equals(kind) ? "Ses mesajı" : normalizeMessageBody(body),
-                kind,
-                normalizeMessageMediaMimeType(kind, mediaMimeType),
-                normalizeMessageMediaData(group.getId(), kind, mediaMimeType, mediaData),
-                "voice".equals(kind) ? Math.max(0, mediaDurationMs == null ? 0 : mediaDurationMs) : null,
-                cleanedClientMessageId,
-                clock.instant()));
-        message.assignSequenceNo(message.getId());
+        Long cleanedReplyToMessageId = replyToMessageId != null && replyToMessageId > 0 ? replyToMessageId : null;
+        if (cleanedReplyToMessageId != null) {
+            DocumentGroupMessage replyTarget = messageRepository.findById(cleanedReplyToMessageId)
+                    .orElseThrow(() -> new ErpExceptions.BadRequest("Replied-to message not found"));
+            if (!replyTarget.getGroupId().equals(group.getId())) {
+                throw new ErpExceptions.BadRequest("Replied-to message is not part of this room");
+            }
+        }
+        String cleanedBody = "voice".equals(kind) ? "Ses mesajı" : normalizeMessageBody(body);
+        String cleanedMediaMimeType = normalizeMessageMediaMimeType(kind, mediaMimeType);
+        String cleanedMediaData = normalizeMessageMediaData(group.getId(), kind, mediaMimeType, mediaData);
+        Integer cleanedDurationMs = "voice".equals(kind) ? Math.max(0, mediaDurationMs == null ? 0 : mediaDurationMs) : null;
+
+        DocumentGroupMessage message;
+        try {
+            message = newTransactionExecutor.call(() -> {
+                DocumentGroupMessage saved = messageRepository.saveAndFlush(DocumentGroupMessage.create(
+                        group.getId(),
+                        authorUserId,
+                        principal.displayName(),
+                        cleanedBody,
+                        kind,
+                        cleanedMediaMimeType,
+                        cleanedMediaData,
+                        cleanedDurationMs,
+                        cleanedClientMessageId,
+                        cleanedReplyToMessageId,
+                        clock.instant()));
+                saved.assignSequenceNo(saved.getId());
+                return messageRepository.saveAndFlush(saved);
+            });
+        } catch (DataIntegrityViolationException duplicate) {
+            // Lost a concurrent race on the client_message_id unique index — return the winner.
+            if (cleanedClientMessageId != null) {
+                List<DocumentGroupMessage> winner = messageRepository.findByClientMessageId(
+                        group.getId(), authorUserId, cleanedClientMessageId, PageRequest.of(0, 1));
+                if (!winner.isEmpty()) {
+                    return winner.getFirst();
+                }
+            }
+            throw duplicate;
+        }
         Instant now = clock.instant();
         group.touch(now);
         notifyGroupMembers(
@@ -541,25 +585,34 @@ public class DocumentGroupService {
         requireView(principal, group);
         String actorKey = actorKey(principal);
         Long currentUserId = principal.userId().isPresent() ? principal.userId().getAsLong() : null;
-        int updated = 0;
+
+        // Candidate messages this actor could mark read: everything up to throughMessageId that the
+        // actor did not author (you don't "read" your own messages).
+        Set<Long> markableIds = new LinkedHashSet<>();
         for (DocumentGroupMessage message : messageRepository.findAllByGroupIdAndIdLessThanEqualOrderByIdAsc(
                 group.getId(),
                 throughMessageId)) {
             boolean authoredByCurrentActor = principal.admin()
                     ? message.getAuthorUserId() == null
                     : currentUserId != null && currentUserId.equals(message.getAuthorUserId());
-            if (authoredByCurrentActor
-                    || messageHiddenReceiptRepository.existsByMessageIdAndActorKey(message.getId(), actorKey)
-                    || messageReadReceiptRepository.existsByMessageIdAndActorKey(message.getId(), actorKey)) {
-                continue;
+            if (!authoredByCurrentActor) {
+                markableIds.add(message.getId());
             }
-            messageReadReceiptRepository.save(DocumentGroupMessageReadReceipt.create(
-                    message.getId(),
-                    actorKey,
-                    clock.instant()));
-            updated++;
         }
-        return updated;
+        if (markableIds.isEmpty()) {
+            return 0;
+        }
+        // Two batch lookups + one batch insert, instead of two exists() queries and one save per
+        // message — marking a busy room read is O(1) round-trips now, not O(messages).
+        Set<Long> alreadyRead = Set.copyOf(messageReadReceiptRepository.findReadMessageIds(actorKey, markableIds));
+        Set<Long> hidden = Set.copyOf(messageHiddenReceiptRepository.findHiddenMessageIds(actorKey, markableIds));
+        Instant readAt = clock.instant();
+        List<DocumentGroupMessageReadReceipt> receipts = markableIds.stream()
+                .filter(id -> !alreadyRead.contains(id) && !hidden.contains(id))
+                .map(id -> DocumentGroupMessageReadReceipt.create(id, actorKey, readAt))
+                .toList();
+        messageReadReceiptRepository.saveAll(receipts);
+        return receipts.size();
     }
 
     @Transactional
@@ -582,8 +635,11 @@ public class DocumentGroupService {
         if (!canManage(principal, group) && !isCurrentUser(principal, message.getAuthorUserId())) {
             throw new ErpExceptions.Forbidden("Message owner or group manager access is required");
         }
+        String mediaData = message.getMediaData();
         messageRepository.delete(message);
         publishDocumentGroupMessageDeletedEvents(group, messageId);
+        // Reclaim the message's uploaded media file after commit (a rollback keeps the row).
+        afterCommit(() -> mediaStorage.deleteReference(mediaData));
         group.touch(clock.instant());
     }
 

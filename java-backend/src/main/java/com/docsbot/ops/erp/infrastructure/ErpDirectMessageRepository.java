@@ -74,4 +74,30 @@ public interface ErpDirectMessageRepository extends JpaRepository<ErpDirectMessa
             @Param("beforeId") long beforeId,
             @Param("actorKey") String actorKey,
             Pageable pageable);
+
+    @Query("""
+            select message
+            from ErpDirectMessage message
+            where lower(message.body) like lower(concat('%', :term, '%'))
+              and (
+                (:admin = true and (message.senderType = 'admin' or message.recipientType = 'admin'))
+                or (:admin = false and (
+                      (message.senderType = 'user' and message.senderUserId = :userId)
+                      or (message.recipientType = 'user' and message.recipientUserId = :userId)
+                ))
+              )
+              and not exists (
+                select receipt.id
+                from ErpDirectMessageHiddenReceipt receipt
+                where receipt.messageId = message.id
+                  and receipt.actorKey = :actorKey
+              )
+            order by message.createdAt desc, message.id desc
+            """)
+    List<ErpDirectMessage> searchVisible(
+            @Param("admin") boolean admin,
+            @Param("userId") Long userId,
+            @Param("actorKey") String actorKey,
+            @Param("term") String term,
+            Pageable pageable);
 }

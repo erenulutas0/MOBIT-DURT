@@ -44,6 +44,9 @@ public class DocumentGroupMessage {
     @Column(name = "client_message_id", length = 128)
     private String clientMessageId;
 
+    @Column(name = "reply_to_message_id")
+    private Long replyToMessageId;
+
     @Column(name = "delivered_at")
     private Instant deliveredAt;
 
@@ -66,6 +69,7 @@ public class DocumentGroupMessage {
             String mediaData,
             Integer mediaDurationMs,
             String clientMessageId,
+            Long replyToMessageId,
             Instant now
     ) {
         DocumentGroupMessage message = new DocumentGroupMessage();
@@ -78,6 +82,7 @@ public class DocumentGroupMessage {
         message.mediaData = mediaData == null || mediaData.isBlank() ? null : mediaData.trim();
         message.mediaDurationMs = mediaDurationMs;
         message.clientMessageId = clientMessageId;
+        message.replyToMessageId = replyToMessageId;
         message.deliveredAt = now;
         message.createdAt = now;
         return message;
@@ -99,6 +104,7 @@ public class DocumentGroupMessage {
     public String getMediaData() { return mediaData; }
     public Integer getMediaDurationMs() { return mediaDurationMs; }
     public String getClientMessageId() { return clientMessageId; }
+    public Long getReplyToMessageId() { return replyToMessageId; }
     public Instant getDeliveredAt() { return deliveredAt; }
     public Long getSequenceNo() { return sequenceNo; }
     public Instant getCreatedAt() { return createdAt; }

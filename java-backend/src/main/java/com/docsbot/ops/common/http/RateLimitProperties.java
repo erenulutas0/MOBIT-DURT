@@ -6,6 +6,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class RateLimitProperties {
 
     private boolean enabled = true;
+    /**
+     * Number of trusted reverse proxies between this app and the client. The client IP is read
+     * as the Nth-from-the-right entry of X-Forwarded-For. Default 0 means the header is NOT
+     * trusted at all (use the direct socket address) so a client cannot spoof X-Forwarded-For
+     * to dodge rate limiting. Set to 1 when running behind a single reverse proxy (nginx/Caddy).
+     */
+    private int trustedProxyHops = 0;
     private int authLimit = 120;
     private int authWindowSeconds = 60;
     private int accountRequestLimit = 60;
@@ -21,6 +28,14 @@ public class RateLimitProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public int getTrustedProxyHops() {
+        return trustedProxyHops;
+    }
+
+    public void setTrustedProxyHops(int trustedProxyHops) {
+        this.trustedProxyHops = trustedProxyHops;
     }
 
     public int getAuthLimit() {

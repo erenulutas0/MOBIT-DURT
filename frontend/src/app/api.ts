@@ -112,8 +112,17 @@ export type ERPTask = {
   priority: "low" | "normal" | "high" | "urgent" | string;
   deadline_at: string | null;
   completed_at: string | null;
+  parent_task_id?: number | null;
+  document_group_id?: number | null;
   created_at: string;
   version?: number;
+};
+
+export type ERPTaskDependency = {
+  id: number;
+  predecessor_task_id: number;
+  successor_task_id: number;
+  created_at: string;
 };
 
 export type ERPTaskAssignment = {
@@ -200,6 +209,7 @@ export type ERPOverview = {
   documents: ERPTaskDocument[];
   help_messages: ERPTaskComment[];
   notifications: ERPNotification[];
+  task_dependencies?: ERPTaskDependency[];
 };
 
 export type ERPUserPage = {
@@ -490,6 +500,7 @@ export type ERPTaskCreate = {
   assignee_team_ids?: number[];
   priority?: "low" | "normal" | "high" | "urgent" | string;
   deadline_at?: string | null;
+  parent_task_id?: number | null;
 };
 
 export type TenderTaskCreateResponse = {
@@ -790,6 +801,49 @@ export async function createERPTask(payload: ERPTaskCreate): Promise<ERPTask> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+export async function addERPTaskDependency(taskId: number, predecessorTaskId: number): Promise<ERPTaskDependency> {
+  const response = await apiFetch(`/api/erp/tasks/${taskId}/dependencies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ predecessor_task_id: predecessorTaskId }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+export async function removeERPTaskDependency(taskId: number, predecessorTaskId: number): Promise<void> {
+  const response = await apiFetch(`/api/erp/tasks/${taskId}/dependencies/${predecessorTaskId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
+export type CompanyChatMessage = {
+  id: number;
+  author_user_id: number | null;
+  author_name: string;
+  author_role: "admin" | "employee" | string;
+  body: string;
+  created_at: string;
+};
+
+/** The shared "Şirket Geneli" channel — everyone posts to and reads the same feed; it is hard-reset once a day server-side. */
+export async function getCompanyChatMessages(): Promise<CompanyChatMessage[]> {
+  const response = await apiFetch("/api/erp/company-chat/messages");
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+export async function sendCompanyChatMessage(body: string): Promise<CompanyChatMessage> {
+  const response = await apiFetch("/api/erp/company-chat/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
   });
   if (!response.ok) throw new Error(await response.text());
   return response.json();

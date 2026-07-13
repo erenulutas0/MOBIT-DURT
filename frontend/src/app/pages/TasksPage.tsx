@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { FileText, Upload, MoreHorizontal, Filter, Download, Eye, Paperclip, Package, Pencil, X, Plus } from "lucide-react";
+import { FileText, Upload, MoreHorizontal, Filter, Download, Eye, Paperclip, Package, Pencil, X, Plus, CalendarDays, List, GitBranch, AlertTriangle } from "lucide-react";
 import {
   ApiDocument,
   ERPSession,
+  addERPTaskDependency,
   createERPTask,
   deleteERPTaskDocument,
   fileType,
   formatBytes,
   getERPTaskDocumentBlob,
+  removeERPTaskDependency,
   requestERPTaskCompletion,
   updateERPTaskDetails,
   updateERPTaskStatus,
@@ -15,11 +17,21 @@ import {
 } from "../api";
 import type { LiveData } from "../lib/types";
 import { isAdmin, userTaskIds, formatDateShort, relativeTime, taskLabel, getAssignee } from "../lib/helpers";
+import { buildTaskAgenda } from "../lib/taskCalendar";
+import {
+  dependencyCandidates,
+  openPredecessorsOf,
+  predecessorsOf,
+  subtaskProgress,
+  subtasksOf,
+  successorsOf,
+} from "../lib/taskRelations";
 import { Badge } from "../components/Badge";
 
 // ─── TASKS ────────────────────────────────────────────────────────────────────
 export function TasksPage({ live, session }: { live: LiveData; session: ERPSession }) {
   const [statusFilter, setStatusFilter] = useState("Tümü");
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", assigneeUserId: "", priority: "normal", deadlineAt: "" });
   const [formError, setFormError] = useState("");
@@ -30,6 +42,10 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
   const [editForm, setEditForm] = useState({ title: "", description: "", priority: "normal", deadlineAt: "", clearDeadline: false });
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
+  const [formParentTaskId, setFormParentTaskId] = useState<number | null>(null);
+  const [depPickerId, setDepPickerId] = useState("");
+  const [depBusy, setDepBusy] = useState(false);
+  const [depError, setDepError] = useState("");
 
   const isoToLocalInput = (iso: string | null | undefined) => {
     if (!iso) return "";
@@ -73,6 +89,25 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
       ? live.documents.find((item) => item.id === document.document_id) || null
       : null)
     .filter((document): document is ApiDocument => Boolean(document));
+  const taskDependencies = overview?.task_dependencies || [];
+  const selectedParentTask = selectedTask?.parent_task_id
+    ? visibleTasks.find((task) => task.id === selectedTask.parent_task_id) || null
+    : null;
+  const selectedSubtasks = selectedTask ? subtasksOf(visibleTasks, selectedTask.id) : [];
+  const selectedSubtaskCounts = selectedTask ? subtaskProgress(visibleTasks, selectedTask.id) : { done: 0, total: 0 };
+  const selectedPredecessors = selectedTask ? predecessorsOf(visibleTasks, taskDependencies, selectedTask.id) : [];
+  const selectedOpenPredecessors = selectedTask ? openPredecessorsOf(visibleTasks, taskDependencies, selectedTask.id) : [];
+  const selectedSuccessors = selectedTask ? successorsOf(visibleTasks, taskDependencies, selectedTask.id) : [];
+  const dependencyPickerCandidates = selectedTask && isAdmin(session)
+    ? dependencyCandidates(visibleTasks, taskDependencies, selectedTask.id)
+    : [];
+  const selectTask = (taskId: number) => {
+    setSelectedTaskId(taskId);
+    setDocumentError("");
+    setEditMode(false);
+    setDepError("");
+    setDepPickerId("");
+  };
   const openTaskDocument = async (documentId: number) => {
     setDocumentError("");
     const preview = window.open("about:blank", "_blank");
@@ -115,6 +150,20 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center rounded border border-border overflow-hidden">
+            <button
+              onClick={() => setView("list")}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors ${view === "list" ? "bg-teal-600 text-white" : "bg-white text-muted-foreground hover:bg-slate-50"}`}
+            >
+              <List className="w-3.5 h-3.5" /> Liste
+            </button>
+            <button
+              onClick={() => setView("calendar")}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors ${view === "calendar" ? "bg-teal-600 text-white" : "bg-white text-muted-foreground hover:bg-slate-50"}`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" /> Takvim
+            </button>
+          </div>
           <button className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-border text-xs px-3 py-1.5 rounded">
             <Filter className="w-3.5 h-3.5" /> Filtrele
           </button>
@@ -136,8 +185,10 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
                 assignee_team_ids: [],
                 priority: form.priority,
                 deadline_at: form.deadlineAt ? new Date(form.deadlineAt).toISOString() : null,
+                parent_task_id: formParentTaskId,
               });
               setForm({ title: "", description: "", assigneeUserId: "", priority: "normal", deadlineAt: "" });
+              setFormParentTaskId(null);
               setShowForm(false);
               live.refresh();
             } catch (error) {
@@ -146,6 +197,17 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
           }}
           className="grid grid-cols-[1fr_220px_160px_200px_auto] gap-2 bg-white border border-border rounded p-3"
         >
+          {formParentTaskId && (
+            <div className="col-span-full flex items-center gap-2 rounded border border-teal-200 bg-teal-50 px-3 py-2 text-[11px] text-teal-800">
+              <span className="font-semibold uppercase tracking-wide">Alt görev</span>
+              <span className="min-w-0 flex-1 truncate">
+                Ana görev: #{formParentTaskId} {visibleTasks.find((task) => task.id === formParentTaskId)?.title || ""}
+              </span>
+              <button type="button" onClick={() => setFormParentTaskId(null)} className="rounded p-0.5 hover:bg-white" title="Alt görev bağlantısını kaldır">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="text-xs bg-slate-50 border border-border rounded px-3 py-2 outline-none" placeholder="Görev başlığı" />
           <select value={form.assigneeUserId} onChange={(event) => setForm({ ...form, assigneeUserId: event.target.value })} className="text-xs bg-slate-50 border border-border rounded px-3 py-2 outline-none">
             <option value="">Atanan kişi yok</option>
@@ -163,6 +225,63 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
           {formError && <div className="col-span-full text-xs text-red-700 bg-red-50 border border-red-100 rounded px-3 py-2">{formError}</div>}
         </form>
       )}
+      {view === "calendar" ? (
+        <div className="space-y-4">
+          {(() => {
+            const agendaTasks = statusFilter === "Tümü"
+              ? visibleTasks
+              : visibleTasks.filter((task) => taskLabel(task.status) === statusFilter);
+            const agenda = buildTaskAgenda(agendaTasks);
+            if (agenda.length === 0) {
+              return (
+                <div className="rounded border border-dashed border-border bg-white px-4 py-10 text-center text-xs text-muted-foreground">
+                  Bu filtrede ajandaya girecek açık görev yok.
+                </div>
+              );
+            }
+            const timeLabel = (value: string | null) => {
+              if (!value) return "—";
+              const date = new Date(value);
+              if (Number.isNaN(date.getTime())) return "—";
+              return new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" }).format(date);
+            };
+            return agenda.map((section) => (
+              <div key={section.key}>
+                <div className="mb-1.5 flex items-center justify-between px-1">
+                  <p className={`text-[11px] font-semibold uppercase tracking-wide ${section.kind === "overdue" ? "text-red-600" : "text-muted-foreground"}`}>
+                    {section.label}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">{section.tasks.length} görev</span>
+                </div>
+                <div className={`divide-y divide-border rounded border bg-white ${section.kind === "overdue" ? "border-red-200" : "border-border"}`}>
+                  {section.tasks.map((task) => {
+                    const assignee = getAssignee(task, overview);
+                    return (
+                      <button
+                        key={task.id}
+                        onClick={() => selectTask(task.id)}
+                        className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 ${selectedTaskId === task.id ? "bg-teal-50/50" : ""}`}
+                      >
+                        <span className={`w-14 shrink-0 font-mono text-xs ${section.kind === "overdue" ? "text-red-600" : "text-muted-foreground"}`}>
+                          {section.kind === "overdue" ? formatDateShort(task.deadline_at) : section.kind === "none" ? "—" : timeLabel(task.deadline_at)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium text-foreground">{task.title}</span>
+                          <span className="block truncate text-[10px] text-muted-foreground">
+                            {assignee?.name || "Atanmamış"}
+                            {(task.priority === "urgent" || task.priority === "high") && ` · ${task.priority === "urgent" ? "Acil" : "Yüksek"}`}
+                          </span>
+                        </span>
+                        <Badge label={taskLabel(task.status)} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ));
+          })()}
+        </div>
+      ) : (
       <div className="bg-white border border-border rounded overflow-hidden">
         <table className="w-full text-xs">
           <thead>
@@ -182,11 +301,7 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
             ) : filtered.map((t) => (
               <tr
                 key={t.id}
-                onClick={() => {
-                  setSelectedTaskId(t.id);
-                  setDocumentError("");
-                  setEditMode(false);
-                }}
+                onClick={() => selectTask(t.id)}
                 className={`hover:bg-slate-50 transition-colors cursor-pointer ${
                   selectedTaskId === t.id ? "bg-teal-50/50" : ""
                 }`}
@@ -244,6 +359,7 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
           </tbody>
         </table>
       </div>
+      )}
       {selectedTask && (
         <aside className="fixed right-0 top-12 bottom-0 z-30 flex w-[420px] flex-col border-l border-border bg-white shadow-xl">
           <div className="flex items-start justify-between border-b border-border bg-slate-50 px-4 py-3">
@@ -396,6 +512,157 @@ export function TasksPage({ live, session }: { live: LiveData; session: ERPSessi
                       Vazgeç
                     </button>
                   </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <GitBranch className="h-3 w-3" /> İlişkiler
+                </p>
+                {selectedSubtaskCounts.total > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Alt görev: {selectedSubtaskCounts.done}/{selectedSubtaskCounts.total}
+                  </span>
+                )}
+              </div>
+              {selectedOpenPredecessors.length > 0 && (
+                <div className="mb-2 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                  <p className="text-[11px] text-amber-800">
+                    Bu görev {selectedOpenPredecessors.length} açık görevi bekliyor; onlar bitmeden tamamlanamaz.
+                  </p>
+                </div>
+              )}
+              {selectedParentTask && (
+                <button
+                  onClick={() => selectTask(selectedParentTask.id)}
+                  className="mb-2 flex w-full items-center gap-2 rounded border border-border px-3 py-2 text-left hover:bg-slate-50"
+                >
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Ana görev</span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                    #{selectedParentTask.id} {selectedParentTask.title}
+                  </span>
+                  <Badge label={taskLabel(selectedParentTask.status)} />
+                </button>
+              )}
+              {selectedSubtasks.length > 0 && (
+                <div className="mb-2 space-y-1.5">
+                  {selectedSubtasks.map((subtask) => (
+                    <button
+                      key={subtask.id}
+                      onClick={() => selectTask(subtask.id)}
+                      className="flex w-full items-center gap-2 rounded border border-border px-3 py-2 text-left hover:bg-slate-50"
+                    >
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Alt görev</span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                        #{subtask.id} {subtask.title}
+                      </span>
+                      <Badge label={taskLabel(subtask.status)} />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {selectedPredecessors.length > 0 && (
+                <div className="mb-2 space-y-1.5">
+                  {selectedPredecessors.map((predecessor) => (
+                    <div key={predecessor.id} className="flex items-center gap-2 rounded border border-border px-3 py-2">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Bekliyor</span>
+                      <button onClick={() => selectTask(predecessor.id)} className="min-w-0 flex-1 truncate text-left text-xs font-medium text-foreground hover:underline">
+                        #{predecessor.id} {predecessor.title}
+                      </button>
+                      <Badge label={taskLabel(predecessor.status)} />
+                      {isAdmin(session) && (
+                        <button
+                          disabled={depBusy}
+                          onClick={async () => {
+                            setDepError("");
+                            setDepBusy(true);
+                            try {
+                              await removeERPTaskDependency(selectedTask.id, predecessor.id);
+                              live.refresh();
+                            } catch (error) {
+                              setDepError(error instanceof Error ? error.message : "Bağımlılık kaldırılamadı");
+                            } finally {
+                              setDepBusy(false);
+                            }
+                          }}
+                          className="rounded p-0.5 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          title="Bağımlılığı kaldır"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selectedSuccessors.length > 0 && (
+                <div className="mb-2 space-y-1.5">
+                  {selectedSuccessors.map((successor) => (
+                    <button
+                      key={successor.id}
+                      onClick={() => selectTask(successor.id)}
+                      className="flex w-full items-center gap-2 rounded border border-border px-3 py-2 text-left hover:bg-slate-50"
+                    >
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">Bunu bekliyor</span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                        #{successor.id} {successor.title}
+                      </span>
+                      <Badge label={taskLabel(successor.status)} />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {isAdmin(session) && !["done", "cancelled"].includes(selectedTask.status) && (
+                <div className="space-y-2">
+                  {dependencyPickerCandidates.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={depPickerId}
+                        onChange={(event) => setDepPickerId(event.target.value)}
+                        className="min-w-0 flex-1 rounded border border-border bg-slate-50 px-2 py-1.5 text-[11px] text-foreground outline-none"
+                      >
+                        <option value="">Beklenecek görevi seç…</option>
+                        {dependencyPickerCandidates.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>#{candidate.id} {candidate.title}</option>
+                        ))}
+                      </select>
+                      <button
+                        disabled={!depPickerId || depBusy}
+                        onClick={async () => {
+                          setDepError("");
+                          setDepBusy(true);
+                          try {
+                            await addERPTaskDependency(selectedTask.id, Number(depPickerId));
+                            setDepPickerId("");
+                            live.refresh();
+                          } catch (error) {
+                            setDepError(error instanceof Error ? error.message : "Bağımlılık eklenemedi");
+                          } finally {
+                            setDepBusy(false);
+                          }
+                        }}
+                        className="rounded bg-teal-600 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-teal-700 disabled:opacity-50 shrink-0"
+                      >
+                        Bağımlılık ekle
+                      </button>
+                    </div>
+                  )}
+                  {!selectedTask.parent_task_id && (
+                    <button
+                      onClick={() => {
+                        setFormParentTaskId(selectedTask.id);
+                        setShowForm(true);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-border px-3 py-2 text-[11px] font-medium text-muted-foreground hover:bg-slate-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Alt görev oluştur
+                    </button>
+                  )}
+                  {depError && <p className="text-[10px] text-red-600">{depError}</p>}
                 </div>
               )}
             </div>

@@ -86,7 +86,9 @@ public class TenderDocumentSearchService {
                     .append(", websearch_to_tsquery('simple', ?)) as rank, ");
             params.add(criteria.query());
             sql.append("ts_headline('simple', coalesce(extracted_text, coalesce(caption, coalesce(original_filename, ''))), ");
-            sql.append("websearch_to_tsquery('simple', ?), 'MaxFragments=2, MinWords=5, MaxWords=18') as snippet ");
+            // StartSel/StopSel emptied so the snippet is plain text (no <b> highlight markup):
+            // consistent with the in-memory fallback and safe for the frontend to render as text.
+            sql.append("websearch_to_tsquery('simple', ?), 'StartSel=\"\", StopSel=\"\", MaxFragments=2, MinWords=5, MaxWords=18') as snippet ");
             params.add(criteria.query());
         } else {
             sql.append("0.0 as rank, ");

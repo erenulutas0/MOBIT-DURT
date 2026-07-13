@@ -20,22 +20,32 @@ import com.docsbot.ops.common.page.OffsetLimitPageable;
 import com.docsbot.ops.erp.domain.ErpTask;
 import com.docsbot.ops.erp.domain.ErpTaskAssignment;
 import com.docsbot.ops.erp.domain.ErpTaskComment;
+import com.docsbot.ops.erp.domain.ErpTaskDependency;
 import com.docsbot.ops.erp.domain.ErpWorkflowTemplate;
 import com.docsbot.ops.erp.domain.ErpWorkflowTemplateAssignment;
 import com.docsbot.ops.erp.domain.TaskPriority;
 import com.docsbot.ops.erp.domain.TaskStatus;
 import com.docsbot.ops.erp.infrastructure.ErpTaskAssignmentRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTaskCommentRepository;
+import com.docsbot.ops.erp.infrastructure.ErpTaskDependencyRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTaskRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTeamMemberRepository;
 
 @Service
 @Profile("postgres")
 class ErpTaskWorkflowService {
+    private static final Set<TaskStatus> OPEN_STATUSES = Set.of(
+            TaskStatus.TODO,
+            TaskStatus.IN_PROGRESS,
+            TaskStatus.BLOCKED,
+            TaskStatus.PENDING_APPROVAL,
+            TaskStatus.OVERDUE);
+
     private final ErpTaskRepository taskRepository;
     private final ErpTaskAssignmentRepository assignmentRepository;
     private final ErpTaskCommentRepository commentRepository;
     private final ErpTeamMemberRepository teamMemberRepository;
+    private final ErpTaskDependencyRepository dependencyRepository;
     private final NotificationService notificationService;
     private final ErpActivityRecorder activityRecorder;
     private final ErpTaskAccessService accessService;
@@ -46,6 +56,7 @@ class ErpTaskWorkflowService {
             ErpTaskAssignmentRepository assignmentRepository,
             ErpTaskCommentRepository commentRepository,
             ErpTeamMemberRepository teamMemberRepository,
+            ErpTaskDependencyRepository dependencyRepository,
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
             ErpTaskAccessService accessService
@@ -54,6 +65,7 @@ class ErpTaskWorkflowService {
         this.assignmentRepository = assignmentRepository;
         this.commentRepository = commentRepository;
         this.teamMemberRepository = teamMemberRepository;
+        this.dependencyRepository = dependencyRepository;
         this.notificationService = notificationService;
         this.activityRecorder = activityRecorder;
         this.accessService = accessService;
@@ -92,7 +104,8 @@ class ErpTaskWorkflowService {
             Collection<Long> assigneeTeamIds,
             Long responsibleUserId,
             String priority,
-            Instant deadlineAt
+            Instant deadlineAt,
+            Long parentTaskId
     ) {
         ErpValidation.requireAdmin(principal);
         String normalizedTitle = ErpValidation.normalizeTitle(title);
@@ -103,15 +116,29 @@ class ErpTaskWorkflowService {
         if (responsibleUserId != null && !userIds.contains(responsibleUserId)) {
             throw new ErpExceptions.BadRequest("Responsible user must be assigned to the task");
         }
+        if (parentTaskId != null) {
+            ErpTask parent = taskRepository.findById(parentTaskId)
+                    .orElseThrow(() -> new ErpExceptions.BadRequest("Parent task not found"));
+            if (!parent.isOpen()) {
+                throw new ErpExceptions.BadRequest("Subtasks cannot be added to a closed task");
+            }
+            if (parent.getParentTaskId() != null) {
+                throw new ErpExceptions.BadRequest("Subtasks cannot be nested more than one level");
+            }
+        }
 
         Instant now = clock.instant();
-        ErpTask task = taskRepository.saveAndFlush(ErpTask.create(
+        ErpTask newTask = ErpTask.create(
                 normalizedTitle,
                 ErpValidation.normalizeOptional(description),
                 null,
                 parsedPriority,
                 deadlineAt,
-                now));
+                now);
+        if (parentTaskId != null) {
+            newTask.assignParent(parentTaskId);
+        }
+        ErpTask task = taskRepository.saveAndFlush(newTask);
 
         List<ErpTaskAssignment> assignments = new ArrayList<>();
         userIds.forEach(userId -> assignments.add(ErpTaskAssignment.forUser(
@@ -157,8 +184,144 @@ class ErpTaskWorkflowService {
                 task.getId(),
                 "priority=" + task.getPriority().name().toLowerCase(Locale.ROOT)
                         + "; assignee_user_count=" + userIds.size()
-                        + "; assignee_team_count=" + teamIds.size());
+                        + "; assignee_team_count=" + teamIds.size()
+                        + (parentTaskId != null ? "; parent_task_id=" + parentTaskId : ""));
         return task;
+    }
+
+    @Transactional
+    ErpTask linkTaskDocumentGroup(ErpPrincipal principal, long taskId, long documentGroupId) {
+        ErpValidation.requireAdmin(principal);
+        ErpTask task = accessService.requireTask(taskId);
+        try {
+            task.linkDocumentGroup(documentGroupId);
+        } catch (IllegalStateException exception) {
+            throw new ErpExceptions.BadRequest(exception.getMessage());
+        }
+        activityRecorder.record(
+                principal,
+                "TASK_DOCUMENT_GROUP_LINKED",
+                "TASK",
+                String.valueOf(taskId),
+                taskId,
+                "document_group_id=" + documentGroupId);
+        return task;
+    }
+
+    @Transactional
+    ErpTaskDependency addTaskDependency(ErpPrincipal principal, long successorTaskId, long predecessorTaskId) {
+        ErpValidation.requireAdmin(principal);
+        if (successorTaskId == predecessorTaskId) {
+            throw new ErpExceptions.BadRequest("A task cannot depend on itself");
+        }
+        ErpTask successor = accessService.requireTask(successorTaskId);
+        accessService.requireTask(predecessorTaskId);
+        if (!successor.isOpen()) {
+            throw new ErpExceptions.BadRequest("Closed tasks cannot receive new dependencies");
+        }
+        if (dependencyRepository.existsByPredecessorTaskIdAndSuccessorTaskId(predecessorTaskId, successorTaskId)) {
+            throw new ErpExceptions.BadRequest("Dependency already exists");
+        }
+        requireNoCycle(predecessorTaskId, successorTaskId);
+        ErpTaskDependency dependency = dependencyRepository.save(
+                ErpTaskDependency.create(predecessorTaskId, successorTaskId, clock.instant()));
+        activityRecorder.record(
+                principal,
+                "TASK_DEPENDENCY_ADDED",
+                "TASK",
+                String.valueOf(successorTaskId),
+                successorTaskId,
+                "predecessor_task_id=" + predecessorTaskId);
+        return dependency;
+    }
+
+    @Transactional
+    void removeTaskDependency(ErpPrincipal principal, long successorTaskId, long predecessorTaskId) {
+        ErpValidation.requireAdmin(principal);
+        long deleted = dependencyRepository.deleteByPredecessorTaskIdAndSuccessorTaskId(
+                predecessorTaskId, successorTaskId);
+        if (deleted == 0) {
+            throw new ErpExceptions.NotFound("Dependency not found");
+        }
+        activityRecorder.record(
+                principal,
+                "TASK_DEPENDENCY_REMOVED",
+                "TASK",
+                String.valueOf(successorTaskId),
+                successorTaskId,
+                "predecessor_task_id=" + predecessorTaskId);
+    }
+
+    /**
+     * Adding edge predecessor→successor cycles iff the predecessor already
+     * depends (transitively) on the successor. Walk the predecessor's own
+     * dependency chain upward and reject when the successor is reachable.
+     */
+    private void requireNoCycle(long predecessorTaskId, long successorTaskId) {
+        Set<Long> seen = new LinkedHashSet<>();
+        List<Long> frontier = new ArrayList<>(List.of(predecessorTaskId));
+        while (!frontier.isEmpty()) {
+            Long current = frontier.remove(frontier.size() - 1);
+            for (ErpTaskDependency dependency : dependencyRepository.findAllBySuccessorTaskId(current)) {
+                Long upstream = dependency.getPredecessorTaskId();
+                if (upstream == successorTaskId) {
+                    throw new ErpExceptions.BadRequest("Dependency would create a cycle");
+                }
+                if (seen.add(upstream)) {
+                    frontier.add(upstream);
+                }
+            }
+        }
+    }
+
+    private void requireCompletable(ErpTask task) {
+        long taskId = task.getId();
+        if (taskRepository.existsByParentTaskIdAndStatusIn(taskId, OPEN_STATUSES)) {
+            throw new ErpExceptions.BadRequest("All subtasks must be completed before this task can be completed");
+        }
+        List<ErpTaskDependency> dependencies = dependencyRepository.findAllBySuccessorTaskId(taskId);
+        if (dependencies.isEmpty()) {
+            return;
+        }
+        List<Long> predecessorIds = dependencies.stream()
+                .map(ErpTaskDependency::getPredecessorTaskId)
+                .toList();
+        List<String> openPredecessors = taskRepository.findAllById(predecessorIds).stream()
+                .filter(ErpTask::isOpen)
+                .map(predecessor -> "#" + predecessor.getId() + " " + predecessor.getTitle())
+                .toList();
+        if (!openPredecessors.isEmpty()) {
+            throw new ErpExceptions.BadRequest(
+                    "Task is waiting on unfinished predecessor tasks: " + String.join(", ", openPredecessors));
+        }
+    }
+
+    private void notifyUnblockedSuccessors(ErpTask completedTask, Instant now) {
+        for (ErpTaskDependency dependency : dependencyRepository.findAllByPredecessorTaskId(completedTask.getId())) {
+            long successorId = dependency.getSuccessorTaskId();
+            ErpTask successor = taskRepository.findById(successorId).orElse(null);
+            if (successor == null || !successor.isOpen()) {
+                continue;
+            }
+            boolean stillWaiting = dependencyRepository.findAllBySuccessorTaskId(successorId).stream()
+                    .map(ErpTaskDependency::getPredecessorTaskId)
+                    .filter(predecessorId -> !predecessorId.equals(completedTask.getId()))
+                    .anyMatch(predecessorId -> taskRepository.findById(predecessorId)
+                            .map(ErpTask::isOpen)
+                            .orElse(false));
+            if (stillWaiting) {
+                continue;
+            }
+            notificationService.notifyUsers(
+                    accessService.assignedUserIds(successorId),
+                    "task_unblocked",
+                    "Predecessor task completed",
+                    successor.getTitle(),
+                    successorId,
+                    "NORMAL",
+                    "task_unblocked:" + successorId + ":" + completedTask.getId(),
+                    now);
+        }
     }
 
     @Transactional
@@ -461,6 +624,7 @@ class ErpTaskWorkflowService {
         if (!accessService.isAssigned(taskId, userId)) {
             throw new ErpExceptions.Forbidden("Task is not assigned to this employee");
         }
+        requireCompletable(task);
         try {
             task.requestCompletion();
         } catch (IllegalStateException exception) {
@@ -497,6 +661,7 @@ class ErpTaskWorkflowService {
     ErpTask approveTaskCompletion(ErpPrincipal principal, long taskId) {
         ErpValidation.requireAdmin(principal);
         ErpTask task = accessService.requireTask(taskId);
+        requireCompletable(task);
         Instant now = clock.instant();
         try {
             task.approveCompletion(now);
@@ -518,6 +683,7 @@ class ErpTaskWorkflowService {
                 "NORMAL",
                 null,
                 now);
+        notifyUnblockedSuccessors(task, now);
         activityRecorder.record(
                 principal,
                 "TASK_COMPLETION_APPROVED",

@@ -6,6 +6,7 @@ import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
 import { MessagesTab } from "./MessagesTab";
+import { TabErrorBoundary } from "./components/TabErrorBoundary";
 import {
   Avatar,
   Card,
@@ -26,7 +27,10 @@ import {
   clearStoredSession,
   createDocumentGroup,
   getBackendHealth,
+  addERPTaskDependency,
   createERPTask,
+  linkERPTaskDocumentGroup,
+  removeERPTaskDependency,
   createERPAccountRequest,
   registerMobilePushToken,
   getDocumentGroups,
@@ -61,6 +65,15 @@ import {
   tenderStatusLabel,
 } from "./utils/formatters";
 import { validateAccountRequestForm, validateLoginForm } from "./utils/authForms";
+import { buildTaskAgenda } from "./utils/taskCalendar";
+import {
+  dependencyCandidates,
+  openPredecessorsOf,
+  predecessorsOf,
+  subtaskProgress,
+  subtasksOf,
+  successorsOf,
+} from "./utils/taskRelations";
 import {
   companySlug,
   deadlineRemainingLabel,
@@ -93,7 +106,7 @@ import {
 type Tab = "home" | "erp" | "tender" | "messages" | "profile";
 type ERPScreen =
   | "overview" | "employees" | "employee-detail"
-  | "tasks" | "create-task" | "task-detail" | "edit-task" | "approvals" | "approval-detail"
+  | "tasks" | "calendar" | "create-task" | "task-detail" | "edit-task" | "approvals" | "approval-detail"
   | "account-requests" | "notifications";
 type TenderScreen =
   | "dashboard" | "documents" | "document-detail"
@@ -144,7 +157,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 };
 
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
-const APP_VERSION = "1.0.10";
+const APP_VERSION = "1.0.11";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -833,6 +846,9 @@ function ERPTab({
   const [editDeadlineLocal, setEditDeadlineLocal] = useState("");
   const [editClearDeadline, setEditClearDeadline] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
+  const [createTaskParentId, setCreateTaskParentId] = useState<number | null>(null);
+  const [dependencyPickerId, setDependencyPickerId] = useState("");
+  const [dependencyBusy, setDependencyBusy] = useState(false);
 
   const navTo = (s: ERPScreen) => setScreen(s);
   const back = () => navTo("overview");
@@ -955,6 +971,43 @@ function ERPTab({
     setTaskLeaderId(null);
     setCreateTaskGroup(false);
     setTaskGroupName("");
+    setCreateTaskParentId(null);
+  };
+
+  const startSubtaskCreation = (parentTask: ERPTask) => {
+    resetTaskForm();
+    setCreateTaskParentId(parentTask.id);
+    setError("");
+    navTo("create-task");
+  };
+
+  const submitDependencyAdd = async () => {
+    if (!selectedTaskId || !dependencyPickerId || dependencyBusy) return;
+    setDependencyBusy(true);
+    setError("");
+    try {
+      await addERPTaskDependency(selectedTaskId, Number(dependencyPickerId));
+      setDependencyPickerId("");
+      await refresh();
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Görev bağımlılığı eklenemedi.");
+    } finally {
+      setDependencyBusy(false);
+    }
+  };
+
+  const submitDependencyRemove = async (predecessorTaskId: number) => {
+    if (!selectedTaskId || dependencyBusy) return;
+    setDependencyBusy(true);
+    setError("");
+    try {
+      await removeERPTaskDependency(selectedTaskId, predecessorTaskId);
+      await refresh();
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Görev bağımlılığı kaldırılamadı.");
+    } finally {
+      setDependencyBusy(false);
+    }
   };
 
   const toggleTaskAssignee = (employeeId: number) => {
@@ -999,6 +1052,7 @@ function ERPTab({
         responsibleUserId: leader?.id || null,
         priority: taskPriority,
         deadlineAt: taskDeadlineIso,
+        parentTaskId: createTaskParentId,
       });
       let createdGroupId: number | null = null;
       if (createTaskGroup && taskAssigneeIds.length > 1) {
@@ -1015,6 +1069,11 @@ function ERPTab({
           "",
           taskInstructions.trim(),
         ].filter(Boolean).join("\n"));
+        try {
+          await linkERPTaskDocumentGroup(task.id, detail.group.id);
+        } catch (linkException) {
+          console.warn("Görev odaya bağlanamadı.", linkException);
+        }
       }
       await refresh();
       resetTaskForm();
@@ -1449,9 +1508,33 @@ function ERPTab({
 
   if (screen === "create-task" && isAdmin) return (
     <div className="flex flex-col min-h-full">
-      <TopBar title="Görev Ver" onBack={() => navTo("tasks")} />
+      <TopBar title={createTaskParentId ? "Alt Görev Ver" : "Görev Ver"} onBack={() => navTo("tasks")} />
       <div className="flex-1 px-4 py-4 space-y-4">
         <LoadingOrError />
+
+        {createTaskParentId && (() => {
+          const parent = visibleTasks.find(item => item.id === createTaskParentId) || null;
+          return (
+            <Card className="p-3 border-primary/30 bg-primary/10">
+              <div className="flex items-center gap-3">
+                <Link className="w-4 h-4 text-primary shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Ana görev</p>
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {parent ? `#${parent.id} ${parent.title}` : `#${createTaskParentId}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setCreateTaskParentId(null)}
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-muted shrink-0"
+                  title="Alt görev bağlantısını kaldır"
+                >
+                  <X className="w-3.5 h-3.5 text-foreground" />
+                </button>
+              </div>
+            </Card>
+          );
+        })()}
 
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -1623,11 +1706,20 @@ function ERPTab({
     return (
       <div className="flex flex-col min-h-full">
         <TopBar title={isAdmin ? "Görevler" : "Görevlerim"} onBack={back} actions={
-          isAdmin ? (
-            <button onClick={() => navTo("create-task")} className="w-9 h-9 flex items-center justify-center rounded-full bg-primary">
-              <Plus className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navTo("calendar")}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-muted text-foreground"
+              title="Görev takvimi"
+            >
+              <CalendarDays className="w-4 h-4" />
             </button>
-          ) : undefined
+            {isAdmin && (
+              <button onClick={() => navTo("create-task")} className="w-9 h-9 flex items-center justify-center rounded-full bg-primary">
+                <Plus className="w-4 h-4 text-white" />
+              </button>
+            )}
+          </div>
         } />
         <div className="overflow-x-auto px-4 py-3" style={{ scrollbarWidth: "none" }}>
           <div className="flex gap-2" style={{ width: "max-content" }}>
@@ -1650,6 +1742,66 @@ function ERPTab({
     );
   }
 
+  // TASK CALENDAR / AGENDA
+  if (screen === "calendar") {
+    const agenda = buildTaskAgenda(visibleTasks);
+    const timeLabel = (value: string | null) => {
+      if (!value) return "—";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "—";
+      return new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" }).format(date);
+    };
+    return (
+      <div className="flex flex-col min-h-full">
+        <TopBar title="Görev Takvimi" onBack={() => navTo("tasks")} />
+        <div className="flex-1 px-4 py-4 space-y-5">
+          <LoadingOrError />
+          {agenda.length === 0 && !loading && (
+            <EmptyState
+              icon={CalendarDays}
+              title="Ajanda boş"
+              desc={isAdmin ? "Açık görev yok. Yeni görev oluşturduğunuzda deadline'ına göre burada listelenir." : "Size atanmış açık görev yok."}
+            />
+          )}
+          {agenda.map(section => (
+            <div key={section.key}>
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-xs font-bold uppercase tracking-wide ${section.kind === "overdue" ? "text-red-400" : "text-muted-foreground"}`}>
+                  {section.label}
+                </p>
+                <span className="text-[11px] text-muted-foreground">{section.tasks.length} görev</span>
+              </div>
+              <div className="space-y-2">
+                {section.tasks.map(task => (
+                  <Card key={task.id} className={`p-3 ${section.kind === "overdue" ? "border-red-500/30" : ""}`} onPress={() => openTask(task.id)}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 shrink-0 text-center">
+                        <p className={`text-sm font-semibold ${section.kind === "overdue" ? "text-red-300" : "text-foreground"}`}>
+                          {section.kind === "none" ? "—" : timeLabel(task.deadline_at)}
+                        </p>
+                        {section.kind === "overdue" && (
+                          <p className="text-[10px] text-red-400/80">{formatDate(task.deadline_at)}</p>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {taskAssigneeName(task, overview)}
+                          {(task.priority === "urgent" || task.priority === "high") && ` · ${taskPriorityLabel(task.priority)}`}
+                        </p>
+                      </div>
+                      <Badge label={taskStatusLabel(task.status)} />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // TASK DETAIL
   if (screen === "task-detail") {
     const task = visibleTasks.find(item => item.id === selectedTaskId) || null;
@@ -1665,6 +1817,17 @@ function ERPTab({
     const comments = (overview?.help_messages || [])
       .filter(item => item.task_id === selectedTaskId)
       .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
+    const allTasks = overview?.tasks || [];
+    const taskDependencies = overview?.task_dependencies || [];
+    const parentTask = task?.parent_task_id
+      ? allTasks.find(item => item.id === task.parent_task_id) || null
+      : null;
+    const subtasks = task ? subtasksOf(allTasks, task.id) : [];
+    const subtaskCounts = task ? subtaskProgress(allTasks, task.id) : { done: 0, total: 0 };
+    const predecessors = task ? predecessorsOf(allTasks, taskDependencies, task.id) : [];
+    const openPredecessors = task ? openPredecessorsOf(allTasks, taskDependencies, task.id) : [];
+    const successors = task ? successorsOf(allTasks, taskDependencies, task.id) : [];
+    const pickerCandidates = task && isAdmin ? dependencyCandidates(allTasks, taskDependencies, task.id) : [];
 
     return (
       <div className="flex flex-col min-h-full">
@@ -1719,6 +1882,160 @@ function ERPTab({
                   );
                 })}
               </Card>
+
+              {openPredecessors.length > 0 && (
+                <Card className="p-3 border-amber-500/30 bg-amber-500/10">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <p className="text-xs text-amber-200/90">
+                      Bu görev {openPredecessors.length} açık görevi bekliyor; onlar tamamlanmadan bu görev tamamlanamaz.
+                    </p>
+                  </div>
+                </Card>
+              )}
+
+              {task.document_group_id && (
+                <Card className="p-3" onPress={() => onOpenDocumentRoom(task.document_group_id!, "chat")}>
+                  <div className="flex items-center gap-3">
+                    <MessageSquare className="w-4 h-4 text-primary shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Görev odası</p>
+                      <p className="text-sm font-medium text-foreground">Çalışma alanını aç</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </div>
+                </Card>
+              )}
+
+              {parentTask && (
+                <Card className="p-3" onPress={() => openTask(parentTask.id)}>
+                  <div className="flex items-center gap-3">
+                    <Link className="w-4 h-4 text-primary shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Ana görev</p>
+                      <p className="text-sm font-medium text-foreground truncate">#{parentTask.id} {parentTask.title}</p>
+                    </div>
+                    <Badge label={taskStatusLabel(parentTask.status)} />
+                  </div>
+                </Card>
+              )}
+
+              {(subtasks.length > 0 || (isAdmin && !task.parent_task_id && task.status !== "done" && task.status !== "cancelled")) && (
+                <Card className="p-4">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4 text-primary" />
+                      <h3 className="text-sm font-bold text-foreground">Alt Görevler</h3>
+                    </div>
+                    {subtaskCounts.total > 0 && (
+                      <span className="text-[10px] text-muted-foreground">{subtaskCounts.done}/{subtaskCounts.total} tamamlandı</span>
+                    )}
+                  </div>
+                  {subtasks.length === 0 ? (
+                    <p className="text-xs text-muted-foreground mb-3">Bu görevin alt görevi yok.</p>
+                  ) : (
+                    <div className="space-y-2 mb-3">
+                      {subtasks.map(subtask => (
+                        <button
+                          key={subtask.id}
+                          onClick={() => openTask(subtask.id)}
+                          className="w-full flex items-center gap-3 rounded-xl bg-muted/40 px-3 py-2.5 text-left"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">{subtask.title}</p>
+                            <p className="text-[10px] text-muted-foreground">{formatDate(subtask.deadline_at)}</p>
+                          </div>
+                          <Badge label={taskStatusLabel(subtask.status)} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {isAdmin && !task.parent_task_id && task.status !== "done" && task.status !== "cancelled" && (
+                    <button
+                      onClick={() => startSubtaskCreation(task)}
+                      className="w-full py-2.5 rounded-xl bg-muted text-xs font-semibold text-foreground flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Alt görev ekle
+                    </button>
+                  )}
+                </Card>
+              )}
+
+              {(predecessors.length > 0 || successors.length > 0 || (isAdmin && task.status !== "done" && task.status !== "cancelled")) && (
+                <Card className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <GitBranch className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-bold text-foreground">Bağımlılıklar</h3>
+                  </div>
+                  {predecessors.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Beklenen görevler</p>
+                      <div className="space-y-2">
+                        {predecessors.map(predecessor => (
+                          <div key={predecessor.id} className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2.5">
+                            <button onClick={() => openTask(predecessor.id)} className="min-w-0 flex-1 text-left">
+                              <p className="text-sm font-medium text-foreground truncate">#{predecessor.id} {predecessor.title}</p>
+                            </button>
+                            <Badge label={taskStatusLabel(predecessor.status)} />
+                            {isAdmin && (
+                              <button
+                                onClick={() => void submitDependencyRemove(predecessor.id)}
+                                disabled={dependencyBusy}
+                                className="w-7 h-7 flex items-center justify-center rounded-full bg-red-500/10 text-red-300 shrink-0 disabled:opacity-50"
+                                title="Bağımlılığı kaldır"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {successors.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Bu görevi bekleyenler</p>
+                      <div className="space-y-2">
+                        {successors.map(successor => (
+                          <button
+                            key={successor.id}
+                            onClick={() => openTask(successor.id)}
+                            className="w-full flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2.5 text-left"
+                          >
+                            <p className="min-w-0 flex-1 text-sm font-medium text-foreground truncate">#{successor.id} {successor.title}</p>
+                            <Badge label={taskStatusLabel(successor.status)} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {isAdmin && task.status !== "done" && task.status !== "cancelled" && (
+                    pickerCandidates.length === 0 && predecessors.length === 0 && successors.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Bağımlılık eklenebilecek başka açık görev yok.</p>
+                    ) : pickerCandidates.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={dependencyPickerId}
+                          onChange={event => setDependencyPickerId(event.target.value)}
+                          className="min-w-0 flex-1 bg-muted rounded-xl px-3 py-2.5 text-xs text-foreground outline-none"
+                        >
+                          <option value="">Beklenecek görevi seç…</option>
+                          {pickerCandidates.map(candidate => (
+                            <option key={candidate.id} value={candidate.id}>#{candidate.id} {candidate.title}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => void submitDependencyAdd()}
+                          disabled={!dependencyPickerId || dependencyBusy}
+                          className="px-3 py-2.5 rounded-xl bg-primary text-white text-xs font-semibold disabled:opacity-50 shrink-0"
+                        >
+                          Ekle
+                        </button>
+                      </div>
+                    )
+                  )}
+                </Card>
+              )}
 
               {assignedUsers.length > 0 && (
                 <Card className="p-4">
@@ -3481,11 +3798,13 @@ export default function App() {
               return (
                 <div key={t} className={`absolute inset-0 ${tab === t ? "flex flex-col min-h-0" : "hidden"}`}>
                   <div className={`tab-enter flex-1 min-h-0 ${t === "messages" ? "overflow-hidden" : "overflow-y-auto"}`}>
-                    {t === "home"     && <HomeTab     user={authUser} setTab={setTab} />}
-                    {t === "erp"      && <ERPTab      user={authUser} onOpenDirectMessage={openDirectMessageFromNotification} onOpenDocumentRoom={openDocumentRoomFromNotification} openRequest={erpOpenRequest} />}
-                    {t === "tender"   && <TenderTab   user={authUser} />}
-                    {t === "messages" && <MessagesTab user={authUser} openRequest={directMessageOpenRequest} roomOpenRequest={roomOpenRequest} profilePhotoVersion={profilePhotoVersion} />}
-                    {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} />}
+                    <TabErrorBoundary tabKey={tab}>
+                      {t === "home"     && <HomeTab     user={authUser} setTab={setTab} />}
+                      {t === "erp"      && <ERPTab      user={authUser} onOpenDirectMessage={openDirectMessageFromNotification} onOpenDocumentRoom={openDocumentRoomFromNotification} openRequest={erpOpenRequest} />}
+                      {t === "tender"   && <TenderTab   user={authUser} />}
+                      {t === "messages" && <MessagesTab user={authUser} openRequest={directMessageOpenRequest} roomOpenRequest={roomOpenRequest} profilePhotoVersion={profilePhotoVersion} />}
+                      {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} />}
+                    </TabErrorBoundary>
                   </div>
                 </div>
               );

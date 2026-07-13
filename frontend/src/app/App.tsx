@@ -13,6 +13,7 @@ const EmployeesPage = lazy(() => import("./pages/EmployeesPage").then((m) => ({ 
 const TasksPage = lazy(() => import("./pages/TasksPage").then((m) => ({ default: m.TasksPage })));
 const ApprovalsPage = lazy(() => import("./pages/ApprovalsPage").then((m) => ({ default: m.ApprovalsPage })));
 const MessagesPage = lazy(() => import("./pages/MessagesPage").then((m) => ({ default: m.MessagesPage })));
+const CompanyChatPage = lazy(() => import("./pages/CompanyChatPage").then((m) => ({ default: m.CompanyChatPage })));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
 const AuthGate = lazy(() => import("./pages/AuthGate").then((m) => ({ default: m.AuthGate })));
 const AccountRequestsPage = lazy(() => import("./pages/AccountRequestsPage").then((m) => ({ default: m.AccountRequestsPage })));
@@ -35,7 +36,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [session, setSession] = useState<ERPSession | null>(() => readStoredSession());
   const live = useLiveData(session);
-  const userAllowedPages: Page[] = ["home", "erp-overview", "employees", "tasks", "messages", "notifications"];
+  const userAllowedPages: Page[] = ["home", "erp-overview", "employees", "tasks", "messages", "company-chat", "notifications"];
   const navigate = (next: Page) => {
     if (next !== "employees") setEmployeeFocus(null);
     setPage(next);
@@ -102,6 +103,7 @@ export default function App() {
           {page === "tasks" && <TasksPage live={live} session={session} />}
           {page === "approvals" && isAdmin(session) && <ApprovalsPage live={live} />}
           {page === "messages" && <MessagesPage live={live} session={session} />}
+          {page === "company-chat" && <CompanyChatPage session={session} />}
           {page === "notifications" && <NotificationsPage live={live} />}
           {page === "account-requests" && isAdmin(session) && <AccountRequestsPage live={live} />}
           {page === "tender-dashboard" && isAdmin(session) && <TenderDashboardPage setPage={navigate} live={live} />}

@@ -24,4 +24,15 @@ public interface ErpRefreshTokenRepository extends JpaRepository<ErpRefreshToken
     int revokeActiveForSubject(
             @Param("subject") String subject,
             @Param("revokedAt") Instant revokedAt);
+
+    @Modifying
+    @Query("""
+            update ErpRefreshToken token
+               set token.revokedAt = :revokedAt
+             where token.userId = :userId
+               and token.revokedAt is null
+            """)
+    int revokeActiveForUser(
+            @Param("userId") long userId,
+            @Param("revokedAt") Instant revokedAt);
 }

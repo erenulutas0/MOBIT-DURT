@@ -87,7 +87,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     properties.getAccountRequestLimit(),
                     properties.getAccountRequestWindowSeconds());
         }
-        if (path.equals("/erp/messages") || path.matches("^/document-groups/\\d+/messages$")) {
+        if (path.equals("/erp/messages")
+                || path.equals("/erp/company-chat/messages")
+                || path.matches("^/document-groups/\\d+/messages$")) {
             return Rule.of("message", properties.getMessageLimit(), properties.getMessageWindowSeconds());
         }
         if (path.equals("/dashboard/upload")
@@ -100,15 +102,30 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String clientKey(HttpServletRequest request) {
+        String remoteAddr = request.getRemoteAddr() == null ? "unknown" : request.getRemoteAddr();
+        int hops = properties.getTrustedProxyHops();
+        if (hops <= 0) {
+            // X-Forwarded-For is client-controlled; without a trusted proxy in front, honoring
+            // it would let a client rotate the header to get a fresh bucket every request and
+            // bypass rate limiting entirely. Use the direct socket address instead.
+            return remoteAddr;
+        }
+        // Behind `hops` trusted proxies, each appends the address it received the request from,
+        // so the real client is the Nth-from-the-right entry. Anything the client prepended sits
+        // further left and is ignored. Fall back to the socket address if the chain is shorter
+        // than expected (misconfiguration or a request that skipped the proxy).
         String forwardedFor = request.getHeader("X-Forwarded-For");
         if (forwardedFor != null && !forwardedFor.isBlank()) {
-            return forwardedFor.split(",")[0].trim();
+            String[] chain = forwardedFor.split(",");
+            int index = chain.length - hops;
+            if (index >= 0 && index < chain.length) {
+                String candidate = chain[index].trim();
+                if (!candidate.isBlank()) {
+                    return candidate;
+                }
+            }
         }
-        String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp.trim();
-        }
-        return request.getRemoteAddr() == null ? "unknown" : request.getRemoteAddr();
+        return remoteAddr;
     }
 
     private void cleanupOccasionally(long now) {

@@ -83,7 +83,53 @@ describe("knowledge graph veri üretimi", () => {
     expect(graph.nodes.some(item => item.cat === "rooms" && item.label === "BEDAS Operasyon")).toBe(true);
     expect(graph.nodes.some(item => item.cat === "notes" && item.label === "BEDAS Notu")).toBe(true);
     expect(graph.edges.some(item => item.s === "ERP_CORE" && item.t.startsWith("COMPANY_"))).toBe(true);
-    expect(graph.edges.some(item => item.s === "VAULT" && item.t.startsWith("NOTE_"))).toBe(true);
+    // The note's "BEDAS" tag matches the company's frontmatter org slug, so it links to the
+    // company node (a real, tag-driven edge) rather than the generic VAULT fallback.
+    expect(graph.edges.some(item => item.s.startsWith("COMPANY_") && item.t.startsWith("NOTE_"))).toBe(true);
+  });
+
+  it("bir notu frontmatter etiketinden şirkete bağlar, eşleşme yoksa VAULT'a düşer", () => {
+    const graph = buildKnowledgeGraphData({
+      tenders: [tender()],
+      documents: [document()],
+      documentGroups: [],
+      vaultNotes: [
+        note({ name: "BEDAS Notu", tags: ["BEDAS", "teklif"] }),
+        note({ name: "İlgisiz Not", path: "2026/other.md", tags: ["genel"] }),
+      ],
+    });
+
+    const companyId = graph.nodes.find(item => item.cat === "tender" && item.label === "BEDAS")?.id;
+    const taggedNoteId = graph.nodes.find(item => item.label === "BEDAS Notu")?.id;
+    const untaggedNoteId = graph.nodes.find(item => item.label === "İlgisiz Not")?.id;
+
+    expect(graph.edges.some(item => item.s === companyId && item.t === taggedNoteId)).toBe(true);
+    expect(graph.edges.some(item => item.s === "VAULT" && item.t === untaggedNoteId)).toBe(true);
+    expect(graph.edges.some(item => item.s === companyId && item.t === untaggedNoteId)).toBe(false);
+  });
+
+  it("aynı ihaledeki belgeleri birbirine bağlar, farklı belge tipleri daha güçlü kenar alır", () => {
+    const graph = buildKnowledgeGraphData({
+      tenders: [tender()],
+      documents: [
+        document({ id: 21, tender_id: "BEDAS-2026-001", document_type: "technical_spec", original_filename: "spec.pdf" }),
+        document({ id: 22, tender_id: "BEDAS-2026-001", document_type: "contract", original_filename: "contract.pdf" }),
+        document({ id: 23, tender_id: "BEDAS-2026-002", document_type: "technical_spec", original_filename: "other-tender.pdf" }),
+      ],
+      documentGroups: [],
+      vaultNotes: [],
+    });
+
+    const specId = graph.nodes.find(item => item.label === "spec.pdf")?.id;
+    const contractId = graph.nodes.find(item => item.label === "contract.pdf")?.id;
+    const otherTenderId = graph.nodes.find(item => item.label === "other-tender.pdf")?.id;
+
+    const crossTypeEdge = graph.edges.find(item => item.s === specId && item.t === contractId);
+    expect(crossTypeEdge?.str).toBe("med");
+    // A document from a different tender never gets a doc-doc edge to this one.
+    expect(graph.edges.some(item =>
+      (item.s === specId && item.t === otherTenderId) || (item.s === otherTenderId && item.t === specId)
+    )).toBe(false);
   });
 
   it("canlı veri yoksa fallback grafiği korur", () => {

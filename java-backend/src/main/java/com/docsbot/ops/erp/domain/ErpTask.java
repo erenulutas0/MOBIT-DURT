@@ -45,6 +45,12 @@ public class ErpTask {
     @Column(name = "workflow_template_id")
     private Long workflowTemplateId;
 
+    @Column(name = "parent_task_id")
+    private Long parentTaskId;
+
+    @Column(name = "document_group_id")
+    private Long documentGroupId;
+
     @Column(name = "scheduled_for")
     private Instant scheduledFor;
 
@@ -90,6 +96,26 @@ public class ErpTask {
         task.workflowTemplateId = workflowTemplateId;
         task.scheduledFor = scheduledFor;
         return task;
+    }
+
+    /** Set at creation time only: subtasks are limited to one level of nesting. */
+    public void assignParent(long parentTaskId) {
+        if (this.parentTaskId != null) {
+            throw new IllegalStateException("Task already has a parent");
+        }
+        this.parentTaskId = parentTaskId;
+    }
+
+    public boolean isOpen() {
+        return status != TaskStatus.DONE && status != TaskStatus.CANCELLED;
+    }
+
+    /** Links the optional collaboration room created alongside this task. Set once, at or shortly after creation. */
+    public void linkDocumentGroup(long documentGroupId) {
+        if (this.documentGroupId != null) {
+            throw new IllegalStateException("Task already has a linked document room");
+        }
+        this.documentGroupId = documentGroupId;
     }
 
     public void edit(String title, String description, TaskPriority priority, Instant deadlineAt, Instant now) {
@@ -188,6 +214,14 @@ public class ErpTask {
 
     public Long getWorkflowTemplateId() {
         return workflowTemplateId;
+    }
+
+    public Long getParentTaskId() {
+        return parentTaskId;
+    }
+
+    public Long getDocumentGroupId() {
+        return documentGroupId;
     }
 
     public Instant getScheduledFor() {

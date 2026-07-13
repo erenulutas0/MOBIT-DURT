@@ -115,7 +115,8 @@ public class ErpService {
             Collection<Long> assigneeTeamIds,
             Long responsibleUserId,
             String priority,
-            Instant deadlineAt
+            Instant deadlineAt,
+            Long parentTaskId
     ) {
         return taskService.createTask(
                 principal,
@@ -125,7 +126,24 @@ public class ErpService {
                 assigneeTeamIds,
                 responsibleUserId,
                 priority,
-                deadlineAt);
+                deadlineAt,
+                parentTaskId);
+    }
+
+    public com.docsbot.ops.erp.domain.ErpTaskDependency addTaskDependency(
+            ErpPrincipal principal,
+            long successorTaskId,
+            long predecessorTaskId
+    ) {
+        return taskService.addTaskDependency(principal, successorTaskId, predecessorTaskId);
+    }
+
+    public ErpTask linkTaskDocumentGroup(ErpPrincipal principal, long taskId, long documentGroupId) {
+        return taskService.linkTaskDocumentGroup(principal, taskId, documentGroupId);
+    }
+
+    public void removeTaskDependency(ErpPrincipal principal, long successorTaskId, long predecessorTaskId) {
+        taskService.removeTaskDependency(principal, successorTaskId, predecessorTaskId);
     }
 
     public ErpTask updateTaskStatus(ErpPrincipal principal, long taskId, String status) {
@@ -207,7 +225,8 @@ public class ErpService {
             String mediaMimeType,
             String mediaData,
             Integer mediaDurationMs,
-            String clientMessageId
+            String clientMessageId,
+            Long replyToMessageId
     ) {
         return directMessageService.sendMessage(
                 principal,
@@ -217,7 +236,8 @@ public class ErpService {
                 mediaMimeType,
                 mediaData,
                 mediaDurationMs,
-                clientMessageId);
+                clientMessageId,
+                replyToMessageId);
     }
 
     public ErpDirectMessage markDirectMessageRead(ErpPrincipal principal, long messageId) {

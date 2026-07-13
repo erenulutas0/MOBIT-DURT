@@ -10,6 +10,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.docsbot.ops.auth.application.RefreshTokenService;
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.domain.UserRole;
 import com.docsbot.ops.auth.domain.UserStatus;
@@ -23,18 +24,21 @@ class ErpUserService {
     private final NotificationService notificationService;
     private final ErpActivityRecorder activityRecorder;
     private final ErpTaskAccessService accessService;
+    private final RefreshTokenService refreshTokenService;
     private final Clock clock;
 
     ErpUserService(
             ErpUserRepository userRepository,
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
-            ErpTaskAccessService accessService
+            ErpTaskAccessService accessService,
+            RefreshTokenService refreshTokenService
     ) {
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.activityRecorder = activityRecorder;
         this.accessService = accessService;
+        this.refreshTokenService = refreshTokenService;
         this.clock = Clock.systemUTC();
     }
 
@@ -93,6 +97,7 @@ class ErpUserService {
         ErpUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new ErpExceptions.NotFound("User not found"));
         notificationService.deleteAllForUser(userId);
+        refreshTokenService.revokeAllForUser(userId);
         userRepository.delete(user);
         userRepository.flush();
         activityRecorder.record(

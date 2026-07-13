@@ -14,8 +14,11 @@ import {
   getDocumentGroupFileVersionBlob,
   getDocumentGroupFileVersions,
   getDocumentGroupMessages,
+  getCompanyChatMessages,
   getDocumentGroups,
   getERPDirectMessages,
+  searchCommunication,
+  sendCompanyChatMessage,
   getAuthenticatedMediaBlob,
   getERPUsers,
   getTendersPage,
@@ -29,9 +32,11 @@ import {
   updateDocumentGroup,
   sendDocumentGroupMessage,
   uploadDocumentGroupFile,
+  uploadDocumentGroupFileWithProgress,
 } from "./api";
-import type { DocumentGroupDetail, DocumentGroupDocument, DocumentGroupDocumentVersion, DocumentGroupMember, DocumentGroupMessage, DocumentGroupSummary, ERPDirectMessage, ERPUser, Tender } from "./api";
+import type { CommunicationSearchResult, CompanyChatMessage, DocumentGroupDetail, DocumentGroupDocument, DocumentGroupDocumentVersion, DocumentGroupMember, DocumentGroupMessage, DocumentGroupSummary, ERPDirectMessage, ERPUser, Tender } from "./api";
 import { dayKey, formatDate, formatDayLabel, formatVoiceDuration } from "./utils/formatters";
+import { reconcileNewestWindow } from "./utils/messageReconcile";
 import {
   forwardedBodyText,
   forwardedDocumentName,
@@ -45,6 +50,7 @@ import {
   EmptyState,
   PdfCanvasPreview,
   SectionHeader,
+  Skeleton,
   TopBar,
   blobToDataUrl,
   isPdfFile,
@@ -55,10 +61,10 @@ import {
   Users, MessageSquare, UserPlus, FileText, Send, FolderOpen, Upload,
   ChevronRight, Search, MoreHorizontal, Download, Eye, Paperclip,
   X, Plus, Clock, Share2, Mic, Square, Image as ImageIcon,
-  Loader2, RefreshCw, ChevronUp,
+  Loader2, RefreshCw, ChevronUp, Megaphone,
 } from "lucide-react";
 
-type MsgScreen = "inbox" | "thread" | "room-thread";
+type MsgScreen = "inbox" | "thread" | "room-thread" | "company-chat";
 
 type RecordingTarget = "direct" | "room";
 type RoomDeleteTarget =
@@ -68,6 +74,7 @@ type RoomActionTarget = RoomDeleteTarget & { action: "options" | "delete" | "for
 type DirectActionTarget = { action: "options" | "delete" | "forward"; messageId: number; title: string };
 type MessageWithMedia = ERPDirectMessage | DocumentGroupMessage;
 type PendingMessageStatus = "sending" | "failed";
+type ReplyTarget = { kind: "direct" | "room"; messageId: number; authorLabel: string; preview: string };
 type PendingDirectMessage = {
   local_id: string;
   client_message_id: string;
@@ -77,6 +84,7 @@ type PendingDirectMessage = {
   created_at: string;
   status: PendingMessageStatus;
   error?: string;
+  reply_to_message_id?: number | null;
 };
 type PendingRoomMessage = {
   local_id: string;
@@ -87,6 +95,7 @@ type PendingRoomMessage = {
   created_at: string;
   status: PendingMessageStatus;
   error?: string;
+  reply_to_message_id?: number | null;
 };
 
 const MESSAGE_REFRESH_INTERVAL_MS = 8_000;
@@ -106,14 +115,107 @@ function DaySeparator({ value }: { value: string | null }) {
   );
 }
 
-function BusyBanner({ message }: { message: string }) {
+const PULL_TO_REFRESH_THRESHOLD = 56;
+
+/** Touch-driven pull-to-refresh for a scrollable container; only engages when the container is already scrolled to top. */
+function usePullToRefresh(onRefresh: () => Promise<void> | void) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const startYRef = useRef<number | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (refreshing) return;
+    startYRef.current = (containerRef.current?.scrollTop ?? 0) <= 0 ? event.touches[0].clientY : null;
+  };
+
+  const onTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (startYRef.current === null || refreshing) return;
+    const delta = event.touches[0].clientY - startYRef.current;
+    if (delta > 0 && (containerRef.current?.scrollTop ?? 0) <= 0) {
+      setPullDistance(Math.min(delta * 0.5, 90));
+    } else {
+      setPullDistance(0);
+    }
+  };
+
+  const onTouchEnd = async () => {
+    const shouldRefresh = pullDistance >= PULL_TO_REFRESH_THRESHOLD;
+    startYRef.current = null;
+    setPullDistance(0);
+    if (shouldRefresh) {
+      setRefreshing(true);
+      try {
+        await onRefresh();
+      } finally {
+        setRefreshing(false);
+      }
+    }
+  };
+
+  return { containerRef, pullDistance, refreshing, onTouchStart, onTouchMove, onTouchEnd };
+}
+
+function PullToRefreshIndicator({ pullDistance, refreshing }: { pullDistance: number; refreshing: boolean }) {
+  if (pullDistance <= 0 && !refreshing) return null;
+  return (
+    <div
+      className="flex items-center justify-center overflow-hidden transition-[height]"
+      style={{ height: refreshing ? 40 : Math.min(pullDistance, 60) }}
+    >
+      <RefreshCw
+        className={`w-4 h-4 text-primary ${refreshing ? "animate-spin" : ""}`}
+        style={refreshing ? undefined : { opacity: Math.min(pullDistance / PULL_TO_REFRESH_THRESHOLD, 1), transform: `rotate(${pullDistance * 3}deg)` }}
+      />
+    </div>
+  );
+}
+
+function ConversationListSkeleton() {
+  return (
+    <div className="px-4 py-2 space-y-1">
+      {[0, 1, 2, 3, 4, 5].map(index => (
+        <div key={index} className="flex items-center gap-3 py-2.5">
+          <Skeleton className="w-11 h-11 rounded-full shrink-0" />
+          <div className="flex-1 min-w-0 space-y-2">
+            <Skeleton className="h-3 w-2/5" />
+            <Skeleton className="h-2.5 w-4/5" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessageThreadSkeleton() {
+  const widths = ["w-40", "w-56", "w-32", "w-48", "w-28"];
+  return (
+    <div className="flex-1 px-4 py-4 space-y-3">
+      {widths.map((width, index) => (
+        <div key={index} className={`flex ${index % 2 === 0 ? "justify-start" : "justify-end"}`}>
+          <Skeleton className={`h-10 rounded-2xl ${width}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BusyBanner({ message, progressPercent }: { message: string; progressPercent?: number | null }) {
   return (
     <div className="px-4 pt-3 shrink-0">
       <Card className="p-3 border-primary/30 bg-primary/10">
         <div className="flex items-center gap-2">
           <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
-          <p className="text-xs font-semibold text-primary">{message}</p>
+          <p className="text-xs font-semibold text-primary flex-1">{message}</p>
+          {typeof progressPercent === "number" && (
+            <span className="text-xs font-bold text-primary shrink-0">%{progressPercent}</span>
+          )}
         </div>
+        {typeof progressPercent === "number" && (
+          <div className="mt-2 h-1.5 rounded-full bg-primary/15 overflow-hidden">
+            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progressPercent}%` }} />
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -269,6 +371,13 @@ function MessagesTab({
   const [screen, setScreen] = useState<MsgScreen>("inbox");
   const [activeTab, setActiveTab] = useState<"all" | "rooms" | "people">("all");
   const [communicationSearch, setCommunicationSearch] = useState("");
+  const [contentSearchResults, setContentSearchResults] = useState<CommunicationSearchResult[]>([]);
+  const [contentSearchLoading, setContentSearchLoading] = useState(false);
+  const [companyChatMessages, setCompanyChatMessages] = useState<CompanyChatMessage[]>([]);
+  const [companyChatLoading, setCompanyChatLoading] = useState(false);
+  const [companyChatError, setCompanyChatError] = useState("");
+  const [companyChatText, setCompanyChatText] = useState("");
+  const [companyChatSending, setCompanyChatSending] = useState(false);
   const [threadSearch, setThreadSearch] = useState("");
   const [msgText, setMsgText] = useState("");
   const [directMessages, setDirectMessages] = useState<ERPDirectMessage[]>([]);
@@ -293,6 +402,7 @@ function MessagesTab({
   const [directMessagesLoadingOlder, setDirectMessagesLoadingOlder] = useState(false);
   const [roomMessagesLoadingOlder, setRoomMessagesLoadingOlder] = useState(false);
   const [roomBusyMessage, setRoomBusyMessage] = useState("");
+  const [uploadProgressPercent, setUploadProgressPercent] = useState<number | null>(null);
   const [memberLoading, setMemberLoading] = useState(false);
   const [visibilityLoadingUserId, setVisibilityLoadingUserId] = useState<number | null>(null);
   const [roomError, setRoomError] = useState("");
@@ -316,6 +426,9 @@ function MessagesTab({
   const [documentVersionsLoading, setDocumentVersionsLoading] = useState(false);
   const [directActionTarget, setDirectActionTarget] = useState<DirectActionTarget | null>(null);
   const [roomActionTarget, setRoomActionTarget] = useState<RoomActionTarget | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
   const recordStartedAtRef = useRef(0);
@@ -444,17 +557,27 @@ function MessagesTab({
     )),
     [threadSearchTerm, visibleDirectMessages]);
 
+  // Server messages already delivered (matched by client_message_id) so a pending bubble
+  // isn't shown twice if a poll/SSE refresh lands the server copy before the POST resolves.
+  const deliveredClientMessageIds = useMemo(
+    () => new Set(sortedDirectMessages.map(message => message.client_message_id).filter(Boolean)),
+    [sortedDirectMessages]);
   const pendingDirectVisible = useMemo(() => pendingDirectMessages.filter(message => {
+    if (deliveredClientMessageIds.has(message.client_message_id)) return false;
     if (selectedDirectUser) return message.recipient_user_id === selectedDirectUser.id;
     return message.recipient_user_id === null;
-  }).sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()), [pendingDirectMessages, selectedDirectUser]);
+  }).sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()), [pendingDirectMessages, selectedDirectUser, deliveredClientMessageIds]);
   const filteredPendingDirectVisible = useMemo(() =>
     pendingDirectVisible.filter(message => threadMatches(message.body, "gönderilemedi gönderiliyor bekliyor")),
     [pendingDirectVisible, threadSearchTerm]);
 
+  const deliveredRoomClientMessageIds = useMemo(
+    () => new Set(roomMessages.map(message => message.client_message_id).filter(Boolean)),
+    [roomMessages]);
   const pendingRoomVisible = useMemo(() => pendingRoomMessages.filter(message =>
     selectedGroup && message.group_id === selectedGroup.group.id
-  ).sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()), [pendingRoomMessages, selectedGroup]);
+    && !deliveredRoomClientMessageIds.has(message.client_message_id)
+  ).sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime()), [pendingRoomMessages, selectedGroup, deliveredRoomClientMessageIds]);
   const filteredPendingRoomVisible = useMemo(() =>
     pendingRoomVisible.filter(message => threadMatches(message.body, "gönderilemedi gönderiliyor bekliyor")),
     [pendingRoomVisible, threadSearchTerm]);
@@ -710,9 +833,40 @@ function MessagesTab({
     return message.body || "Mesaj";
   };
 
+  const openReplyToDirect = (message: ERPDirectMessage) => {
+    const isMine = message.sender_type === (user.role === "admin" ? "admin" : "user") && (user.role === "admin" || message.sender_user_id === user.id);
+    setReplyTarget({
+      kind: "direct",
+      messageId: message.id,
+      authorLabel: isMine ? "Siz" : (message.sender_type === "admin" ? "Admin" : message.sender_name),
+      preview: directMessageActionTitle(message),
+    });
+  };
+
+  const openReplyToRoom = (message: DocumentGroupMessage) => {
+    setReplyTarget({
+      kind: "room",
+      messageId: message.id,
+      authorLabel: message.author_user_id === user.id ? "Siz" : message.author_name,
+      preview: message.message_kind === "voice" ? "Ses mesajı" : (message.body || "Mesaj"),
+    });
+  };
+
+  const cancelReply = () => setReplyTarget(null);
+
+  const scrollToMessage = (messageId: number) => {
+    const node = messageRefs.current.get(messageId);
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedMessageId(messageId);
+      window.setTimeout(() => setHighlightedMessageId(current => current === messageId ? null : current), 1500);
+    }
+  };
+
   const refreshDirectMessages = async () => {
     try {
-      setDirectMessages(await getERPDirectMessages(100));
+      const latest = await getERPDirectMessages(100);
+      setDirectMessages(prev => reconcileNewestWindow(prev, latest));
     } catch (exception) {
       setRoomError(exception instanceof Error ? exception.message : "Mesajlar yüklenemedi.");
     }
@@ -723,12 +877,71 @@ function MessagesTab({
     setThreadSearch("");
     setRoomError("");
     setRoomNotice("");
+    setReplyTarget(null);
     setScreen("thread");
   };
 
   const openPersonThread = (targetUser: ERPUser) => {
     if (targetUser.id === user.id) return;
     openDirectThread(user.role !== "admin" && targetUser.role === "admin" ? null : targetUser);
+  };
+
+  const openContentSearchResult = (result: CommunicationSearchResult) => {
+    if (result.type === "room_message" || result.type === "room_document") {
+      if (result.group_id) void openGroup(result.group_id);
+      return;
+    }
+    if (!result.other_user_id) {
+      openDirectThread(null);
+      return;
+    }
+    const existing = roomUsers.find(roomUser => roomUser.id === result.other_user_id);
+    openPersonThread(existing || {
+      id: result.other_user_id,
+      name: result.title,
+      role: "user",
+      status: "offline",
+      email: null,
+      phone: null,
+      document_network_visible: false,
+      last_seen_at: null,
+      approved_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    });
+  };
+
+  const refreshCompanyChat = async () => {
+    try {
+      setCompanyChatMessages(await getCompanyChatMessages());
+    } catch (exception) {
+      console.warn("Şirket geneli mesajlar yenilenemedi.", exception);
+    }
+  };
+
+  const openCompanyChat = () => {
+    setCompanyChatError("");
+    setScreen("company-chat");
+    setCompanyChatLoading(true);
+    getCompanyChatMessages()
+      .then(setCompanyChatMessages)
+      .catch(exception => setCompanyChatError(exception instanceof Error ? exception.message : "Mesajlar yüklenemedi."))
+      .finally(() => setCompanyChatLoading(false));
+  };
+
+  const sendCompanyChatMsg = async () => {
+    const body = companyChatText.trim();
+    if (!body || companyChatSending) return;
+    setCompanyChatSending(true);
+    setCompanyChatError("");
+    try {
+      const sent = await sendCompanyChatMessage(body);
+      setCompanyChatMessages(prev => [...prev, sent]);
+      setCompanyChatText("");
+    } catch (exception) {
+      setCompanyChatError(exception instanceof Error ? exception.message : "Mesaj gönderilemedi.");
+    } finally {
+      setCompanyChatSending(false);
+    }
   };
 
   const resolveDirectTargetFromMessage = (message: ERPDirectMessage): ERPUser | null => {
@@ -784,6 +997,7 @@ function MessagesTab({
         body: pending.body,
         recipientUserId: pending.recipient_user_id,
         clientMessageId: pending.client_message_id,
+        replyToMessageId: pending.reply_to_message_id,
       });
       commitPendingDirectMessage(pending.local_id, sent);
     } catch (exception) {
@@ -801,6 +1015,7 @@ function MessagesTab({
       const message = await sendDocumentGroupMessage(pending.group_id, {
         body: pending.body,
         clientMessageId: pending.client_message_id,
+        replyToMessageId: pending.reply_to_message_id,
       });
       commitPendingRoomMessage(pending.local_id, message);
       setGroups(await getDocumentGroups());
@@ -846,9 +1061,11 @@ function MessagesTab({
       body,
       created_at: new Date().toISOString(),
       status: "sending",
+      reply_to_message_id: replyTarget?.kind === "direct" ? replyTarget.messageId : null,
     };
     setPendingDirectMessages(prev => [...prev, pending]);
     setMsgText("");
+    setReplyTarget(null);
     await sendPendingDirectMessage(pending);
   };
 
@@ -1015,6 +1232,8 @@ function MessagesTab({
     }
   };
 
+  const inboxPullToRefresh = usePullToRefresh(refreshCommunicationLists);
+
   const refreshRoomUsers = async () => {
     try {
       setRoomUsers(await getERPUsers());
@@ -1047,6 +1266,7 @@ function MessagesTab({
     setRoomError("");
     setRoomNotice("");
     setThreadSearch("");
+    setReplyTarget(null);
     setRoomBusyMessage("Çalışma alanı açılıyor...");
     setRoomLoading(true);
     try {
@@ -1105,6 +1325,7 @@ function MessagesTab({
     if (!file || !selectedGroup) return;
     setRoomError("");
     setRoomBusyMessage("Doküman yükleniyor...");
+    setUploadProgressPercent(0);
     setRoomLoading(true);
     try {
       const note = [
@@ -1112,13 +1333,16 @@ function MessagesTab({
         uploadNote,
       ].filter(Boolean).join("\n");
       const tender = roomTenders.find(item => item.tender_id === selectedRoomTenderId);
-      await uploadDocumentGroupFile({
-        groupId: selectedGroup.group.id,
-        file,
-        note,
-        tenderId: selectedRoomTenderId || selectedGroup.group.tender_id || undefined,
-        year: tender?.year || selectedGroup.group.year || undefined,
-      });
+      await uploadDocumentGroupFileWithProgress(
+        {
+          groupId: selectedGroup.group.id,
+          file,
+          note,
+          tenderId: selectedRoomTenderId || selectedGroup.group.tender_id || undefined,
+          year: tender?.year || selectedGroup.group.year || undefined,
+        },
+        percent => setUploadProgressPercent(percent)
+      );
       setUploadNote("");
       const [detail, messages] = await Promise.all([
         getDocumentGroup(selectedGroup.group.id),
@@ -1132,6 +1356,7 @@ function MessagesTab({
     } finally {
       setRoomLoading(false);
       setRoomBusyMessage("");
+      setUploadProgressPercent(null);
     }
   };
 
@@ -1433,9 +1658,11 @@ function MessagesTab({
       author_name: user.name,
       created_at: new Date().toISOString(),
       status: "sending",
+      reply_to_message_id: replyTarget?.kind === "room" ? replyTarget.messageId : null,
     };
     setPendingRoomMessages(prev => [...prev, pending]);
     setRoomMessageText("");
+    setReplyTarget(null);
     await sendPendingRoomMessage(pending);
   };
 
@@ -1728,6 +1955,24 @@ function MessagesTab({
   }, [user.id, user.role]);
 
   useEffect(() => {
+    const term = communicationSearch.trim();
+    if (term.length < 2) {
+      setContentSearchResults([]);
+      setContentSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setContentSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      searchCommunication(term)
+        .then(results => { if (!cancelled) setContentSearchResults(results); })
+        .catch(() => { if (!cancelled) setContentSearchResults([]); })
+        .finally(() => { if (!cancelled) setContentSearchLoading(false); });
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [communicationSearch]);
+
+  useEffect(() => {
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     let retryTimer: number | null = null;
@@ -1746,7 +1991,7 @@ function MessagesTab({
         ]);
         if (cancelled) return;
         setSelectedGroup(detail);
-        setRoomMessages(messages);
+        setRoomMessages(prev => reconcileNewestWindow(prev, messages));
       } catch (exception) {
         console.warn("Canlı oda mesajları yenilenemedi.", exception);
       }
@@ -1769,6 +2014,9 @@ function MessagesTab({
             if (screen === "room-thread" && selectedGroup?.group.id && groupId === selectedGroup.group.id) {
               void refreshCurrentRoom(groupId);
             }
+          }
+          if (event.eventName === "company_chat_message" || event.eventName === "company_chat_cleared") {
+            if (screen === "company-chat") void refreshCompanyChat();
           }
         }, error => {
           console.warn("Canlı mesaj bağlantısı koptu.", error);
@@ -1805,7 +2053,7 @@ function MessagesTab({
       if (document.hidden) return;
       try {
         const nextMessages = await getERPDirectMessages(100);
-        if (!cancelled) setDirectMessages(nextMessages);
+        if (!cancelled) setDirectMessages(prev => reconcileNewestWindow(prev, nextMessages));
       } catch (exception) {
         console.warn("Mesajlar yenilenemedi.", exception);
       }
@@ -1830,7 +2078,7 @@ function MessagesTab({
         ]);
         if (cancelled) return;
         setSelectedGroup(detail);
-        setRoomMessages(messages);
+        setRoomMessages(prev => reconcileNewestWindow(prev, messages));
       } catch (exception) {
         console.warn("Oda mesajları yenilenemedi.", exception);
       }
@@ -1839,6 +2087,43 @@ function MessagesTab({
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+    };
+  }, [screen, selectedGroup?.group.id]);
+
+  // When the app returns to the foreground, SSE events that arrived while hidden were
+  // dropped (the handler ignores events while document.hidden) and polling was paused, so
+  // the active screen can be stale. Refetch it immediately on resume/focus instead of
+  // waiting for the next poll tick.
+  useEffect(() => {
+    const refreshActiveScreen = async () => {
+      if (screen === "thread" || screen === "inbox") {
+        await refreshDirectMessages();
+      } else if (screen === "room-thread" && selectedGroup) {
+        const groupId = selectedGroup.group.id;
+        try {
+          const [detail, messages] = await Promise.all([
+            getDocumentGroup(groupId),
+            getDocumentGroupMessages(groupId),
+          ]);
+          setSelectedGroup(detail);
+          setRoomMessages(prev => reconcileNewestWindow(prev, messages));
+        } catch (exception) {
+          console.warn("Oda mesajları yenilenemedi.", exception);
+        }
+        void refreshGroups();
+      } else if (screen === "company-chat") {
+        await refreshCompanyChat();
+      }
+    };
+    const onForeground = () => {
+      if (document.hidden) return;
+      void refreshActiveScreen();
+    };
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
+    return () => {
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
     };
   }, [screen, selectedGroup?.group.id]);
 
@@ -1886,6 +2171,84 @@ function MessagesTab({
       setScreen("inbox");
     });
   }, [roomOpenRequest?.nonce]);
+
+  if (screen === "company-chat") {
+    const isOwnCompanyMessage = (message: CompanyChatMessage) =>
+      user.role === "admin" ? message.author_role === "admin" : message.author_user_id === user.id;
+    return (
+    <div className="flex flex-col h-full min-h-0">
+      <TopBar title="Şirket Geneli" onBack={() => setScreen("inbox")} />
+      <div className="shrink-0 px-4 py-2.5 flex items-center gap-2" style={{ background: "rgba(217,119,6,0.12)" }}>
+        <Megaphone className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+        <p className="text-[11px] text-amber-500/90">Herkes yazabilir · mesajlar her gece sıfırlanır</p>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
+        {companyChatLoading ? (
+          <MessageThreadSkeleton />
+        ) : companyChatMessages.length === 0 ? (
+          <EmptyState icon={Megaphone} title="Bugün henüz mesaj yok" desc="İlk mesajı yazan siz olun." />
+        ) : (
+          companyChatMessages.map((message, index) => {
+            const own = isOwnCompanyMessage(message);
+            const showDaySeparator = index === 0
+              || dayKey(companyChatMessages[index - 1]?.created_at) !== dayKey(message.created_at);
+            return (
+              <div key={message.id} className="space-y-3">
+                {showDaySeparator && <DaySeparator value={message.created_at} />}
+                <div className={`flex gap-2 ${own ? "justify-end" : "justify-start"}`}>
+                  {!own && <Avatar name={message.author_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.author_user_id || message.author_name)} />}
+                  <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${own ? "bg-amber-500 text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"}`}>
+                    {!own && (
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <p className="text-[10px] font-semibold opacity-70">{message.author_name}</p>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${message.author_role === "admin" ? "bg-amber-500/20 text-amber-500" : "bg-muted text-muted-foreground"}`}>
+                          {message.author_role === "admin" ? "Admin" : "Çalışan"}
+                        </span>
+                      </div>
+                    )}
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.body}</p>
+                    <p className={`text-[10px] mt-1 ${own ? "text-white/70" : "text-muted-foreground"}`}>{formatDate(message.created_at)}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+      {companyChatError && (
+        <div className="px-4 pb-2 shrink-0">
+          <Card className="p-3 border-red-500/30 bg-red-500/10">
+            <p className="text-xs text-red-300">{companyChatError}</p>
+          </Card>
+        </div>
+      )}
+      <div className="shrink-0 border-t border-border px-4 py-3 flex items-end gap-2.5 bg-background">
+        <div className="flex-1 bg-muted rounded-2xl px-4 py-2.5">
+          <textarea
+            rows={1}
+            value={companyChatText}
+            onChange={event => setCompanyChatText(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void sendCompanyChatMsg();
+              }
+            }}
+            placeholder="Şirket geneline mesaj yazın..."
+            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none"
+          />
+        </div>
+        <button
+          onClick={() => void sendCompanyChatMsg()}
+          disabled={!companyChatText.trim() || companyChatSending}
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-amber-500 shrink-0 disabled:opacity-50"
+        >
+          <Send className="w-4 h-4 text-white" />
+        </button>
+      </div>
+    </div>
+    );
+  }
 
   if (screen === "thread") return (
     <div className="flex flex-col h-full min-h-0">
@@ -1954,8 +2317,27 @@ function MessagesTab({
             {showDaySeparator && <DaySeparator value={message.created_at} />}
             <div className={`flex gap-2 ${own ? "justify-end" : "justify-start"}`}>
               {!own && <Avatar name={message.sender_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.sender_user_id || message.sender_name)} />}
-              <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${own ? "bg-primary text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"}`}>
+              <div
+                ref={node => { if (node) messageRefs.current.set(message.id, node); else messageRefs.current.delete(message.id); }}
+                className={`max-w-[78%] rounded-2xl px-4 py-2.5 transition-colors ${own ? "bg-primary text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"} ${highlightedMessageId === message.id ? "ring-2 ring-amber-400" : ""}`}
+              >
                 {!own && <p className="text-[10px] font-semibold opacity-70 mb-1">{message.sender_name}</p>}
+                {message.reply_to_message_id && (() => {
+                  const quoted = directMessages.find(item => item.id === message.reply_to_message_id);
+                  return (
+                    <button
+                      onClick={() => scrollToMessage(message.reply_to_message_id!)}
+                      className={`mb-1.5 w-full rounded-lg px-2 py-1.5 text-left border-l-2 ${own ? "bg-white/10 border-white/50" : "bg-muted border-primary"}`}
+                    >
+                      <p className={`text-[10px] font-semibold ${own ? "text-white/80" : "text-primary"}`}>
+                        {quoted ? (directMessageOwn(quoted) ? "Siz" : quoted.sender_name) : "Mesaj"}
+                      </p>
+                      <p className={`text-[11px] truncate ${own ? "text-white/70" : "text-muted-foreground"}`}>
+                        {quoted ? directMessageActionTitle(quoted) : "Mesaj yüklenmedi"}
+                      </p>
+                    </button>
+                  );
+                })()}
                 {isForwardedLabel(message.body) && (
                   <div className={`mb-1 flex items-center gap-1 text-[10px] font-semibold ${own ? "text-white/70" : "text-muted-foreground"}`}>
                     <Share2 className="w-3 h-3" /> İletildi
@@ -2033,6 +2415,18 @@ function MessagesTab({
         ))}
         <div className="h-2" />
       </div>
+      {replyTarget?.kind === "direct" && (
+        <div className="shrink-0 border-t border-border bg-muted/50 px-4 py-2 flex items-center gap-2">
+          <div className="w-1 self-stretch rounded-full bg-primary shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-primary">{replyTarget.authorLabel}</p>
+            <p className="text-xs text-muted-foreground truncate">{replyTarget.preview}</p>
+          </div>
+          <button onClick={cancelReply} className="w-7 h-7 flex items-center justify-center rounded-full bg-muted shrink-0" aria-label="Yanıtlamayı iptal et">
+            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
+      )}
       <div className="shrink-0 border-t border-border px-4 py-3 flex items-end gap-2.5 bg-background">
         <button className="w-9 h-9 flex items-center justify-center rounded-full bg-muted shrink-0">
           <Paperclip className="w-4 h-4 text-muted-foreground" />
@@ -2080,6 +2474,11 @@ function MessagesTab({
           onClose={() => setDirectActionTarget(null)}
           onDelete={() => setDirectActionTarget({ ...directActionTarget, action: "delete" })}
           onForward={() => setDirectActionTarget({ ...directActionTarget, action: "forward" })}
+          onReply={() => {
+            const message = directMessages.find(item => item.id === directActionTarget.messageId);
+            if (message) openReplyToDirect(message);
+            setDirectActionTarget(null);
+          }}
         />
       )}
 
@@ -2235,7 +2634,7 @@ function MessagesTab({
           </Card>
         </div>
       )}
-      {roomBusyMessage && <BusyBanner message={roomBusyMessage} />}
+      {roomBusyMessage && <BusyBanner message={roomBusyMessage} progressPercent={uploadProgressPercent} />}
 
       {roomView === "chat" ? (
       <div ref={roomThreadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
@@ -2269,14 +2668,32 @@ function MessagesTab({
               {showDaySeparator && <DaySeparator value={item.time} />}
               {item.kind === "message" && item.message ? (
             <div className={`flex items-start gap-2 ${item.message.author_user_id === user.id ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[82%] rounded-2xl px-4 py-2.5 ${
+              <div
+                ref={node => { if (node) messageRefs.current.set(item.message!.id, node); else messageRefs.current.delete(item.message!.id); }}
+                className={`max-w-[82%] rounded-2xl px-4 py-2.5 transition-colors ${
                 item.message.author_user_id === user.id
                   ? "bg-primary text-white rounded-br-sm"
                   : "bg-card border border-border text-foreground rounded-bl-sm"
-              }`}>
+              } ${highlightedMessageId === item.message.id ? "ring-2 ring-amber-400" : ""}`}>
                 {item.message.author_user_id !== user.id && (
                   <p className="text-[10px] font-semibold opacity-70 mb-1">{item.message.author_name}</p>
                 )}
+                {item.message.reply_to_message_id && (() => {
+                  const quoted = roomMessages.find(msg => msg.id === item.message!.reply_to_message_id);
+                  return (
+                    <button
+                      onClick={() => scrollToMessage(item.message!.reply_to_message_id!)}
+                      className={`mb-1.5 w-full rounded-lg px-2 py-1.5 text-left border-l-2 ${item.message!.author_user_id === user.id ? "bg-white/10 border-white/50" : "bg-muted border-primary"}`}
+                    >
+                      <p className={`text-[10px] font-semibold ${item.message!.author_user_id === user.id ? "text-white/80" : "text-primary"}`}>
+                        {quoted ? (quoted.author_user_id === user.id ? "Siz" : quoted.author_name) : "Mesaj"}
+                      </p>
+                      <p className={`text-[11px] truncate ${item.message!.author_user_id === user.id ? "text-white/70" : "text-muted-foreground"}`}>
+                        {quoted ? (quoted.message_kind === "voice" ? "Ses mesajı" : (quoted.body || "Mesaj")) : "Mesaj yüklenmedi"}
+                      </p>
+                    </button>
+                  );
+                })()}
                 {isForwardedLabel(item.message.body) && (
                   <div className={`mb-1 flex items-center gap-1 text-[10px] font-semibold ${item.message.author_user_id === user.id ? "text-white/70" : "text-muted-foreground"}`}>
                     <Share2 className="w-3 h-3" /> İletildi
@@ -2501,6 +2918,18 @@ function MessagesTab({
       </div>
       )}
 
+      {roomView === "chat" && replyTarget?.kind === "room" && (
+        <div className="shrink-0 border-t border-border bg-muted/50 px-4 py-2 flex items-center gap-2">
+          <div className="w-1 self-stretch rounded-full bg-primary shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-primary">{replyTarget.authorLabel}</p>
+            <p className="text-xs text-muted-foreground truncate">{replyTarget.preview}</p>
+          </div>
+          <button onClick={cancelReply} className="w-7 h-7 flex items-center justify-center rounded-full bg-muted shrink-0" aria-label="Yanıtlamayı iptal et">
+            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
+      )}
       {roomView === "chat" && <div className="shrink-0 border-t border-border px-4 py-3 flex items-end gap-2.5 bg-background">
         <label className="w-9 h-9 flex items-center justify-center rounded-full bg-muted shrink-0 active:opacity-80">
           <Paperclip className="w-4 h-4 text-muted-foreground" />
@@ -2612,6 +3041,11 @@ function MessagesTab({
           onClose={() => setRoomActionTarget(null)}
           onDelete={() => setRoomActionTarget({ ...roomActionTarget, action: "delete" })}
           onForward={() => setRoomActionTarget({ ...roomActionTarget, action: "forward" })}
+          onReply={roomActionTarget.kind === "message" ? () => {
+            const message = roomMessages.find(item => item.id === roomActionTarget.id);
+            if (message) openReplyToRoom(message);
+            setRoomActionTarget(null);
+          } : undefined}
         />
       )}
 
@@ -2802,7 +3236,69 @@ function MessagesTab({
       </div>
 
       {activeTab === "all" && (
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div
+          ref={inboxPullToRefresh.containerRef}
+          onTouchStart={inboxPullToRefresh.onTouchStart}
+          onTouchMove={inboxPullToRefresh.onTouchMove}
+          onTouchEnd={() => void inboxPullToRefresh.onTouchEnd()}
+          className="flex-1 min-h-0 overflow-y-auto"
+        >
+          <PullToRefreshIndicator pullDistance={inboxPullToRefresh.pullDistance} refreshing={inboxPullToRefresh.refreshing} />
+          {!communicationSearch.trim() && (
+            <button
+              onClick={openCompanyChat}
+              className="w-full flex items-center gap-3 px-4 py-4 border-b border-border active:opacity-90 transition-opacity"
+              style={{ background: "linear-gradient(90deg, rgba(217,119,6,0.18), rgba(217,119,6,0.05))" }}
+            >
+              <div className="w-11 h-11 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
+                <Megaphone className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-bold text-amber-500">Şirket Geneli</p>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">Herkesin yazabildiği ortak pano · her gece sıfırlanır</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-amber-500/70 shrink-0" />
+            </button>
+          )}
+          {communicationSearch.trim().length >= 2 && (
+            <div className="px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Mesaj ve dosya içeriğinde</p>
+                {contentSearchLoading && <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />}
+              </div>
+              {!contentSearchLoading && contentSearchResults.length === 0 ? (
+                <p className="text-xs text-muted-foreground">İçerikte eşleşme bulunamadı.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {contentSearchResults.map(result => (
+                    <button
+                      key={`${result.type}-${result.id}`}
+                      onClick={() => openContentSearchResult(result)}
+                      className="w-full flex items-start gap-2.5 rounded-xl bg-muted/40 px-3 py-2.5 text-left"
+                    >
+                      {result.type === "room_document" ? (
+                        <FileText className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      ) : (
+                        <MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-foreground truncate">
+                          {result.title}
+                          {result.group_name && <span className="text-muted-foreground font-normal"> · {result.group_name}</span>}
+                        </p>
+                        {result.snippet && (
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">{result.snippet}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {roomLoading && groups.length === 0 && directMessages.length === 0 && roomUsers.length === 0 && (
+            <ConversationListSkeleton />
+          )}
           {showAdminDirectShortcut && (
             <button onClick={() => openDirectThread(null)}
               className="w-full flex items-center gap-3 px-4 py-4 border-b border-border active:bg-muted/30 transition-colors">
@@ -2887,7 +3383,14 @@ function MessagesTab({
       )}
 
       {activeTab === "rooms" && (
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
+        <div
+          ref={inboxPullToRefresh.containerRef}
+          onTouchStart={inboxPullToRefresh.onTouchStart}
+          onTouchMove={inboxPullToRefresh.onTouchMove}
+          onTouchEnd={() => void inboxPullToRefresh.onTouchEnd()}
+          className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4"
+        >
+          <PullToRefreshIndicator pullDistance={inboxPullToRefresh.pullDistance} refreshing={inboxPullToRefresh.refreshing} />
           {roomError && (
             <Card className="p-3 border-red-500/30 bg-red-500/10">
               <p className="text-xs text-red-300">{roomError}</p>
@@ -2941,7 +3444,7 @@ function MessagesTab({
           </Card>
 
           {roomLoading && groups.length === 0 && !selectedGroup ? (
-            <EmptyState icon={Clock} title="Yükleniyor" desc="Doküman odaları açılıyor." />
+            <ConversationListSkeleton />
           ) : groups.length === 0 ? (
             <EmptyState icon={FolderOpen} title="Alan yok" desc="İlk çalışma alanını oluşturun." />
           ) : visibleGroups.length === 0 ? (
@@ -3188,8 +3691,17 @@ function MessagesTab({
       )}
 
       {activeTab === "people" && (
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5">
-          {roomUsers.length === 0 ? (
+        <div
+          ref={inboxPullToRefresh.containerRef}
+          onTouchStart={inboxPullToRefresh.onTouchStart}
+          onTouchMove={inboxPullToRefresh.onTouchMove}
+          onTouchEnd={() => void inboxPullToRefresh.onTouchEnd()}
+          className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5"
+        >
+          <PullToRefreshIndicator pullDistance={inboxPullToRefresh.pullDistance} refreshing={inboxPullToRefresh.refreshing} />
+          {roomLoading && roomUsers.length === 0 ? (
+            <ConversationListSkeleton />
+          ) : roomUsers.length === 0 ? (
             <EmptyState icon={Users} title="Kişi yok" desc="Onaylı çalışanlar burada görünecek." />
           ) : visibleUserDirectorySections.every(section => section.items.length === 0) ? (
             <EmptyState icon={Search} title="Sonuç bulunamadı" desc="Kişi aramasını değiştirerek tekrar deneyin." />

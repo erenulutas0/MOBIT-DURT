@@ -24,14 +24,17 @@ public class TenderSummaryService {
 
     private final TenderDocumentRepository documentRepository;
     private final TenderFactExtractionService factExtractionService;
+    private final TenderVaultWriter vaultWriter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TenderSummaryService(
             TenderDocumentRepository documentRepository,
-            TenderFactExtractionService factExtractionService
+            TenderFactExtractionService factExtractionService,
+            TenderVaultWriter vaultWriter
     ) {
         this.documentRepository = documentRepository;
         this.factExtractionService = factExtractionService;
+        this.vaultWriter = vaultWriter;
     }
 
     @Transactional
@@ -49,7 +52,9 @@ public class TenderSummaryService {
         } catch (Exception exception) {
             document.markAiSummaryFailed(exception.getMessage(), Instant.now());
         }
-        return documentRepository.saveAndFlush(document);
+        TenderDocument saved = documentRepository.saveAndFlush(document);
+        vaultWriter.writeExtractionResults(saved);
+        return saved;
     }
 
     private Map<String, Object> summaryFor(

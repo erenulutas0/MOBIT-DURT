@@ -268,7 +268,48 @@ public class ErpController {
                 request.assigneeTeamIds(),
                 request.responsibleUserId(),
                 request.priority(),
-                request.deadlineAt()));
+                request.deadlineAt(),
+                request.parentTaskId()));
+    }
+
+    @PostMapping("/tasks/{taskId}/dependencies")
+    ErpDtos.TaskDependencyResponse addTaskDependency(
+            JwtAuthenticationToken authentication,
+            @PathVariable long taskId,
+            @Valid @RequestBody AddTaskDependencyRequest request
+    ) {
+        if (request.predecessorTaskId() == null) {
+            throw new ErpExceptions.BadRequest("predecessor_task_id is required");
+        }
+        return ErpDtos.TaskDependencyResponse.from(erpService.addTaskDependency(
+                ErpPrincipal.from(authentication),
+                taskId,
+                request.predecessorTaskId()));
+    }
+
+    @DeleteMapping("/tasks/{taskId}/dependencies/{predecessorTaskId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void removeTaskDependency(
+            JwtAuthenticationToken authentication,
+            @PathVariable long taskId,
+            @PathVariable long predecessorTaskId
+    ) {
+        erpService.removeTaskDependency(ErpPrincipal.from(authentication), taskId, predecessorTaskId);
+    }
+
+    @PostMapping("/tasks/{taskId}/document-group")
+    ErpDtos.TaskResponse linkTaskDocumentGroup(
+            JwtAuthenticationToken authentication,
+            @PathVariable long taskId,
+            @Valid @RequestBody LinkTaskDocumentGroupRequest request
+    ) {
+        if (request.documentGroupId() == null) {
+            throw new ErpExceptions.BadRequest("document_group_id is required");
+        }
+        return ErpDtos.TaskResponse.from(erpService.linkTaskDocumentGroup(
+                ErpPrincipal.from(authentication),
+                taskId,
+                request.documentGroupId()));
     }
 
     @PatchMapping("/tasks/{taskId}")
@@ -407,7 +448,8 @@ public class ErpController {
                 request.mediaMimeType(),
                 request.mediaData(),
                 request.mediaDurationMs(),
-                request.clientMessageId()));
+                request.clientMessageId(),
+                request.replyToMessageId()));
     }
 
     @PatchMapping("/messages/{messageId}/read")
@@ -429,14 +471,18 @@ public class ErpController {
         MessageMediaStorage.StoredContent media = erpService.readDirectMessageMedia(
                 ErpPrincipal.from(authentication),
                 messageId);
-        ContentDisposition disposition = (download
-                ? ContentDisposition.attachment()
-                : ContentDisposition.inline())
+        // Only render known-safe types inline; anything else (attacker-chosen content type on a
+        // chat message) is forced to attachment so it can't execute on the API origin.
+        boolean inline = !download && MessageMediaStorage.isInlineSafe(media.contentType());
+        ContentDisposition disposition = (inline
+                ? ContentDisposition.inline()
+                : ContentDisposition.attachment())
                 .filename(media.filename())
                 .build();
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(media.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header("X-Content-Type-Options", "nosniff")
                 .body(new FileSystemResource(media.path()));
     }
 
@@ -597,13 +643,24 @@ public class ErpController {
             @JsonProperty("assignee_team_ids") List<Long> assigneeTeamIds,
             @JsonProperty("responsible_user_id") Long responsibleUserId,
             String priority,
-            @JsonProperty("deadline_at") Instant deadlineAt
+            @JsonProperty("deadline_at") Instant deadlineAt,
+            @JsonProperty("parent_task_id") Long parentTaskId
     ) {
         CreateTaskRequest {
             assigneeUserIds = assigneeUserIds == null ? List.of() : List.copyOf(assigneeUserIds);
             assigneeTeamIds = assigneeTeamIds == null ? List.of() : List.copyOf(assigneeTeamIds);
             priority = priority == null || priority.isBlank() ? "normal" : priority;
         }
+    }
+
+    record AddTaskDependencyRequest(
+            @JsonProperty("predecessor_task_id") Long predecessorTaskId
+    ) {
+    }
+
+    record LinkTaskDocumentGroupRequest(
+            @JsonProperty("document_group_id") Long documentGroupId
+    ) {
     }
 
     record UpdateTaskRequest(
@@ -673,7 +730,8 @@ public class ErpController {
             @JsonProperty("media_mime_type") String mediaMimeType,
             @JsonProperty("media_data") String mediaData,
             @JsonProperty("media_duration_ms") Integer mediaDurationMs,
-            @JsonProperty("client_message_id") String clientMessageId
+            @JsonProperty("client_message_id") String clientMessageId,
+            @JsonProperty("reply_to_message_id") Long replyToMessageId
     ) {
     }
 

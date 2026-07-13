@@ -19,6 +19,7 @@ import com.docsbot.ops.auth.AuthSessionResponse;
 import com.docsbot.ops.auth.TokenService;
 import com.docsbot.ops.auth.domain.ErpRefreshToken;
 import com.docsbot.ops.auth.infrastructure.ErpRefreshTokenRepository;
+import com.docsbot.ops.common.tx.NewTransactionExecutor;
 
 @Service
 public class RefreshTokenService {
@@ -27,24 +28,28 @@ public class RefreshTokenService {
 
     private final ErpRefreshTokenRepository tokenRepository;
     private final TokenService tokenService;
+    private final NewTransactionExecutor newTransactionExecutor;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
     public RefreshTokenService(
             ObjectProvider<ErpRefreshTokenRepository> tokenRepository,
-            TokenService tokenService
+            TokenService tokenService,
+            NewTransactionExecutor newTransactionExecutor
     ) {
-        this(tokenRepository.getIfAvailable(), tokenService, Clock.systemUTC());
+        this(tokenRepository.getIfAvailable(), tokenService, newTransactionExecutor, Clock.systemUTC());
     }
 
     RefreshTokenService(
             ErpRefreshTokenRepository tokenRepository,
             TokenService tokenService,
+            NewTransactionExecutor newTransactionExecutor,
             Clock clock
     ) {
         this.tokenRepository = tokenRepository;
         this.tokenService = tokenService;
+        this.newTransactionExecutor = newTransactionExecutor;
         this.clock = clock;
     }
 
@@ -86,8 +91,22 @@ public class RefreshTokenService {
         Instant now = clock.instant();
         String currentHash = hash(rawRefreshToken);
         ErpRefreshToken current = tokenRepository.findByTokenHash(currentHash)
-                .filter(token -> token.activeAt(now))
                 .orElseThrow(() -> new AuthExceptions.Unauthorized("Invalid refresh token"));
+        if (current.getRevokedAt() != null) {
+            // Reuse of an already-rotated token. The legitimate holder rotated it forward, so
+            // a replay means someone else is also holding a token from this family (theft).
+            // Revoke every active token for this subject, forcing a fresh login everywhere and
+            // killing the attacker's still-valid descendant along with it. This must land in a
+            // separate transaction because we reject the request right after: throwing here
+            // would otherwise roll the revocation back with the rest of the rotate() tx.
+            String subject = current.getSubject();
+            newTransactionExecutor.call(() -> tokenRepository.revokeActiveForSubject(subject, now));
+            throw new AuthExceptions.Unauthorized("Refresh token reuse detected");
+        }
+        if (!current.activeAt(now)) {
+            // Expired but never rotated — nothing to revoke, just reject.
+            throw new AuthExceptions.Unauthorized("Invalid refresh token");
+        }
 
         TokenService.IssuedToken accessToken = tokenService.issue(
                 current.getSubject(),
@@ -123,6 +142,20 @@ public class RefreshTokenService {
         Instant now = clock.instant();
         tokenRepository.findByTokenHash(hash(rawRefreshToken))
                 .ifPresent(token -> token.revoke(now, null));
+    }
+
+    /**
+     * Revoke every active refresh token for a user — call when the account is deleted or its
+     * role changes so an off-boarded/demoted employee cannot keep rotating (up to the 30-day
+     * refresh TTL) with their old role. The current access token (stateless JWT) still stands
+     * until its ~60-minute expiry; capping the refresh chain is the meaningful mitigation.
+     */
+    @Transactional
+    public int revokeAllForUser(long userId) {
+        if (tokenRepository == null) {
+            return 0;
+        }
+        return tokenRepository.revokeActiveForUser(userId, clock.instant());
     }
 
     private IssuedRefreshToken createRefreshToken(
