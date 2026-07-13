@@ -62,6 +62,7 @@ export type ERPTaskAssignment = {
   assignee_user_id: number | null;
   assignee_team_id: number | null;
   role?: "responsible" | "participant" | string;
+  title?: string | null;
   created_at: string;
 };
 
@@ -488,6 +489,7 @@ export async function createERPTask(payload: {
   description?: string | null;
   assigneeUserIds: number[];
   responsibleUserId?: number | null;
+  assigneeTitles?: Record<number, string>;
   priority?: "low" | "normal" | "high" | "urgent" | string;
   deadlineAt?: string | null;
   parentTaskId?: number | null;
@@ -501,6 +503,7 @@ export async function createERPTask(payload: {
       assignee_user_ids: payload.assigneeUserIds,
       assignee_team_ids: [],
       responsible_user_id: payload.responsibleUserId || null,
+      assignee_titles: payload.assigneeTitles || {},
       priority: payload.priority || "normal",
       deadline_at: payload.deadlineAt || null,
       parent_task_id: payload.parentTaskId || null,

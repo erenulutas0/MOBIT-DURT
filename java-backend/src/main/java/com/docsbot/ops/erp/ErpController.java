@@ -267,6 +267,7 @@ public class ErpController {
                 request.assigneeUserIds(),
                 request.assigneeTeamIds(),
                 request.responsibleUserId(),
+                request.assigneeTitles(),
                 request.priority(),
                 request.deadlineAt(),
                 request.parentTaskId()));
@@ -642,6 +643,7 @@ public class ErpController {
             @JsonProperty("assignee_user_ids") List<Long> assigneeUserIds,
             @JsonProperty("assignee_team_ids") List<Long> assigneeTeamIds,
             @JsonProperty("responsible_user_id") Long responsibleUserId,
+            @JsonProperty("assignee_titles") java.util.Map<Long, String> assigneeTitles,
             String priority,
             @JsonProperty("deadline_at") Instant deadlineAt,
             @JsonProperty("parent_task_id") Long parentTaskId
@@ -649,6 +651,7 @@ public class ErpController {
         CreateTaskRequest {
             assigneeUserIds = assigneeUserIds == null ? List.of() : List.copyOf(assigneeUserIds);
             assigneeTeamIds = assigneeTeamIds == null ? List.of() : List.copyOf(assigneeTeamIds);
+            assigneeTitles = assigneeTitles == null ? java.util.Map.of() : java.util.Map.copyOf(assigneeTitles);
             priority = priority == null || priority.isBlank() ? "normal" : priority;
         }
     }

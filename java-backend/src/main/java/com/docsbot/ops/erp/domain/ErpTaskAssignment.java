@@ -29,6 +29,10 @@ public class ErpTaskAssignment {
     @Column(name = "role", nullable = false, length = 32)
     private String role = "participant";
 
+    // Optional free-text label shown next to the role, e.g. "AI Architect" / "Backend Developer".
+    @Column(name = "title", length = 120)
+    private String title;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -36,16 +40,29 @@ public class ErpTaskAssignment {
     }
 
     public static ErpTaskAssignment forUser(long taskId, long userId, Instant now) {
-        return forUser(taskId, userId, "participant", now);
+        return forUser(taskId, userId, "participant", null, now);
     }
 
     public static ErpTaskAssignment forUser(long taskId, long userId, String role, Instant now) {
+        return forUser(taskId, userId, role, null, now);
+    }
+
+    public static ErpTaskAssignment forUser(long taskId, long userId, String role, String title, Instant now) {
         ErpTaskAssignment assignment = new ErpTaskAssignment();
         assignment.taskId = taskId;
         assignment.assigneeUserId = userId;
         assignment.role = normalizeRole(role);
+        assignment.title = normalizeTitle(title);
         assignment.createdAt = now;
         return assignment;
+    }
+
+    private static String normalizeTitle(String title) {
+        if (title == null || title.isBlank()) {
+            return null;
+        }
+        String trimmed = title.trim();
+        return trimmed.length() > 120 ? trimmed.substring(0, 120) : trimmed;
     }
 
     public static ErpTaskAssignment forTeam(long taskId, long teamId, Instant now) {
@@ -82,6 +99,10 @@ public class ErpTaskAssignment {
 
     public String getRole() {
         return role;
+    }
+
+    public String getTitle() {
+        return title;
     }
 
     public Instant getCreatedAt() {

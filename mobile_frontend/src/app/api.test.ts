@@ -546,6 +546,7 @@ describe("mobil API istemcisi", () => {
       assignee_user_ids: [2, 3],
       assignee_team_ids: [],
       responsible_user_id: 2,
+      assignee_titles: {},
       priority: "high",
       deadline_at: "2026-07-10T09:00:00Z",
       parent_task_id: null,

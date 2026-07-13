@@ -875,6 +875,7 @@ function ERPTab({
   const [taskDeadlineLocal, setTaskDeadlineLocal] = useState("");
   const [taskAssigneeIds, setTaskAssigneeIds] = useState<number[]>([]);
   const [taskLeaderId, setTaskLeaderId] = useState<number | null>(null);
+  const [taskAssigneeTitles, setTaskAssigneeTitles] = useState<Record<number, string>>({});
   const [createTaskGroup, setCreateTaskGroup] = useState(false);
   const [taskGroupName, setTaskGroupName] = useState("");
   const [taskSaving, setTaskSaving] = useState(false);
@@ -1007,6 +1008,7 @@ function ERPTab({
     setTaskDeadlineLocal("");
     setTaskAssigneeIds([]);
     setTaskLeaderId(null);
+    setTaskAssigneeTitles({});
     setCreateTaskGroup(false);
     setTaskGroupName("");
     setCreateTaskParentId(null);
@@ -1083,11 +1085,17 @@ function ERPTab({
         "Katılımcılar:",
         memberLines,
       ].filter(Boolean).join("\n");
+      const assigneeTitles: Record<number, string> = {};
+      taskAssigneeIds.forEach(id => {
+        const label = (taskAssigneeTitles[id] || "").trim();
+        if (label) assigneeTitles[id] = label;
+      });
       const task = await createERPTask({
         title: taskTitle.trim(),
         description,
         assigneeUserIds: taskAssigneeIds,
         responsibleUserId: leader?.id || null,
+        assigneeTitles,
         priority: taskPriority,
         deadlineAt: taskDeadlineIso,
         parentTaskId: createTaskParentId,
@@ -1654,14 +1662,26 @@ function ERPTab({
                       </div>
                     </button>
                     {selected && (
-                      <button
-                        type="button"
-                        onClick={() => setTaskLeaderId(employee.id)}
-                        className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 ${leader ? "bg-primary text-white" : "bg-background/70 text-muted-foreground"}`}
-                      >
-                        <GitBranch className="w-3.5 h-3.5" />
-                        {leader ? "Görev sorumlusu" : "Sorumlu yap"}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setTaskLeaderId(employee.id)}
+                          className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-semibold flex items-center justify-center gap-2 ${leader ? "bg-primary text-white" : "bg-background/70 text-muted-foreground"}`}
+                        >
+                          <GitBranch className="w-3.5 h-3.5" />
+                          {leader ? "Görev sorumlusu" : "Sorumlu yap"}
+                        </button>
+                        <input
+                          value={taskAssigneeTitles[employee.id] || ""}
+                          onChange={event => {
+                            const value = event.target.value;
+                            setTaskAssigneeTitles(current => ({ ...current, [employee.id]: value }));
+                          }}
+                          maxLength={120}
+                          placeholder={leader ? "Ünvan (örn. AI Architect)" : "Ünvan (örn. Backend Developer)"}
+                          className="mt-2 w-full min-w-0 bg-background/70 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none border border-border"
+                        />
+                      </>
                     )}
                   </div>
                 );
@@ -1852,6 +1872,11 @@ function ERPTab({
       || assignedUsers.find(employee => employee.name === leaderLine)
       || assignedUsers[0]
       || null;
+    const assigneeTitleFor = (userId: number): string => {
+      const label = (overview?.assignments || [])
+        .find(item => item.task_id === task?.id && item.assignee_user_id === userId)?.title;
+      return (label || "").trim();
+    };
     const comments = (overview?.help_messages || [])
       .filter(item => item.task_id === selectedTaskId)
       .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
@@ -2092,7 +2117,9 @@ function ERPTab({
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-foreground truncate">{leaderUser.name}</p>
-                          <p className="text-[10px] text-primary">Görev sorumlusu</p>
+                          <p className="text-[10px] text-primary truncate">
+                            {assigneeTitleFor(leaderUser.id) ? `Sorumlu · ${assigneeTitleFor(leaderUser.id)}` : "Görev sorumlusu"}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -2103,7 +2130,9 @@ function ERPTab({
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-foreground truncate">{employee.name}</p>
-                          <p className="text-[10px] text-muted-foreground">Görevli</p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {assigneeTitleFor(employee.id) ? `Görevli · ${assigneeTitleFor(employee.id)}` : "Görevli"}
+                          </p>
                         </div>
                       </div>
                     ))}

@@ -115,6 +115,7 @@ public final class ErpDtos {
             @JsonProperty("assignee_user_id") Long assigneeUserId,
             @JsonProperty("assignee_team_id") Long assigneeTeamId,
             String role,
+            String title,
             @JsonProperty("created_at") Instant createdAt
     ) {
         public static AssignmentResponse from(ErpTaskAssignment assignment) {
@@ -124,6 +125,7 @@ public final class ErpDtos {
                     assignment.getAssigneeUserId(),
                     assignment.getAssigneeTeamId(),
                     assignment.getRole(),
+                    assignment.getTitle(),
                     assignment.getCreatedAt());
         }
     }

@@ -103,6 +103,7 @@ class ErpTaskWorkflowService {
             Collection<Long> assigneeUserIds,
             Collection<Long> assigneeTeamIds,
             Long responsibleUserId,
+            java.util.Map<Long, String> assigneeTitles,
             String priority,
             Instant deadlineAt,
             Long parentTaskId
@@ -140,11 +141,13 @@ class ErpTaskWorkflowService {
         }
         ErpTask task = taskRepository.saveAndFlush(newTask);
 
+        java.util.Map<Long, String> titles = assigneeTitles == null ? java.util.Map.of() : assigneeTitles;
         List<ErpTaskAssignment> assignments = new ArrayList<>();
         userIds.forEach(userId -> assignments.add(ErpTaskAssignment.forUser(
                 task.getId(),
                 userId,
                 responsibleUserId != null && responsibleUserId.equals(userId) ? "responsible" : "participant",
+                titles.get(userId),
                 now)));
         teamIds.forEach(teamId -> assignments.add(ErpTaskAssignment.forTeam(task.getId(), teamId, now)));
         assignmentRepository.saveAll(assignments);

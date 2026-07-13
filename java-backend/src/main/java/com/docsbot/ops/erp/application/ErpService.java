@@ -114,6 +114,7 @@ public class ErpService {
             Collection<Long> assigneeUserIds,
             Collection<Long> assigneeTeamIds,
             Long responsibleUserId,
+            java.util.Map<Long, String> assigneeTitles,
             String priority,
             Instant deadlineAt,
             Long parentTaskId
@@ -125,6 +126,7 @@ public class ErpService {
                 assigneeUserIds,
                 assigneeTeamIds,
                 responsibleUserId,
+                assigneeTitles,
                 priority,
                 deadlineAt,
                 parentTaskId);

@@ -50,6 +50,7 @@ public class TenderTaskService {
                 assigneeUserIds,
                 assigneeTeamIds,
                 null,
+                java.util.Map.of(),
                 priority,
                 deadlineAt,
                 null);

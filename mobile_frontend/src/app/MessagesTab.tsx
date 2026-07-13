@@ -427,6 +427,13 @@ function MessagesTab({
   const [directActionTarget, setDirectActionTarget] = useState<DirectActionTarget | null>(null);
   const [roomActionTarget, setRoomActionTarget] = useState<RoomActionTarget | null>(null);
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
+  // WhatsApp-style multi-select forward: long-press a message to enter selection mode, tap to
+  // add/remove, then forward every selected message at once. Scoped to one thread at a time.
+  const [selectionMode, setSelectionMode] = useState<"direct" | "room" | null>(null);
+  const [selectedForwardIds, setSelectedForwardIds] = useState<Set<number>>(new Set());
+  const [multiForwardOpen, setMultiForwardOpen] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -654,6 +661,55 @@ function MessagesTab({
 
   const messageMediaPayload = (message: MessageWithMedia) =>
     message.media_ref || message.media_data || null;
+
+  // Body text used when forwarding a message, matching the single-forward handlers.
+  const forwardBodyFor = (message: MessageWithMedia) =>
+    message.message_kind === "text" || !message.message_kind
+      ? `İletildi\n${message.body}`
+      : message.message_kind === "voice"
+        ? "İletilen ses mesajı"
+        : `İletilen doküman: ${forwardedDocumentName(message.body)}`;
+
+  const exitSelectionMode = () => {
+    setSelectionMode(null);
+    setSelectedForwardIds(new Set());
+    setMultiForwardOpen(false);
+  };
+
+  const enterSelectionMode = (scope: "direct" | "room", messageId: number) => {
+    setSelectionMode(scope);
+    setSelectedForwardIds(new Set([messageId]));
+  };
+
+  const toggleForwardSelection = (messageId: number) => {
+    setSelectedForwardIds(prev => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  };
+
+  // Touch/mouse long-press to enter selection mode without hijacking normal taps.
+  const bindLongPress = (onLongPress: () => void) => ({
+    onPointerDown: () => {
+      longPressFiredRef.current = false;
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = setTimeout(() => {
+        longPressFiredRef.current = true;
+        onLongPress();
+      }, 450);
+    },
+    onPointerUp: () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    },
+    onPointerLeave: () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    },
+    onPointerCancel: () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    },
+  });
 
   const resolveMessageMediaUrl = async (scope: "direct" | "room", message: MessageWithMedia) => {
     const key = mediaCacheKey(scope, message.id);
@@ -1808,6 +1864,75 @@ function MessagesTab({
     }
   };
 
+  // Messages selected for multi-forward, resolved from the active thread and ordered oldest-first
+  // so they arrive in the same order the user saw them.
+  const selectedForwardMessages = (): MessageWithMedia[] => {
+    const source: MessageWithMedia[] = selectionMode === "direct" ? directMessages : roomMessages;
+    return source
+      .filter(item => selectedForwardIds.has(item.id))
+      .sort((left, right) => left.id - right.id);
+  };
+
+  const forwardSelectedToPerson = async (person: ERPUser) => {
+    if (forwardingRef.current || !selectionMode) return;
+    const chosen = selectedForwardMessages();
+    if (chosen.length === 0) return;
+    forwardingRef.current = true;
+    setMultiForwardOpen(false);
+    setRoomError("");
+    try {
+      const recipientUserId = user.role !== "admin" && person.role === "admin" ? null : person.id;
+      const sentList: ERPDirectMessage[] = [];
+      for (const message of chosen) {
+        const sent = await sendERPDirectMessage({
+          body: forwardBodyFor(message),
+          recipientUserId,
+          messageKind: (message.message_kind as "text" | "voice" | "image" | "file") || "text",
+          mediaMimeType: message.media_mime_type || null,
+          mediaData: messageMediaPayload(message),
+          mediaDurationMs: message.media_duration_ms || null,
+          clientMessageId: createClientMessageId(),
+        });
+        sentList.push(sent);
+      }
+      setDirectMessages(prev => reconcileNewestWindow(prev, sentList));
+      setRoomNotice(`${chosen.length} mesaj ${person.name} kişisine iletildi.`);
+      exitSelectionMode();
+    } catch (exception) {
+      setRoomError(exception instanceof Error ? exception.message : "İletme işlemi tamamlanamadı.");
+    } finally {
+      forwardingRef.current = false;
+    }
+  };
+
+  const forwardSelectedToRoom = async (room: DocumentGroupSummary) => {
+    if (forwardingRef.current || !selectionMode) return;
+    const chosen = selectedForwardMessages();
+    if (chosen.length === 0) return;
+    forwardingRef.current = true;
+    setMultiForwardOpen(false);
+    setRoomError("");
+    try {
+      for (const message of chosen) {
+        await sendDocumentGroupMessage(room.id, {
+          body: forwardBodyFor(message),
+          messageKind: (message.message_kind as "text" | "voice" | "image" | "file") || "text",
+          mediaMimeType: message.media_mime_type || null,
+          mediaData: messageMediaPayload(message),
+          mediaDurationMs: message.media_duration_ms || null,
+          clientMessageId: createClientMessageId(),
+        });
+      }
+      setGroups(await getDocumentGroups());
+      setRoomNotice(`${chosen.length} mesaj ${room.name} odasına iletildi.`);
+      exitSelectionMode();
+    } catch (exception) {
+      setRoomError(exception instanceof Error ? exception.message : "İletme işlemi tamamlanamadı.");
+    } finally {
+      forwardingRef.current = false;
+    }
+  };
+
   const addRoomMember = async () => {
     if (!selectedGroup || !selectedMemberId) return;
     setRoomError("");
@@ -2270,7 +2395,22 @@ function MessagesTab({
 
   if (screen === "thread") return (
     <div className="flex flex-col h-full min-h-0">
-      <TopBar title={directThreadTitle} onBack={() => setScreen("inbox")} />
+      <TopBar title={directThreadTitle} onBack={() => { exitSelectionMode(); setScreen("inbox"); }} />
+      {selectionMode === "direct" && (
+        <div className="shrink-0 px-4 py-2.5 border-b border-border bg-primary/10 flex items-center gap-3">
+          <button onClick={exitSelectionMode} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0" aria-label="Seçimi iptal et">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <p className="flex-1 text-sm font-semibold text-foreground">{selectedForwardIds.size} mesaj seçildi</p>
+          <button
+            onClick={() => { if (selectedForwardIds.size > 0) setMultiForwardOpen(true); }}
+            disabled={selectedForwardIds.size === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
+          >
+            <Share2 className="w-3.5 h-3.5" /> İlet
+          </button>
+        </div>
+      )}
       <div className="shrink-0 px-4 py-3 border-b border-border bg-background">
         <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-2.5">
           <Search className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -2333,11 +2473,20 @@ function MessagesTab({
           return (
           <div key={message.id} className="space-y-3">
             {showDaySeparator && <DaySeparator value={message.created_at} />}
-            <div className={`flex gap-2 ${own ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`flex gap-2 items-center ${selectionMode === "direct" ? "cursor-pointer" : ""} ${own ? "justify-end" : "justify-start"}`}
+              onClick={selectionMode === "direct" ? () => toggleForwardSelection(message.id) : undefined}
+            >
+              {selectionMode === "direct" && (
+                <span className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${selectedForwardIds.has(message.id) ? "bg-primary border-primary" : "border-muted-foreground/50"}`}>
+                  {selectedForwardIds.has(message.id) && <span className="w-2 h-2 rounded-full bg-white" />}
+                </span>
+              )}
               {!own && <Avatar name={message.sender_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.sender_user_id || message.sender_name)} />}
               <div
                 ref={node => { if (node) messageRefs.current.set(message.id, node); else messageRefs.current.delete(message.id); }}
-                className={`max-w-[78%] rounded-2xl px-4 py-2.5 transition-colors ${own ? "bg-primary text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"} ${highlightedMessageId === message.id ? "ring-2 ring-amber-400" : ""}`}
+                {...bindLongPress(() => { if (!selectionMode) enterSelectionMode("direct", message.id); })}
+                className={`max-w-[78%] rounded-2xl px-4 py-2.5 transition-colors ${own ? "bg-primary text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"} ${highlightedMessageId === message.id ? "ring-2 ring-amber-400" : ""} ${selectionMode === "direct" && selectedForwardIds.has(message.id) ? "ring-2 ring-primary" : ""}`}
               >
                 {!own && <p className="text-[10px] font-semibold opacity-70 mb-1">{message.sender_name}</p>}
                 {message.reply_to_message_id && (() => {
@@ -2408,17 +2557,19 @@ function MessagesTab({
                   {own && <span>{directDeliveryLabel(message)}</span>}
                 </div>
               </div>
-              <button
-                onClick={() => setDirectActionTarget({
-                  action: "options",
-                  messageId: message.id,
-                  title: directMessageActionTitle(message),
-                })}
-                className="w-8 h-8 mt-1 rounded-full bg-muted flex items-center justify-center shrink-0"
-                aria-label="Mesaj seçenekleri"
-              >
-                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-              </button>
+              {selectionMode !== "direct" && (
+                <button
+                  onClick={() => setDirectActionTarget({
+                    action: "options",
+                    messageId: message.id,
+                    title: directMessageActionTitle(message),
+                  })}
+                  className="w-8 h-8 mt-1 rounded-full bg-muted flex items-center justify-center shrink-0"
+                  aria-label="Mesaj seçenekleri"
+                >
+                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                </button>
+              )}
             </div>
           </div>
         )})}
@@ -2519,6 +2670,16 @@ function MessagesTab({
           onForwardToRoom={room => void forwardDirectMessageToRoom(room)}
         />
       )}
+      {multiForwardOpen && selectionMode === "direct" && (
+        <ForwardActionSheet
+          title={`${selectedForwardIds.size} mesaj iletilecek`}
+          people={forwardPeople}
+          rooms={groups}
+          onClose={() => setMultiForwardOpen(false)}
+          onForwardToPerson={person => void forwardSelectedToPerson(person)}
+          onForwardToRoom={room => void forwardSelectedToRoom(room)}
+        />
+      )}
       {previewFile && (
         <div className="fixed inset-0 bg-black/80 z-50 flex flex-col">
           <div className="h-14 px-4 flex items-center gap-3 border-b border-border bg-background">
@@ -2576,7 +2737,7 @@ function MessagesTab({
             </div>
           </div>
         }
-        onBack={() => setScreen("inbox")}
+        onBack={() => { exitSelectionMode(); setScreen("inbox"); }}
         actions={
           <button
             onClick={() => void refreshGroups()}
@@ -2592,6 +2753,22 @@ function MessagesTab({
           </button>
         }
       />
+
+      {selectionMode === "room" && (
+        <div className="shrink-0 px-4 py-2.5 border-b border-border bg-primary/10 flex items-center gap-3">
+          <button onClick={exitSelectionMode} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0" aria-label="Seçimi iptal et">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <p className="flex-1 text-sm font-semibold text-foreground">{selectedForwardIds.size} mesaj seçildi</p>
+          <button
+            onClick={() => { if (selectedForwardIds.size > 0) setMultiForwardOpen(true); }}
+            disabled={selectedForwardIds.size === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
+          >
+            <Share2 className="w-3.5 h-3.5" /> İlet
+          </button>
+        </div>
+      )}
 
       <div className="shrink-0 px-4 py-3 border-b border-border bg-background space-y-3">
         {user.role === "admin" && (
@@ -2685,14 +2862,23 @@ function MessagesTab({
             <div key={item.id} className="space-y-3">
               {showDaySeparator && <DaySeparator value={item.time} />}
               {item.kind === "message" && item.message ? (
-            <div className={`flex items-start gap-2 ${item.message.author_user_id === user.id ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`flex items-center gap-2 ${selectionMode === "room" ? "cursor-pointer" : "items-start"} ${item.message.author_user_id === user.id ? "justify-end" : "justify-start"}`}
+              onClick={selectionMode === "room" ? () => toggleForwardSelection(item.message!.id) : undefined}
+            >
+              {selectionMode === "room" && (
+                <span className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${selectedForwardIds.has(item.message.id) ? "bg-primary border-primary" : "border-muted-foreground/50"}`}>
+                  {selectedForwardIds.has(item.message.id) && <span className="w-2 h-2 rounded-full bg-white" />}
+                </span>
+              )}
               <div
                 ref={node => { if (node) messageRefs.current.set(item.message!.id, node); else messageRefs.current.delete(item.message!.id); }}
+                {...bindLongPress(() => { if (!selectionMode) enterSelectionMode("room", item.message!.id); })}
                 className={`max-w-[82%] rounded-2xl px-4 py-2.5 transition-colors ${
                 item.message.author_user_id === user.id
                   ? "bg-primary text-white rounded-br-sm"
                   : "bg-card border border-border text-foreground rounded-bl-sm"
-              } ${highlightedMessageId === item.message.id ? "ring-2 ring-amber-400" : ""}`}>
+              } ${highlightedMessageId === item.message.id ? "ring-2 ring-amber-400" : ""} ${selectionMode === "room" && selectedForwardIds.has(item.message.id) ? "ring-2 ring-primary" : ""}`}>
                 {item.message.author_user_id !== user.id && (
                   <p className="text-[10px] font-semibold opacity-70 mb-1">{item.message.author_name}</p>
                 )}
@@ -2759,13 +2945,15 @@ function MessagesTab({
                 )}
                 <p className="text-[10px] opacity-60 mt-1">{formatDate(item.message.created_at)}</p>
               </div>
-              <button
-                onClick={() => setRoomActionTarget({ action: "options", kind: "message", id: item.message!.id, title: item.message!.message_kind === "voice" ? "Ses mesajı" : item.message!.body || "Mesaj" })}
-                className="w-8 h-8 mt-1 rounded-full bg-muted flex items-center justify-center shrink-0"
-                aria-label="Mesajı sil"
-              >
-                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-              </button>
+              {selectionMode !== "room" && (
+                <button
+                  onClick={() => setRoomActionTarget({ action: "options", kind: "message", id: item.message!.id, title: item.message!.message_kind === "voice" ? "Ses mesajı" : item.message!.body || "Mesaj" })}
+                  className="w-8 h-8 mt-1 rounded-full bg-muted flex items-center justify-center shrink-0"
+                  aria-label="Mesajı sil"
+                >
+                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                </button>
+              )}
             </div>
           ) : item.document ? (
             <div className="flex justify-start">
@@ -3084,6 +3272,16 @@ function MessagesTab({
           onClose={() => setRoomActionTarget(null)}
           onForwardToPerson={person => void forwardRoomItemToPerson(person)}
           onForwardToRoom={room => void forwardRoomItemToRoom(room)}
+        />
+      )}
+      {multiForwardOpen && selectionMode === "room" && (
+        <ForwardActionSheet
+          title={`${selectedForwardIds.size} mesaj iletilecek`}
+          people={forwardPeople}
+          rooms={groups.filter(item => item.id !== selectedGroup.group.id)}
+          onClose={() => setMultiForwardOpen(false)}
+          onForwardToPerson={person => void forwardSelectedToPerson(person)}
+          onForwardToRoom={room => void forwardSelectedToRoom(room)}
         />
       )}
 
