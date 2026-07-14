@@ -162,7 +162,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.16";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.17";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -640,7 +640,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
       </div>
 
       <p className="text-[10px] text-muted-foreground text-center mt-8">
-        v1.0.6 · Mobit © 2026
+        v{APP_VERSION} · Mobit © 2026
       </p>
       </div>
     </div>
@@ -3687,6 +3687,7 @@ function ProfileTab({
           style={{ background: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)" }}>
           <LogOut className="w-4 h-4" /> Çıkış Yap
         </button>
+        <p className="text-center text-[10px] text-muted-foreground mt-4">Uygulama sürümü v{APP_VERSION}</p>
         <div className="h-6" />
       </div>
 
