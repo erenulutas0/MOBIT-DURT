@@ -61,7 +61,7 @@ import {
   Users, MessageSquare, UserPlus, FileText, Send, FolderOpen, Upload,
   ChevronRight, Search, MoreHorizontal, Download, Eye, Paperclip,
   X, Plus, Clock, Share2, Mic, Square, Image as ImageIcon,
-  Loader2, RefreshCw, ChevronUp, Megaphone,
+  Loader2, RefreshCw, ChevronUp, Megaphone, Trash2,
 } from "lucide-react";
 
 type MsgScreen = "inbox" | "thread" | "room-thread" | "company-chat";
@@ -350,6 +350,33 @@ function GroupImagePreview({
   );
 }
 
+function MultiDeleteSheet({
+  count,
+  onClose,
+  onConfirm,
+}: {
+  count: number;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-end px-4 pb-4">
+      <div className="bg-card rounded-xl border border-border w-full p-4 space-y-3">
+        <p className="text-sm font-bold text-foreground">{count} mesaj silinsin mi?</p>
+        <p className="text-xs text-muted-foreground">Seçili mesajlar yalnızca sizden silinir; diğer kişilerde kalır.</p>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 rounded-xl bg-muted py-2.5 text-sm font-semibold text-foreground">
+            Vazgeç
+          </button>
+          <button onClick={onConfirm} className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white">
+            Benden sil
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MESSAGES TAB ─────────────────────────────────────────────────────────────
 function MessagesTab({
   user,
@@ -429,9 +456,10 @@ function MessagesTab({
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   // WhatsApp-style multi-select forward: long-press a message to enter selection mode, tap to
   // add/remove, then forward every selected message at once. Scoped to one thread at a time.
-  const [selectionMode, setSelectionMode] = useState<"direct" | "room" | null>(null);
+  const [selectionMode, setSelectionMode] = useState<"direct" | "room" | "company" | null>(null);
   const [selectedForwardIds, setSelectedForwardIds] = useState<Set<number>>(new Set());
   const [multiForwardOpen, setMultiForwardOpen] = useState(false);
+  const [multiDeleteOpen, setMultiDeleteOpen] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -674,9 +702,10 @@ function MessagesTab({
     setSelectionMode(null);
     setSelectedForwardIds(new Set());
     setMultiForwardOpen(false);
+    setMultiDeleteOpen(false);
   };
 
-  const enterSelectionMode = (scope: "direct" | "room", messageId: number) => {
+  const enterSelectionMode = (scope: "direct" | "room" | "company", messageId: number) => {
     setSelectionMode(scope);
     setSelectedForwardIds(new Set([messageId]));
   };
@@ -1865,12 +1894,55 @@ function MessagesTab({
   };
 
   // Messages selected for multi-forward, resolved from the active thread and ordered oldest-first
-  // so they arrive in the same order the user saw them.
+  // so they arrive in the same order the user saw them. Company-wide messages are text-only, so
+  // they map to a minimal shape the text-forward path understands.
   const selectedForwardMessages = (): MessageWithMedia[] => {
+    if (selectionMode === "company") {
+      return companyChatMessages
+        .filter(item => selectedForwardIds.has(item.id))
+        .sort((left, right) => left.id - right.id)
+        .map(item => ({ id: item.id, body: item.body } as unknown as MessageWithMedia));
+    }
     const source: MessageWithMedia[] = selectionMode === "direct" ? directMessages : roomMessages;
     return source
       .filter(item => selectedForwardIds.has(item.id))
       .sort((left, right) => left.id - right.id);
+  };
+
+  // Bulk "delete for me" of the selected messages (direct + room threads). Company-wide messages
+  // reset nightly and have no per-message delete, so this is not offered there.
+  const deleteSelectedForMe = async () => {
+    if (!selectionMode || selectionMode === "company") return;
+    const ids = [...selectedForwardIds];
+    if (ids.length === 0) return;
+    setMultiDeleteOpen(false);
+    setRoomError("");
+    try {
+      if (selectionMode === "direct") {
+        for (const id of ids) {
+          await deleteERPDirectMessage(id, "me");
+        }
+        setHiddenDirectMessageIds(prev => {
+          const next = new Set(prev);
+          ids.forEach(id => next.add(id));
+          return next;
+        });
+      } else {
+        if (!selectedGroup) return;
+        for (const id of ids) {
+          await deleteDocumentGroupMessage(selectedGroup.group.id, id, "me");
+        }
+        setHiddenRoomMessageIds(prev => {
+          const next = new Set(prev);
+          ids.forEach(id => next.add(id));
+          return next;
+        });
+      }
+      setRoomNotice(`${ids.length} mesaj sizden silindi.`);
+      exitSelectionMode();
+    } catch (exception) {
+      setRoomError(exception instanceof Error ? exception.message : "Mesajlar silinemedi.");
+    }
   };
 
   const forwardSelectedToPerson = async (person: ERPUser) => {
@@ -2320,10 +2392,25 @@ function MessagesTab({
       user.role === "admin" ? message.author_role === "admin" : message.author_user_id === user.id;
     return (
     <div className="flex flex-col h-full min-h-0">
-      <TopBar title="Şirket Geneli" onBack={() => setScreen("inbox")} />
+      <TopBar title="Şirket Geneli" onBack={() => { exitSelectionMode(); setScreen("inbox"); }} />
+      {selectionMode === "company" && (
+        <div className="shrink-0 px-4 py-2.5 border-b border-border bg-primary/10 flex items-center gap-3">
+          <button onClick={exitSelectionMode} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0" aria-label="Seçimi iptal et">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <p className="flex-1 text-sm font-semibold text-foreground">{selectedForwardIds.size} mesaj seçildi</p>
+          <button
+            onClick={() => { if (selectedForwardIds.size > 0) setMultiForwardOpen(true); }}
+            disabled={selectedForwardIds.size === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
+          >
+            <Share2 className="w-3.5 h-3.5" /> İlet
+          </button>
+        </div>
+      )}
       <div className="shrink-0 px-4 py-2.5 flex items-center gap-2" style={{ background: "rgba(217,119,6,0.12)" }}>
         <Megaphone className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-        <p className="text-[11px] text-amber-500/90">Herkes yazabilir · mesajlar her gece sıfırlanır</p>
+        <p className="text-[11px] text-amber-500/90">Herkes yazabilir · mesajlar her gece sıfırlanır · uzun bas ve ilet</p>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
         {companyChatLoading ? (
@@ -2338,9 +2425,20 @@ function MessagesTab({
             return (
               <div key={message.id} className="space-y-3">
                 {showDaySeparator && <DaySeparator value={message.created_at} />}
-                <div className={`flex gap-2 ${own ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`flex gap-2 items-center ${selectionMode === "company" ? "cursor-pointer" : ""} ${own ? "justify-end" : "justify-start"}`}
+                  onClick={selectionMode === "company" ? () => toggleForwardSelection(message.id) : undefined}
+                >
+                  {selectionMode === "company" && (
+                    <span className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${selectedForwardIds.has(message.id) ? "bg-primary border-primary" : "border-muted-foreground/50"}`}>
+                      {selectedForwardIds.has(message.id) && <span className="w-2 h-2 rounded-full bg-white" />}
+                    </span>
+                  )}
                   {!own && <Avatar name={message.author_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.author_user_id || message.author_name)} />}
-                  <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${own ? "bg-amber-500 text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"}`}>
+                  <div
+                    {...bindLongPress(() => { if (!selectionMode) enterSelectionMode("company", message.id); })}
+                    className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${own ? "bg-amber-500 text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"} ${selectionMode === "company" && selectedForwardIds.has(message.id) ? "ring-2 ring-primary" : ""}`}
+                  >
                     {!own && (
                       <div className="flex items-center gap-1.5 mb-1">
                         <p className="text-[10px] font-semibold opacity-70">{message.author_name}</p>
@@ -2389,6 +2487,16 @@ function MessagesTab({
           <Send className="w-4 h-4 text-white" />
         </button>
       </div>
+      {multiForwardOpen && selectionMode === "company" && (
+        <ForwardActionSheet
+          title={`${selectedForwardIds.size} mesaj iletilecek`}
+          people={forwardPeople}
+          rooms={groups}
+          onClose={() => setMultiForwardOpen(false)}
+          onForwardToPerson={person => void forwardSelectedToPerson(person)}
+          onForwardToRoom={room => void forwardSelectedToRoom(room)}
+        />
+      )}
     </div>
     );
   }
@@ -2403,9 +2511,16 @@ function MessagesTab({
           </button>
           <p className="flex-1 text-sm font-semibold text-foreground">{selectedForwardIds.size} mesaj seçildi</p>
           <button
+            onClick={() => { if (selectedForwardIds.size > 0) setMultiDeleteOpen(true); }}
+            disabled={selectedForwardIds.size === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-red-500/90 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Sil
+          </button>
+          <button
             onClick={() => { if (selectedForwardIds.size > 0) setMultiForwardOpen(true); }}
             disabled={selectedForwardIds.size === 0}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
           >
             <Share2 className="w-3.5 h-3.5" /> İlet
           </button>
@@ -2680,6 +2795,13 @@ function MessagesTab({
           onForwardToRoom={room => void forwardSelectedToRoom(room)}
         />
       )}
+      {multiDeleteOpen && selectionMode === "direct" && (
+        <MultiDeleteSheet
+          count={selectedForwardIds.size}
+          onClose={() => setMultiDeleteOpen(false)}
+          onConfirm={() => void deleteSelectedForMe()}
+        />
+      )}
       {previewFile && (
         <div className="fixed inset-0 bg-black/80 z-50 flex flex-col">
           <div className="h-14 px-4 flex items-center gap-3 border-b border-border bg-background">
@@ -2761,9 +2883,16 @@ function MessagesTab({
           </button>
           <p className="flex-1 text-sm font-semibold text-foreground">{selectedForwardIds.size} mesaj seçildi</p>
           <button
+            onClick={() => { if (selectedForwardIds.size > 0) setMultiDeleteOpen(true); }}
+            disabled={selectedForwardIds.size === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-red-500/90 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Sil
+          </button>
+          <button
             onClick={() => { if (selectedForwardIds.size > 0) setMultiForwardOpen(true); }}
             disabled={selectedForwardIds.size === 0}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 shrink-0"
           >
             <Share2 className="w-3.5 h-3.5" /> İlet
           </button>
@@ -3282,6 +3411,13 @@ function MessagesTab({
           onClose={() => setMultiForwardOpen(false)}
           onForwardToPerson={person => void forwardSelectedToPerson(person)}
           onForwardToRoom={room => void forwardSelectedToRoom(room)}
+        />
+      )}
+      {multiDeleteOpen && selectionMode === "room" && (
+        <MultiDeleteSheet
+          count={selectedForwardIds.size}
+          onClose={() => setMultiDeleteOpen(false)}
+          onConfirm={() => void deleteSelectedForMe()}
         />
       )}
 

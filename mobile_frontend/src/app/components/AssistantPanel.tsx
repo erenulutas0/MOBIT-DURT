@@ -23,6 +23,17 @@ import {
 
 type ChatTurn = { role: "user" | "assistant"; text: string };
 
+// Tappable quick prompts. Wording matches the rule-based responder's keyword intents
+// (gecik / bugün / hafta / hazır / bekleyen / mesaj) so each chip returns a useful answer.
+const QUICK_PROMPTS = [
+  "Geciken görevlerim",
+  "Bugün ne teslim",
+  "Bu hafta teslim",
+  "Önü açılan görevler",
+  "Bekleyen görevlerim",
+  "Okunmamış mesajlarım",
+];
+
 /**
  * Mobit-Asistan — the personal briefing screen. Renders the caller's workload the way an
  * assistant would report it: what is late, what is due today/this week, which tasks just got
@@ -68,8 +79,8 @@ export function AssistantPanel({
     threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns, sending]);
 
-  const send = useCallback(async () => {
-    const text = draft.trim();
+  const send = useCallback(async (override?: string) => {
+    const text = (override ?? draft).trim();
     if (!text || sending) return;
     setDraft("");
     setTurns(prev => [...prev, { role: "user", text }]);
@@ -217,9 +228,23 @@ export function AssistantPanel({
             <span className="text-sm font-semibold text-foreground">Asistana sor</span>
           </div>
           {turns.length === 0 && (
-            <p className="text-xs text-muted-foreground mb-2">
-              Örnek: “geciken görevlerim”, “bugün ne teslim”, “okunmamış mesajlarım”.
-            </p>
+            <div className="mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
+                Bir seçenek seç veya kendi sorunu yaz:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_PROMPTS.map(prompt => (
+                  <button
+                    key={prompt}
+                    onClick={() => void send(prompt)}
+                    disabled={sending}
+                    className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 active:scale-95 disabled:opacity-40 transition-transform"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           <div className="space-y-2">
             {turns.map((turn, i) => (
@@ -251,8 +276,22 @@ export function AssistantPanel({
         </div>
       </div>
 
-      {/* Compose bar — pinned */}
+      {/* Compose bar — pinned, with a quick-prompt row above the input */}
       <div className="border-t border-border bg-background px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+        {turns.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-1 [scrollbar-width:none] [-ms-overflow-style:none]">
+            {QUICK_PROMPTS.map(prompt => (
+              <button
+                key={prompt}
+                onClick={() => void send(prompt)}
+                disabled={sending}
+                className="shrink-0 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 active:scale-95 disabled:opacity-40 transition-transform"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <input
             value={draft}
