@@ -602,6 +602,13 @@ export async function markAllERPNotificationsRead(): Promise<void> {
   if (!response.ok) throw new Error(await errorText(response, "Bildirimler okundu yapılamadı."));
 }
 
+export async function getERPNotificationUnreadCount(): Promise<number> {
+  const response = await apiFetch("/erp/notifications/unread-count");
+  if (!response.ok) throw new Error(await errorText(response, "Okunmamış bildirim sayısı alınamadı."));
+  const data = await response.json();
+  return typeof data?.unread_count === "number" ? data.unread_count : 0;
+}
+
 function messagePageQuery(limit: number, beforeId?: number | null) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (beforeId && beforeId > 0) {

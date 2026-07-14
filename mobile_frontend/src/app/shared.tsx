@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, Clock, FileText } from "lucide-react";
+import { Bell, ChevronLeft, Clock, FileText } from "lucide-react";
 
 type Role = "admin" | "user";
 type AuthUser = { id: number | null; name: string; email: string; role: Role; dept: string };
@@ -173,5 +173,24 @@ function PdfCanvasPreview({ url }: { url: string }) {
   );
 }
 
-export { Avatar, Card, SectionHeader, Skeleton, TopBar, EmptyState, isPdfFile, blobToDataUrl, profilePhotoKey, readProfilePhoto, PdfCanvasPreview };
+// Notification bell with an unread badge, shown in every tab header so notifications are reachable
+// from anywhere — not just the ERP tab.
+function NotificationBell({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="relative w-9 h-9 rounded-full bg-muted flex items-center justify-center active:scale-95"
+      aria-label="Bildirimler"
+    >
+      <Bell className="w-4 h-4 text-muted-foreground" />
+      {count > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+export { Avatar, Card, SectionHeader, Skeleton, TopBar, EmptyState, NotificationBell, isPdfFile, blobToDataUrl, profilePhotoKey, readProfilePhoto, PdfCanvasPreview };
 export type { Role, AuthUser, DirectMessageOpenRequest, RoomOpenRequest };

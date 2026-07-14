@@ -49,6 +49,7 @@ import {
   Avatar,
   Card,
   EmptyState,
+  NotificationBell,
   PdfCanvasPreview,
   SectionHeader,
   Skeleton,
@@ -500,11 +501,15 @@ function MessagesTab({
   openRequest,
   roomOpenRequest,
   profilePhotoVersion = 0,
+  unreadNotifications = 0,
+  onOpenNotifications,
 }: {
   user: AuthUser;
   openRequest?: DirectMessageOpenRequest | null;
   roomOpenRequest?: RoomOpenRequest | null;
   profilePhotoVersion?: number;
+  unreadNotifications?: number;
+  onOpenNotifications?: () => void;
 }) {
   const hiddenStorageSuffix = user.id ?? user.email;
   const hiddenDirectMessageStorageKey = `docsbot.hidden.direct.messages.${hiddenStorageSuffix}`;
@@ -3741,18 +3746,21 @@ function MessagesTab({
       <TopBar
         title="İletişim"
         actions={
-          <button
-            onClick={() => void refreshCommunicationLists()}
-            disabled={roomLoading}
-            className="w-8 h-8 rounded-full bg-muted flex items-center justify-center disabled:opacity-60"
-            aria-label="İletişimi yenile"
-          >
-            {roomLoading ? (
-              <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 text-muted-foreground" />
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenNotifications && <NotificationBell count={unreadNotifications} onClick={onOpenNotifications} />}
+            <button
+              onClick={() => void refreshCommunicationLists()}
+              disabled={roomLoading}
+              className="w-8 h-8 rounded-full bg-muted flex items-center justify-center disabled:opacity-60"
+              aria-label="İletişimi yenile"
+            >
+              {roomLoading ? (
+                <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+          </div>
         }
       />
       {roomBusyMessage && <BusyBanner message={roomBusyMessage} />}

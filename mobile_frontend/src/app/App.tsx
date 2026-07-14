@@ -12,6 +12,7 @@ import {
   Avatar,
   Card,
   EmptyState,
+  NotificationBell,
   PdfCanvasPreview,
   SectionHeader,
   Skeleton,
@@ -38,6 +39,7 @@ import {
   getERPAccountRequests,
   getMobileAppUpdateInfo,
   getERPNotificationPreferences,
+  getERPNotificationUnreadCount,
   getERPOverview,
   getFolderTree,
   getTenderDocumentBlob,
@@ -113,7 +115,7 @@ type TenderScreen =
   | "dashboard" | "documents" | "document-detail"
   | "document-groups" | "folder-tree" | "upload"
   | "obsidian" | "tender-detail" | "ai-extraction";
-type ERPOpenRequest = { kind: "task"; taskId: number; nonce: number } | { kind: "account-requests"; nonce: number };
+type ERPOpenRequest = { kind: "task"; taskId: number; nonce: number } | { kind: "account-requests"; nonce: number } | { kind: "notifications"; nonce: number };
 type NotificationNavigationTarget =
   | { kind: "direct"; messageId: number }
   | { kind: "room"; groupId: number; view: "chat" | "documents" }
@@ -646,7 +648,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
 }
 
 // ─── HOME TAB ─────────────────────────────────────────────────────────────────
-function HomeTab({ user, setTab }: { user: AuthUser; setTab: (t: Tab) => void }) {
+function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { user: AuthUser; setTab: (t: Tab) => void; unreadNotifications: number; onOpenNotifications: () => void }) {
   const isAdmin = user.role === "admin";
   const [showAssistant, setShowAssistant] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
@@ -689,7 +691,10 @@ function HomeTab({ user, setTab }: { user: AuthUser; setTab: (t: Tab) => void })
             <p className="text-xs text-muted-foreground">Hoş geldiniz,</p>
             <h1 className="text-xl font-bold text-foreground">{user.name}</h1>
           </div>
-          <ImageWithFallback src={mobitLogo} alt="Mobit" className="h-10 object-contain" />
+          <div className="flex items-center gap-3">
+            <NotificationBell count={unreadNotifications} onClick={onOpenNotifications} />
+            <ImageWithFallback src={mobitLogo} alt="Mobit" className="h-10 object-contain" />
+          </div>
         </div>
         <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
           <Building2 className="w-3.5 h-3.5" />
@@ -1145,6 +1150,10 @@ function ERPTab({
     if (!openRequest) return;
     if (openRequest.kind === "task") {
       openTask(openRequest.taskId);
+      return;
+    }
+    if (openRequest.kind === "notifications") {
+      navTo("notifications");
       return;
     }
     if (openRequest.kind === "account-requests" && isAdmin) {
@@ -3456,10 +3465,14 @@ function ProfileTab({
   user,
   onLogout,
   onProfilePhotoChange,
+  unreadNotifications,
+  onOpenNotifications,
 }: {
   user: AuthUser;
   onLogout: () => void;
   onProfilePhotoChange: () => void;
+  unreadNotifications: number;
+  onOpenNotifications: () => void;
 }) {
   const [darkToggle, setDarkToggle] = useState(true);
   const [notificationPrefs, setNotificationPrefs] = useState<ERPNotificationPreference | null>(null);
@@ -3534,7 +3547,7 @@ function ProfileTab({
 
   return (
     <div className="flex flex-col min-h-full">
-      <TopBar title="Profil" />
+      <TopBar title="Profil" actions={<NotificationBell count={unreadNotifications} onClick={onOpenNotifications} />} />
       <div className="flex-1 px-4 py-4 space-y-5">
         <Card className="p-5 flex flex-col items-center text-center">
           <Avatar name={user.name} size="lg" src={profilePhoto} />
@@ -3768,6 +3781,7 @@ export default function App() {
   const [directMessageOpenRequest, setDirectMessageOpenRequest] = useState<DirectMessageOpenRequest | null>(null);
   const [roomOpenRequest, setRoomOpenRequest] = useState<RoomOpenRequest | null>(null);
   const [profilePhotoVersion, setProfilePhotoVersion] = useState(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -3798,6 +3812,32 @@ export default function App() {
       console.warn("Native push setup failed.", error);
     });
   }, [authUser?.email]);
+
+  // Unread-notification badge shown in every tab header. Refreshes on login, on tab switch, and
+  // every 60s so the count stays current wherever the user is.
+  useEffect(() => {
+    if (!authUser) {
+      setUnreadNotifCount(0);
+      return;
+    }
+    let active = true;
+    const load = () => {
+      getERPNotificationUnreadCount()
+        .then(count => { if (active) setUnreadNotifCount(count); })
+        .catch(() => undefined);
+    };
+    load();
+    const interval = setInterval(load, 60000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [authUser?.email, tab]);
+
+  const openNotificationsFromAnywhere = () => {
+    setErpOpenRequest({ kind: "notifications", nonce: Date.now() });
+    setTab("erp");
+  };
 
   useEffect(() => {
     const handleExpired = () => {
@@ -3872,11 +3912,11 @@ export default function App() {
                 <div key={t} className={`absolute inset-0 ${tab === t ? "flex flex-col min-h-0" : "hidden"}`}>
                   <div className={`tab-enter flex-1 min-h-0 ${t === "messages" ? "overflow-hidden" : "overflow-y-auto"}`}>
                     <TabErrorBoundary tabKey={tab}>
-                      {t === "home"     && <HomeTab     user={authUser} setTab={setTab} />}
+                      {t === "home"     && <HomeTab     user={authUser} setTab={setTab} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} />}
                       {t === "erp"      && <ERPTab      user={authUser} onOpenDirectMessage={openDirectMessageFromNotification} onOpenDocumentRoom={openDocumentRoomFromNotification} openRequest={erpOpenRequest} />}
                       {t === "tender"   && <TenderTab   user={authUser} onOpenRoom={openDocumentRoomFromNotification} />}
-                      {t === "messages" && <MessagesTab user={authUser} openRequest={directMessageOpenRequest} roomOpenRequest={roomOpenRequest} profilePhotoVersion={profilePhotoVersion} />}
-                      {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} />}
+                      {t === "messages" && <MessagesTab user={authUser} openRequest={directMessageOpenRequest} roomOpenRequest={roomOpenRequest} profilePhotoVersion={profilePhotoVersion} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} />}
+                      {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} />}
                     </TabErrorBoundary>
                   </div>
                 </div>
