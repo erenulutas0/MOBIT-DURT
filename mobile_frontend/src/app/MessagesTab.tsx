@@ -420,6 +420,53 @@ function ZoomableImage({ src, alt }: { src: string; alt: string }) {
   );
 }
 
+function UserProfileSheet({
+  profile,
+  currentUserId,
+  onClose,
+  onMessage,
+}: {
+  profile: ERPUser;
+  currentUserId: number;
+  onClose: () => void;
+  onMessage: () => void;
+}) {
+  const roleLabel = profile.role === "admin" ? "Yönetici" : "Kullanıcı";
+  const canMessage = profile.id > 0 && profile.id !== currentUserId;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-end px-4 pb-4" onClick={onClose}>
+      <div className="bg-card rounded-xl border border-border w-full p-5 space-y-4" onClick={event => event.stopPropagation()}>
+        <div className="flex items-center gap-3">
+          <Avatar name={profile.name} size="lg" color="bg-slate-700" src={readProfilePhoto(profile.id > 0 ? profile.id : profile.name)} />
+          <div className="min-w-0">
+            <p className="text-base font-bold text-foreground truncate">{profile.name}</p>
+            <p className="text-xs text-muted-foreground">{roleLabel}</p>
+          </div>
+        </div>
+        {(profile.email || profile.phone) && (
+          <div className="space-y-1 text-sm text-muted-foreground">
+            {profile.email && <p className="truncate">{profile.email}</p>}
+            {profile.phone && <p>{profile.phone}</p>}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl bg-muted py-2.5 text-sm font-semibold text-foreground">
+            Kapat
+          </button>
+          {canMessage && (
+            <button
+              onClick={onMessage}
+              className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-semibold text-white inline-flex items-center justify-center gap-1.5"
+            >
+              <MessageSquare className="w-4 h-4" /> Mesaj gönder
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MultiDeleteSheet({
   count,
   onClose,
@@ -530,6 +577,8 @@ function MessagesTab({
   const [selectedForwardIds, setSelectedForwardIds] = useState<Set<number>>(new Set());
   const [multiForwardOpen, setMultiForwardOpen] = useState(false);
   const [multiDeleteOpen, setMultiDeleteOpen] = useState(false);
+  // Tapping a message avatar opens a small profile sheet (info + "Mesaj gönder").
+  const [profileTarget, setProfileTarget] = useState<{ id: number | null; name: string } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -1043,6 +1092,30 @@ function MessagesTab({
   const openPersonThread = (targetUser: ERPUser) => {
     if (targetUser.id === user.id) return;
     openDirectThread(user.role !== "admin" && targetUser.role === "admin" ? null : targetUser);
+  };
+
+  // Opens the profile sheet for a message author. Skipped while multi-selecting so avatar taps
+  // don't fight the selection toggle.
+  const openProfileFor = (userId: number | null | undefined, name: string) => {
+    if (selectionMode) return;
+    setProfileTarget({ id: userId ?? null, name });
+  };
+
+  const messageProfileFrom = (userId: number | null | undefined, name: string): ERPUser => {
+    const known = userId != null ? roomUsers.find(candidate => candidate.id === userId) : undefined;
+    if (known) return known;
+    return {
+      id: userId ?? -1,
+      name,
+      role: "user",
+      status: "offline",
+      email: null,
+      phone: null,
+      document_network_visible: false,
+      last_seen_at: null,
+      approved_at: null,
+      created_at: "",
+    };
   };
 
   const openContentSearchResult = (result: CommunicationSearchResult) => {
@@ -2514,7 +2587,11 @@ function MessagesTab({
                       {selectedForwardIds.has(message.id) && <span className="w-2 h-2 rounded-full bg-white" />}
                     </span>
                   )}
-                  {!own && <Avatar name={message.author_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.author_user_id || message.author_name)} />}
+                  {!own && (
+                    <button onClick={() => openProfileFor(message.author_user_id, message.author_name)} className="shrink-0 active:scale-95" aria-label="Profili gör">
+                      <Avatar name={message.author_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.author_user_id || message.author_name)} />
+                    </button>
+                  )}
                   <div
                     {...bindLongPress(() => { if (!selectionMode) enterSelectionMode("company", message.id); })}
                     className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${own ? "bg-amber-500 text-white rounded-br-sm" : "bg-card border border-border text-foreground rounded-bl-sm"} ${selectionMode === "company" && selectedForwardIds.has(message.id) ? "ring-2 ring-primary" : ""}`}
@@ -2575,6 +2652,14 @@ function MessagesTab({
           onClose={() => setMultiForwardOpen(false)}
           onForwardToPerson={person => void forwardSelectedToPerson(person)}
           onForwardToRoom={room => void forwardSelectedToRoom(room)}
+        />
+      )}
+      {profileTarget && (
+        <UserProfileSheet
+          profile={messageProfileFrom(profileTarget.id, profileTarget.name)}
+          currentUserId={user.id}
+          onClose={() => setProfileTarget(null)}
+          onMessage={() => { const target = messageProfileFrom(profileTarget.id, profileTarget.name); setProfileTarget(null); openPersonThread(target); }}
         />
       )}
     </div>
@@ -2677,7 +2762,11 @@ function MessagesTab({
                   {selectedForwardIds.has(message.id) && <span className="w-2 h-2 rounded-full bg-white" />}
                 </span>
               )}
-              {!own && <Avatar name={message.sender_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.sender_user_id || message.sender_name)} />}
+              {!own && (
+                <button onClick={() => openProfileFor(message.sender_user_id, message.sender_name)} className="shrink-0 active:scale-95" aria-label="Profili gör">
+                  <Avatar name={message.sender_name} size="sm" color="bg-slate-700" src={readProfilePhoto(message.sender_user_id || message.sender_name)} />
+                </button>
+              )}
               <div
                 ref={node => { if (node) messageRefs.current.set(message.id, node); else messageRefs.current.delete(message.id); }}
                 {...bindLongPress(() => { if (!selectionMode) enterSelectionMode("direct", message.id); })}
@@ -2882,6 +2971,14 @@ function MessagesTab({
           onConfirm={() => void deleteSelectedForMe()}
         />
       )}
+      {profileTarget && (
+        <UserProfileSheet
+          profile={messageProfileFrom(profileTarget.id, profileTarget.name)}
+          currentUserId={user.id}
+          onClose={() => setProfileTarget(null)}
+          onMessage={() => { const target = messageProfileFrom(profileTarget.id, profileTarget.name); setProfileTarget(null); openPersonThread(target); }}
+        />
+      )}
       {previewFile && (
         <div className="fixed inset-0 bg-black/80 z-50 flex flex-col">
           <div className="h-14 px-4 flex items-center gap-3 border-b border-border bg-background">
@@ -3081,6 +3178,15 @@ function MessagesTab({
                 <span className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${selectedForwardIds.has(item.message.id) ? "bg-primary border-primary" : "border-muted-foreground/50"}`}>
                   {selectedForwardIds.has(item.message.id) && <span className="w-2 h-2 rounded-full bg-white" />}
                 </span>
+              )}
+              {item.message.author_user_id !== user.id && (
+                <button
+                  onClick={() => openProfileFor(item.message!.author_user_id, item.message!.author_name)}
+                  className="shrink-0 self-end active:scale-95"
+                  aria-label="Profili gör"
+                >
+                  <Avatar name={item.message.author_name} size="sm" color="bg-slate-700" src={readProfilePhoto(item.message.author_user_id || item.message.author_name)} />
+                </button>
               )}
               <div
                 ref={node => { if (node) messageRefs.current.set(item.message!.id, node); else messageRefs.current.delete(item.message!.id); }}
@@ -3500,6 +3606,14 @@ function MessagesTab({
           count={selectedForwardIds.size}
           onClose={() => setMultiDeleteOpen(false)}
           onConfirm={() => void deleteSelectedForMe()}
+        />
+      )}
+      {profileTarget && (
+        <UserProfileSheet
+          profile={messageProfileFrom(profileTarget.id, profileTarget.name)}
+          currentUserId={user.id}
+          onClose={() => setProfileTarget(null)}
+          onMessage={() => { const target = messageProfileFrom(profileTarget.id, profileTarget.name); setProfileTarget(null); openPersonThread(target); }}
         />
       )}
 
