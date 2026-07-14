@@ -22,6 +22,40 @@ export function companySlug(value: string) {
     .slice(0, 32) || "SIRKET";
 }
 
+// Common Turkish tender-issuing organisations offered as one-tap presets when creating a tender
+// group, so the user doesn't have to type them. Any organisation not on this list can still be
+// added via the free-text "Yeni şirket ekle" option.
+export const PRESET_TENDER_COMPANIES = [
+  "BEDAŞ",
+  "İBB",
+  "ASELSAN",
+  "ROKETSAN",
+  "TEİAŞ",
+  "EÜAŞ",
+  "TEDAŞ",
+  "TCDD",
+  "BOTAŞ",
+  "DSİ",
+  "Karayolları Genel Müdürlüğü",
+  "HAVELSAN",
+  "MKE",
+  "İSKİ",
+  "ASKİ",
+];
+
+// Presets not already present in the tender list, filtered by the search query.
+export function presetCompanyOptions(tenders: Tender[], query: string) {
+  const existing = new Set(
+    companyOptionsFromTenders(tenders).map(tender => tender.organization.toLocaleLowerCase("tr-TR"))
+  );
+  const normalizedQuery = query.trim().toLocaleLowerCase("tr-TR");
+  return PRESET_TENDER_COMPANIES.filter(name => {
+    const key = name.toLocaleLowerCase("tr-TR");
+    if (existing.has(key)) return false;
+    return !normalizedQuery || key.includes(normalizedQuery);
+  });
+}
+
 export function companyOptionsFromTenders(tenders: Tender[]) {
   const companies = new Map<string, Tender>();
   for (const tender of tenders) {
@@ -78,6 +112,45 @@ export function forwardedDocumentName(value: string) {
     .replace(/^İletilen doküman:\s*/i, "")
     .replace(/^İletildi\s*·\s*/i, "")
     .trim() || "dokuman";
+}
+
+const MONTH_NAMES_TR = [
+  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
+];
+
+// Obsidian-like tender archive: year → month → tender-issuing company → documents. The month is
+// derived from each document's upload date (no dedicated field needed). Years and months sort
+// newest-first; companies sort alphabetically.
+export function groupDocumentsByYearMonthTender(documents: DocumentGroupDocument[]) {
+  const byYear = new Map<string, Map<string, Map<string, DocumentGroupDocument[]>>>();
+  for (const item of documents) {
+    const uploaded = new Date(item.created_at);
+    const valid = !Number.isNaN(uploaded.getTime());
+    const year = String(item.year || item.document.year || (valid ? uploaded.getFullYear() : new Date().getFullYear()));
+    const monthKey = String(valid ? uploaded.getMonth() : 0).padStart(2, "0");
+    const tenderId = item.tender_id || item.document.tender_id || "Genel";
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    const months = byYear.get(year)!;
+    if (!months.has(monthKey)) months.set(monthKey, new Map());
+    const tenders = months.get(monthKey)!;
+    if (!tenders.has(tenderId)) tenders.set(tenderId, []);
+    tenders.get(tenderId)!.push(item);
+  }
+  return [...byYear.entries()]
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([year, months]) => ({
+      year,
+      months: [...months.entries()]
+        .sort(([left], [right]) => right.localeCompare(left))
+        .map(([monthKey, tenders]) => ({
+          monthKey,
+          monthLabel: MONTH_NAMES_TR[Number(monthKey)] || "",
+          tenders: [...tenders.entries()]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([tenderId, items]) => ({ tenderId, items })),
+        })),
+    }));
 }
 
 export function groupDocumentsByYearTender(documents: DocumentGroupDocument[]) {

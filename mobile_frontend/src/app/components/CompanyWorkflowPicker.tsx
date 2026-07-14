@@ -5,6 +5,7 @@ import {
   canCreateCompanyOption,
   companyOptionsFromTenders,
   filterCompanyOptions,
+  presetCompanyOptions,
 } from "../utils/mobileWorkflow";
 
 export function CompanyWorkflowPicker({
@@ -23,8 +24,19 @@ export function CompanyWorkflowPicker({
   const [creating, setCreating] = useState(false);
   const companyOptions = useMemo(() => companyOptionsFromTenders(tenders), [tenders]);
   const filteredCompanies = useMemo(() => filterCompanyOptions(tenders, query), [tenders, query]);
+  const presetCompanies = useMemo(() => presetCompanyOptions(tenders, query), [tenders, query]);
   const trimmedQuery = query.trim();
   const canCreateCompany = Boolean(onCreateCompany && canCreateCompanyOption(tenders, trimmedQuery));
+
+  const createNamedCompany = async (name: string) => {
+    if (!onCreateCompany) return;
+    setCreating(true);
+    try {
+      selectCompany(await onCreateCompany(name));
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const selectCompany = (tender: Tender) => {
     onSelect({ tenderId: tender.tender_id, companyName: tender.organization, year: tender.year });
@@ -112,6 +124,27 @@ export function CompanyWorkflowPicker({
               )}
             </div>
           </div>
+
+          {onCreateCompany && presetCompanies.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground px-1">
+                Yaygın kurumlar
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {presetCompanies.map(name => (
+                  <button
+                    type="button"
+                    key={name}
+                    onClick={() => void createNamedCompany(name)}
+                    disabled={creating}
+                    className="rounded-full border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground active:bg-muted disabled:opacity-60"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

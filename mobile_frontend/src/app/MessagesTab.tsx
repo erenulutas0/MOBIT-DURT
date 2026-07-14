@@ -41,7 +41,7 @@ import { reconcileNewestWindow } from "./utils/messageReconcile";
 import {
   forwardedBodyText,
   forwardedDocumentName,
-  groupDocumentsByYearTender,
+  groupDocumentsByYearMonthTender,
   isForwardedLabel,
   microphoneErrorMessage,
 } from "./utils/mobileWorkflow";
@@ -662,7 +662,7 @@ function MessagesTab({
     );
   }, [hiddenRoomDocumentIds, hiddenRoomMessageIds, roomMessages, selectedGroup]);
   const groupedRoomDocuments = useMemo(() =>
-    groupDocumentsByYearTender((selectedGroup?.documents || []).filter(document => !hiddenRoomDocumentIds.has(document.id))),
+    groupDocumentsByYearMonthTender((selectedGroup?.documents || []).filter(document => !hiddenRoomDocumentIds.has(document.id))),
     [hiddenRoomDocumentIds, selectedGroup]);
   const threadSearchTerm = threadSearch.toLocaleLowerCase("tr-TR").trim();
   const threadMatches = (...values: Array<string | number | null | undefined>) => {
@@ -778,24 +778,30 @@ function MessagesTab({
     return groupedRoomDocuments
       .map(yearGroup => ({
         ...yearGroup,
-        tenders: yearGroup.tenders
-          .map(tenderGroup => ({
-            ...tenderGroup,
-            items: tenderGroup.items.filter(item => threadMatches(
-              yearGroup.year,
-              tenderGroup.tenderId,
-              item.note,
-              item.uploaded_by,
-              item.document.original_filename,
-              item.document.stored_filename,
-              item.document.document_type,
-              item.document.organization,
-              item.document.internal_unit
-            )),
+        months: yearGroup.months
+          .map(monthGroup => ({
+            ...monthGroup,
+            tenders: monthGroup.tenders
+              .map(tenderGroup => ({
+                ...tenderGroup,
+                items: tenderGroup.items.filter(item => threadMatches(
+                  yearGroup.year,
+                  monthGroup.monthLabel,
+                  tenderGroup.tenderId,
+                  item.note,
+                  item.uploaded_by,
+                  item.document.original_filename,
+                  item.document.stored_filename,
+                  item.document.document_type,
+                  item.document.organization,
+                  item.document.internal_unit
+                )),
+              }))
+              .filter(tenderGroup => tenderGroup.items.length > 0),
           }))
-          .filter(tenderGroup => tenderGroup.items.length > 0),
+          .filter(monthGroup => monthGroup.tenders.length > 0),
       }))
-      .filter(yearGroup => yearGroup.tenders.length > 0);
+      .filter(yearGroup => yearGroup.months.length > 0);
   }, [groupedRoomDocuments, threadSearchTerm]);
 
   const directThreadTitle = selectedDirectUser?.name || (user.role === "admin" ? "Konuşma" : "Admin ile Konuşma");
@@ -3373,11 +3379,14 @@ function MessagesTab({
         {threadSearchTerm && filteredGroupedRoomDocuments.length === 0 ? (
           <EmptyState icon={Search} title="Sonuç bulunamadı" desc="Bu alandaki dokümanlarda aramanıza uygun kayıt yok." />
         ) : groupedRoomDocuments.length === 0 ? (
-          <EmptyState icon={FolderOpen} title="Doküman yok" desc="Bu alana gönderilen dosyalar burada yıl ve şirket bazında klasörlenir." />
+          <EmptyState icon={FolderOpen} title="Doküman yok" desc="Bu alana gönderilen dosyalar burada yıl, ay ve şirket bazında klasörlenir." />
         ) : filteredGroupedRoomDocuments.map(yearGroup => (
           <div key={yearGroup.year} className="space-y-3">
             <SectionHeader title={yearGroup.year} />
-            {yearGroup.tenders.map(tenderGroup => (
+            {yearGroup.months.map(monthGroup => (
+            <div key={monthGroup.monthKey} className="space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground px-1">{monthGroup.monthLabel}</p>
+            {monthGroup.tenders.map(tenderGroup => (
               <Card key={tenderGroup.tenderId} className="p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <FolderOpen className="w-4 h-4 text-primary" />
@@ -3440,6 +3449,8 @@ function MessagesTab({
                   ))}
                 </div>
               </Card>
+            ))}
+            </div>
             ))}
           </div>
         ))}

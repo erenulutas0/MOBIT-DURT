@@ -9,6 +9,7 @@ import {
   filterCompanyOptions,
   forwardedBodyText,
   forwardedDocumentName,
+  groupDocumentsByYearMonthTender,
   groupDocumentsByYearTender,
   initials,
   isForwardedLabel,
@@ -171,6 +172,20 @@ describe("mobil workflow yardımcıları", () => {
     expect(grouped.map(group => group.year)).toEqual(["2026", "2025"]);
     expect(grouped[0].tenders.map(item => item.tenderId)).toEqual(["BEDAS-2026-001", "IBB-2026-010"]);
     expect(grouped[1].tenders[0].tenderId).toBe("Genel");
+  });
+
+  it("oda dokümanlarını yıl → ay → şirket bazlı klasörler", () => {
+    const grouped = groupDocumentsByYearMonthTender([
+      groupDocument({ id: 1, tender_id: "BEDAS-2026-001", year: 2026, created_at: "2026-07-10T00:00:00Z" }),
+      groupDocument({ id: 2, tender_id: "IBB-2026-010", year: 2026, created_at: "2026-07-02T00:00:00Z" }),
+      groupDocument({ id: 3, tender_id: "BEDAS-2026-001", year: 2026, created_at: "2026-03-15T00:00:00Z" }),
+    ]);
+
+    expect(grouped.map(group => group.year)).toEqual(["2026"]);
+    // Newest month first: Temmuz (07) before Mart (03).
+    expect(grouped[0].months.map(month => month.monthLabel)).toEqual(["Temmuz", "Mart"]);
+    expect(grouped[0].months[0].tenders.map(item => item.tenderId)).toEqual(["BEDAS-2026-001", "IBB-2026-010"]);
+    expect(grouped[0].months[1].tenders[0].items).toHaveLength(1);
   });
 
   it("çoklu görev atamalarını görev ağacı için kullanıcı listesine çevirir", () => {
