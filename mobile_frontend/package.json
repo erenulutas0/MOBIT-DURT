@@ -27,8 +27,7 @@
     "pdfjs-dist": "^4.10.38",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "tw-animate-css": "1.3.8",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "tw-animate-css": "1.3.8"
   },
   "devDependencies": {
     "@capacitor/android": "^7.6.7",

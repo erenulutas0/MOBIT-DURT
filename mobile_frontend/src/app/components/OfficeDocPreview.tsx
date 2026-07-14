@@ -55,7 +55,10 @@ export function OfficeDocPreview({
           const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
           body = result.value || "<p>(Belge boş görünüyor.)</p>";
         } else {
-          const XLSX = await import("xlsx");
+          // Vendored SheetJS (patched 0.20.3) — imported from the repo, not npm, because the
+          // patched build lives only on the SheetJS CDN (which CI can't fetch) and the npm
+          // `xlsx` package has unpatched advisories.
+          const XLSX = await import("../vendor/xlsx.mjs");
           const workbook = XLSX.read(buffer, { type: "array" });
           body = workbook.SheetNames
             .map(sheetName => `<h3>${sheetName}</h3>${XLSX.utils.sheet_to_html(workbook.Sheets[sheetName])}`)

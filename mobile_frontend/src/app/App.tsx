@@ -162,7 +162,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.17";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.18";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
