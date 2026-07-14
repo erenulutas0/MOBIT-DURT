@@ -162,7 +162,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.18";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.19";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -2261,9 +2261,9 @@ function ERPTab({
         notifications.some(item => !item.read_at) ? (
           <button
             onClick={() => void markAllNotificationsRead()}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-muted"
+            className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-2 text-xs font-semibold text-primary active:scale-95"
           >
-            <CheckCircle2 className="w-4 h-4 text-primary" />
+            <CheckCircle2 className="w-4 h-4" /> Tümünü okundu
           </button>
         ) : undefined
       } />
@@ -2367,17 +2367,30 @@ function ERPTab({
                       )}
                       <div className="flex items-center justify-between gap-2 mt-2">
                         <span className="text-[10px] text-muted-foreground">{formatDate(notification.created_at)}</span>
-                        {notification.task_id && (
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openTask(notification.task_id!);
-                            }}
-                            className="text-[10px] text-primary font-semibold"
-                          >
-                            Göreve git
-                          </button>
-                        )}
+                        <div className="flex items-center gap-3 shrink-0">
+                          {notification.task_id && (
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTask(notification.task_id!);
+                              }}
+                              className="text-[10px] text-primary font-semibold"
+                            >
+                              Göreve git
+                            </button>
+                          )}
+                          {unread && (
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void markNotificationRead(notification.id);
+                              }}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground active:scale-95"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Okundu
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2489,7 +2502,7 @@ function KnowledgeGraph({
     <div className="relative flex flex-col h-full min-h-0 overflow-hidden" style={{ background: "#0A0A12" }}>
       <style>{`@keyframes graphPulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.15; } }`}</style>
       <TopBar
-        title={graphData.dynamic ? "Canlı Bilgi Grafiği" : "Knowledge Graph"}
+        title={graphData.dynamic ? "Canlı Bilgi Grafiği" : "Bilgi Grafiği"}
         onBack={onBack}
         actions={
           <div className="flex items-center gap-2">
@@ -2571,9 +2584,20 @@ function KnowledgeGraph({
                   <circle cx={node.x} cy={node.y} r={node.r + 3} fill={color} opacity={0.12} />
                   <circle cx={node.x} cy={node.y} r={node.r} fill={`${color}22`} stroke={color} strokeWidth={isSelected ? 2 : 1} strokeOpacity={isSelected ? 1 : 0.7} />
                   {isSelected && <circle cx={node.x} cy={node.y} r={node.r + 5} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.5} />}
-                  {(node.r >= 9 || isSelected) && (
-                    <text x={node.x} y={node.y + node.r + 8} textAnchor="middle" fill={color} fontSize={6} fontFamily="JetBrains Mono, monospace">
-                      {node.shortLabel}
+                  {(node.r >= 8 || isSelected) && (
+                    <text
+                      x={node.x}
+                      y={node.y + node.r + 9}
+                      textAnchor="middle"
+                      fill="#E5E7EB"
+                      stroke="#0b0b14"
+                      strokeWidth={0.7}
+                      paintOrder="stroke"
+                      fontSize={8}
+                      fontWeight={600}
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {node.label.length > 16 ? `${node.label.slice(0, 15)}…` : node.label}
                     </text>
                   )}
                 </g>
@@ -2600,7 +2624,7 @@ function KnowledgeGraph({
 
       <div className={`absolute inset-y-0 left-0 z-30 w-[260px] border-r border-border bg-[#13131f] transition-transform ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="h-14 px-4 flex items-center justify-between border-b border-border">
-          <p className="text-sm font-bold text-foreground">Vault Gezgini</p>
+          <p className="text-sm font-bold text-foreground">Bilgi Ağı Gezgini</p>
           <button onClick={() => setDrawerOpen(false)} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
             <X className="w-4 h-4 text-foreground" />
           </button>
@@ -2631,7 +2655,7 @@ function KnowledgeGraph({
         <div className="absolute inset-0 z-40 bg-black/80 p-4">
           <div className="flex items-center gap-2 bg-[#13131f] border border-border rounded-2xl px-3 py-3">
             <Search className="w-4 h-4 text-muted-foreground" />
-            <input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Graph içinde ara..."
+            <input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Grafikte ara..."
               className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground" />
             <button onClick={() => setSearchOpen(false)} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
               <X className="w-4 h-4 text-foreground" />

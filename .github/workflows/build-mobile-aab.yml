@@ -6,11 +6,11 @@ on:
       version_name:
         description: "versionName (leave as default unless overriding)"
         required: false
-        default: "1.0.18"
+        default: "1.0.19"
       version_code:
         description: "versionCode (integer, higher than last Play upload)"
         required: false
-        default: "18"
+        default: "19"
 
 jobs:
   build:

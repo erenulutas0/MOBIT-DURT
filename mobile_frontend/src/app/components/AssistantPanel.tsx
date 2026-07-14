@@ -21,7 +21,7 @@ import {
   type AssistantTaskItem,
 } from "../api";
 
-type ChatTurn = { role: "user" | "assistant"; text: string };
+type ChatTurn = { role: "user" | "assistant"; text: string; target?: "tasks" | "messages" };
 
 // Tappable quick prompts. Wording matches the rule-based responder's keyword intents
 // (gecik / bugün / hafta / hazır / bekleyen / mesaj) so each chip returns a useful answer.
@@ -87,7 +87,10 @@ export function AssistantPanel({
     setSending(true);
     try {
       const reply = await sendAssistantMessage(text);
-      setTurns(prev => [...prev, { role: "assistant", text: reply.reply }]);
+      // Give the reply a "git" shortcut to whatever it is about — messages for message queries,
+      // the task list otherwise (the assistant is task-focused).
+      const target: ChatTurn["target"] = /mesaj/i.test(text) ? "messages" : "tasks";
+      setTurns(prev => [...prev, { role: "assistant", text: reply.reply, target }]);
     } catch (exception) {
       setTurns(prev => [
         ...prev,
@@ -250,7 +253,7 @@ export function AssistantPanel({
             {turns.map((turn, i) => (
               <div
                 key={i}
-                className={turn.role === "user" ? "flex justify-end" : "flex justify-start"}
+                className={turn.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}
               >
                 <div
                   className={
@@ -262,6 +265,14 @@ export function AssistantPanel({
                 >
                   {turn.text}
                 </div>
+                {turn.role === "assistant" && turn.target && (
+                  <button
+                    onClick={() => (turn.target === "messages" ? onOpenMessages() : onOpenTasks())}
+                    className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200 active:scale-95"
+                  >
+                    {turn.target === "messages" ? "Mesajlara git" : "Görevlere git"} →
+                  </button>
+                )}
               </div>
             ))}
             {sending && (
