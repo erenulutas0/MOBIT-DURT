@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: "versionName (e.g. 1.0.13)"
-        required: true
+        description: "versionName (leave as default unless overriding)"
+        required: false
+        default: "1.0.18"
       version_code:
-        description: "versionCode (integer, must be greater than the last Play upload)"
-        required: true
+        description: "versionCode (integer, higher than last Play upload)"
+        required: false
+        default: "18"
 
 jobs:
   build:
@@ -71,11 +73,18 @@ jobs:
 
       - name: Build signed AAB + APK
         working-directory: mobile_frontend/android
+        # Values come from env (not interpolated into the script) and are trimmed + quoted, so a
+        # stray space in an input can't split the Gradle arg into a bogus task name.
+        env:
+          VERSION_CODE_INPUT: ${{ inputs.version_code }}
+          VERSION_NAME_INPUT: ${{ inputs.version_name }}
         run: |
           chmod +x gradlew
+          VERSION_CODE="$(echo "$VERSION_CODE_INPUT" | tr -d '[:space:]')"
+          VERSION_NAME="$(echo "$VERSION_NAME_INPUT" | xargs)"
           ./gradlew bundleRelease assembleRelease \
-            -PversionCodeOverride=${{ inputs.version_code }} \
-            -PversionNameOverride=${{ inputs.version_name }}
+            "-PversionCodeOverride=${VERSION_CODE}" \
+            "-PversionNameOverride=${VERSION_NAME}"
 
       - name: Report version
         run: echo "Built versionName=${{ inputs.version_name }} versionCode=${{ inputs.version_code }}"
