@@ -2668,7 +2668,7 @@ function MessagesTab({
       {profileTarget && (
         <UserProfileSheet
           profile={messageProfileFrom(profileTarget.id, profileTarget.name)}
-          currentUserId={user.id}
+          currentUserId={user.id ?? -1}
           onClose={() => setProfileTarget(null)}
           onMessage={() => { const target = messageProfileFrom(profileTarget.id, profileTarget.name); setProfileTarget(null); openPersonThread(target); }}
         />
@@ -2985,7 +2985,7 @@ function MessagesTab({
       {profileTarget && (
         <UserProfileSheet
           profile={messageProfileFrom(profileTarget.id, profileTarget.name)}
-          currentUserId={user.id}
+          currentUserId={user.id ?? -1}
           onClose={() => setProfileTarget(null)}
           onMessage={() => { const target = messageProfileFrom(profileTarget.id, profileTarget.name); setProfileTarget(null); openPersonThread(target); }}
         />
@@ -3627,7 +3627,7 @@ function MessagesTab({
       {profileTarget && (
         <UserProfileSheet
           profile={messageProfileFrom(profileTarget.id, profileTarget.name)}
-          currentUserId={user.id}
+          currentUserId={user.id ?? -1}
           onClose={() => setProfileTarget(null)}
           onMessage={() => { const target = messageProfileFrom(profileTarget.id, profileTarget.name); setProfileTarget(null); openPersonThread(target); }}
         />
