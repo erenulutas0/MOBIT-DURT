@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CompanyWorkflowPicker } from "./components/CompanyWorkflowPicker";
 import { ForwardActionSheet } from "./components/ForwardActionSheet";
+import { OfficeDocPreview, isOfficeDocument } from "./components/OfficeDocPreview";
 import { DeleteActionSheet, MessageOptionsSheet } from "./components/MessageActionSheets";
 import {
   addDocumentGroupMember,
@@ -347,6 +348,75 @@ function GroupImagePreview({
     <button onClick={onOpen} className="mt-3 overflow-hidden rounded-xl border border-border bg-muted block">
       <img src={url} alt={document.document.original_filename || "Görsel"} className="max-h-64 w-full object-cover" />
     </button>
+  );
+}
+
+// Pinch-to-zoom + pan image for the preview lightbox (important for reviewers inspecting scanned
+// documents). Two-pointer pinch scales 1×–5×; single-pointer drags when zoomed; double-tap toggles.
+function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const gesture = useRef({ dist: 1, scale: 1 });
+  const pan = useRef<{ x: number; y: number } | null>(null);
+
+  const clampScale = (value: number) => Math.min(5, Math.max(1, value));
+
+  const handleDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      gesture.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, scale };
+    } else if (scale > 1) {
+      pan.current = { x: event.clientX - offset.x, y: event.clientY - offset.y };
+    }
+  };
+  const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      setScale(clampScale(gesture.current.scale * (dist / gesture.current.dist)));
+    } else if (scale > 1 && pan.current) {
+      setOffset({ x: event.clientX - pan.current.x, y: event.clientY - pan.current.y });
+    }
+  };
+  const handleUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(event.pointerId);
+    pan.current = null;
+    if (pointers.current.size === 0 && scale <= 1.01) setOffset({ x: 0, y: 0 });
+  };
+  const toggleZoom = () => {
+    if (scale > 1) {
+      setScale(1);
+      setOffset({ x: 0, y: 0 });
+    } else {
+      setScale(2.5);
+    }
+  };
+
+  return (
+    <div
+      className="w-full h-full overflow-hidden flex items-center justify-center touch-none select-none"
+      onPointerDown={handleDown}
+      onPointerMove={handleMove}
+      onPointerUp={handleUp}
+      onPointerCancel={handleUp}
+      onDoubleClick={toggleZoom}
+    >
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        className="max-w-full max-h-full object-contain"
+        style={{
+          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+          transition: pan.current ? "none" : "transform 0.12s ease-out",
+        }}
+      />
+    </div>
   );
 }
 
@@ -1702,6 +1772,16 @@ function MessagesTab({
     setPreviewFile(null);
   };
 
+  const downloadPreviewFile = () => {
+    if (!previewFile) return;
+    const link = document.createElement("a");
+    link.href = previewFile.url;
+    link.download = previewFile.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
   const loadOlderDirectMessages = async () => {
     if (directMessagesLoadingOlder || directMessages.length === 0) return;
     const beforeId = Math.min(...directMessages.map(message => message.id));
@@ -2826,11 +2906,13 @@ function MessagesTab({
           </div>
           <div className="flex-1 min-h-0 bg-background">
             {previewFile.type.startsWith("image/") ? (
-              <img src={previewFile.url} alt={previewFile.name} className="w-full h-full object-contain" />
+              <ZoomableImage src={previewFile.url} alt={previewFile.name} />
             ) : previewFile.type.startsWith("video/") ? (
               <video src={previewFile.url} controls className="w-full h-full" />
             ) : isPdfFile(previewFile) ? (
               <PdfCanvasPreview url={previewFile.url} />
+            ) : isOfficeDocument(previewFile.name, previewFile.type) ? (
+              <OfficeDocPreview url={previewFile.url} name={previewFile.name} type={previewFile.type} onDownload={downloadPreviewFile} />
             ) : (
               <iframe src={previewFile.url} title={previewFile.name} className="w-full h-full border-0 bg-white" />
             )}
@@ -3524,11 +3606,13 @@ function MessagesTab({
           </div>
           <div className="flex-1 min-h-0 bg-background">
             {previewFile.type.startsWith("image/") ? (
-              <img src={previewFile.url} alt={previewFile.name} className="w-full h-full object-contain" />
+              <ZoomableImage src={previewFile.url} alt={previewFile.name} />
             ) : previewFile.type.startsWith("video/") ? (
               <video src={previewFile.url} controls className="w-full h-full" />
             ) : isPdfFile(previewFile) ? (
               <PdfCanvasPreview url={previewFile.url} />
+            ) : isOfficeDocument(previewFile.name, previewFile.type) ? (
+              <OfficeDocPreview url={previewFile.url} name={previewFile.name} type={previewFile.type} onDownload={downloadPreviewFile} />
             ) : (
               <iframe src={previewFile.url} title={previewFile.name} className="w-full h-full border-0 bg-white" />
             )}
@@ -4147,11 +4231,13 @@ function MessagesTab({
           </div>
           <div className="flex-1 min-h-0 bg-background">
             {previewFile.type.startsWith("image/") ? (
-              <img src={previewFile.url} alt={previewFile.name} className="w-full h-full object-contain" />
+              <ZoomableImage src={previewFile.url} alt={previewFile.name} />
             ) : previewFile.type.startsWith("video/") ? (
               <video src={previewFile.url} controls className="w-full h-full" />
             ) : isPdfFile(previewFile) ? (
               <PdfCanvasPreview url={previewFile.url} />
+            ) : isOfficeDocument(previewFile.name, previewFile.type) ? (
+              <OfficeDocPreview url={previewFile.url} name={previewFile.name} type={previewFile.type} onDownload={downloadPreviewFile} />
             ) : (
               <iframe src={previewFile.url} title={previewFile.name} className="w-full h-full border-0 bg-white" />
             )}
