@@ -27,7 +27,8 @@ export type Page =
   | "upload"
   | "obsidian"
   | "tender-detail"
-  | "ai-extraction";
+  | "ai-extraction"
+  | "feedback";
 
 export type LiveData = {
   overview: ERPOverview | null;

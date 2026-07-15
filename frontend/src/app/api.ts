@@ -761,6 +761,60 @@ export async function getERPAnalyticsSummary(): Promise<ERPAnalyticsSummary> {
   return response.json();
 }
 
+export type ERPFeedback = {
+  id: number;
+  user_id: number | null;
+  user_name: string;
+  category: "bug" | "suggestion" | "question" | "other" | string;
+  message: string;
+  app_version: string | null;
+  status: "new" | "read" | "resolved" | string;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+};
+
+export type ERPAnnouncement = {
+  id: number;
+  title: string;
+  body: string;
+  updated_at: string;
+};
+
+export async function getERPFeedback(status = "all"): Promise<ERPFeedback[]> {
+  const response = await apiFetch(`/api/erp/feedback?status=${encodeURIComponent(status)}`);
+  if (!response.ok) throw new Error("Dönütler yüklenemedi");
+  return response.json();
+}
+
+export async function updateERPFeedbackStatus(feedbackId: number, status: string): Promise<ERPFeedback> {
+  const response = await apiFetch(`/api/erp/feedback/${feedbackId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) throw new Error("Dönüt durumu güncellenemedi");
+  return response.json();
+}
+
+export async function getERPAnnouncement(): Promise<ERPAnnouncement | null> {
+  const response = await apiFetch("/api/erp/announcement");
+  if (!response.ok) throw new Error("Duyuru yüklenemedi");
+  const data = await response.json();
+  return data?.announcement ?? null;
+}
+
+export async function publishERPAnnouncement(title: string, body: string): Promise<ERPAnnouncement | null> {
+  const response = await apiFetch("/api/erp/announcement", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body }),
+  });
+  if (!response.ok) throw new Error("Duyuru yayınlanamadı");
+  const data = await response.json();
+  return data?.announcement ?? null;
+}
+
 export async function getERPActivity(offset = 0, limit = 50): Promise<ERPActivityEventPage> {
   const params = new URLSearchParams({
     offset: String(offset),

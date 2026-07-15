@@ -89,6 +89,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     properties.getAccountRequestLimit(),
                     properties.getAccountRequestWindowSeconds());
         }
+        if (path.equals("/erp/feedback")) {
+            // Feedback shares the assistant limits: authenticated users, modest volume, and each
+            // submission fans out an admin notification — don't let one client flood that.
+            return Rule.of("feedback", properties.getAssistantLimit(), properties.getAssistantWindowSeconds());
+        }
         if (path.equals("/erp/assistant/chat")) {
             return Rule.of("assistant", properties.getAssistantLimit(), properties.getAssistantWindowSeconds());
         }

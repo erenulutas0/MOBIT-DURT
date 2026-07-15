@@ -621,6 +621,37 @@ export async function markAllERPNotificationsRead(): Promise<void> {
   if (!response.ok) throw new Error(await errorText(response, "Bildirimler okundu yapılamadı."));
 }
 
+export type ERPAnnouncement = {
+  id: number;
+  title: string;
+  body: string;
+  updated_at: string;
+};
+
+export async function getERPAnnouncement(): Promise<ERPAnnouncement | null> {
+  const response = await apiFetch("/erp/announcement");
+  if (!response.ok) throw new Error(await errorText(response, "Duyuru alınamadı."));
+  const data = await response.json();
+  return data?.announcement ?? null;
+}
+
+export async function sendERPFeedback(payload: {
+  category: "bug" | "suggestion" | "question" | "other";
+  message: string;
+  appVersion?: string;
+}): Promise<void> {
+  const response = await apiFetch("/erp/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      category: payload.category,
+      message: payload.message,
+      app_version: payload.appVersion || null,
+    }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Dönüt gönderilemedi."));
+}
+
 export async function getERPNotificationUnreadCount(): Promise<number> {
   const response = await apiFetch("/erp/notifications/unread-count");
   if (!response.ok) throw new Error(await errorText(response, "Okunmamış bildirim sayısı alınamadı."));

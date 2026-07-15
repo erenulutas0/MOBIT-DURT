@@ -22,6 +22,7 @@ export const navItems = [
       { label: "Şirket Geneli", icon: Megaphone, page: "company-chat" as Page },
       { label: "Bildirimler", icon: Bell, page: "notifications" as Page, badge: 7 },
       { label: "Hesap Talepleri", icon: UserPlus, page: "account-requests" as Page, badge: 2 },
+      { label: "Dönütler & Duyuru", icon: Zap, page: "feedback" as Page },
     ],
   },
   {
@@ -47,7 +48,7 @@ export function visibleNavItems(session: ERPSession) {
       return {
         ...item,
         items: item.items
-          .filter((sub) => !["approvals", "account-requests"].includes(sub.page))
+          .filter((sub) => !["approvals", "account-requests", "feedback"].includes(sub.page))
           .map((sub) => sub.page === "employees" ? { ...sub, label: "Profil" } : { ...sub, badge: undefined }),
       };
     }

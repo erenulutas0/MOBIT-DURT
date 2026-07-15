@@ -8,6 +8,7 @@ import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
 import { MessagesTab } from "./MessagesTab";
 import { TabErrorBoundary } from "./components/TabErrorBoundary";
+import { HelpFeedbackOverlay } from "./components/HelpFeedbackOverlay";
 import {
   Avatar,
   Card,
@@ -40,6 +41,7 @@ import {
   getDocumentGroups,
   getERPAccountRequests,
   getMobileAppUpdateInfo,
+  getERPAnnouncement,
   getERPNotificationPreferences,
   getERPNotificationUnreadCount,
   getERPOverview,
@@ -60,7 +62,7 @@ import {
   updateERPTaskDetails,
   sendDocumentGroupMessage,
 } from "./api";
-import type { DocumentGroupSummary, ERPAccountRequest, ERPNotificationPreference, ERPOverview, ERPTask, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
+import type { DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPTask, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
 import {
   employeeStatusLabel,
   formatDate,
@@ -164,7 +166,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.20";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.21";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -3568,12 +3570,14 @@ function ProfileTab({
   onProfilePhotoChange,
   unreadNotifications,
   onOpenNotifications,
+  onOpenHelp,
 }: {
   user: AuthUser;
   onLogout: () => void;
   onProfilePhotoChange: () => void;
   unreadNotifications: number;
   onOpenNotifications: () => void;
+  onOpenHelp: () => void;
 }) {
   const [darkToggle, setDarkToggle] = useState(true);
   const [notificationPrefs, setNotificationPrefs] = useState<ERPNotificationPreference | null>(null);
@@ -3783,6 +3787,13 @@ function ProfileTab({
           <ImageWithFallback src={mobitLogo} alt="Mobit" className="h-9 object-contain opacity-25" />
         </div>
 
+        <button
+          onClick={onOpenHelp}
+          className="w-full py-3.5 rounded-xl text-sm font-semibold text-primary flex items-center justify-center gap-2 border border-primary/25 bg-primary/10"
+        >
+          <MessageSquare className="w-4 h-4" /> Yardım & Dönüt Gönder
+        </button>
+
         <button onClick={() => setShowConfirm(true)}
           className="w-full py-3.5 rounded-xl text-sm font-semibold text-red-400 flex items-center justify-center gap-2 border"
           style={{ background: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)" }}>
@@ -3884,6 +3895,8 @@ export default function App() {
   const [roomOpenRequest, setRoomOpenRequest] = useState<RoomOpenRequest | null>(null);
   const [profilePhotoVersion, setProfilePhotoVersion] = useState(0);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [announcement, setAnnouncement] = useState<ERPAnnouncement | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -3939,6 +3952,40 @@ export default function App() {
   const openNotificationsFromAnywhere = () => {
     setErpOpenRequest({ kind: "notifications", nonce: Date.now() });
     setTab("erp");
+  };
+
+  // Help & announcement overlay. Fetched on login; auto-opens only when the active announcement
+  // is one the user hasn't dismissed yet (dismissal keyed on id + updated_at), so it re-surfaces
+  // exactly when the admin publishes something new — not on every app open.
+  useEffect(() => {
+    if (!authUser) {
+      setAnnouncement(null);
+      setShowHelp(false);
+      return;
+    }
+    let active = true;
+    getERPAnnouncement()
+      .then(current => {
+        if (!active) return;
+        setAnnouncement(current);
+        if (current) {
+          const key = `${current.id}:${current.updated_at}`;
+          if (localStorage.getItem("docsbot.announcement.dismissed") !== key) {
+            setShowHelp(true);
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [authUser?.email]);
+
+  const closeHelp = () => {
+    if (announcement) {
+      localStorage.setItem("docsbot.announcement.dismissed", `${announcement.id}:${announcement.updated_at}`);
+    }
+    setShowHelp(false);
   };
 
   useEffect(() => {
@@ -4018,7 +4065,7 @@ export default function App() {
                       {t === "erp"      && <ERPTab      user={authUser} onOpenDirectMessage={openDirectMessageFromNotification} onOpenDocumentRoom={openDocumentRoomFromNotification} openRequest={erpOpenRequest} />}
                       {t === "tender"   && <TenderTab   user={authUser} onOpenRoom={openDocumentRoomFromNotification} />}
                       {t === "messages" && <MessagesTab user={authUser} openRequest={directMessageOpenRequest} roomOpenRequest={roomOpenRequest} profilePhotoVersion={profilePhotoVersion} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} />}
-                      {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} />}
+                      {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} onOpenHelp={() => setShowHelp(true)} />}
                     </TabErrorBoundary>
                   </div>
                 </div>
@@ -4026,6 +4073,13 @@ export default function App() {
             })}
           </div>
           <BottomNav tab={tab} setTab={setTab} role={authUser.role} />
+          {showHelp && (
+            <HelpFeedbackOverlay
+              announcement={announcement}
+              appVersion={APP_VERSION}
+              onClose={closeHelp}
+            />
+          )}
         </>
       )}
     </div>

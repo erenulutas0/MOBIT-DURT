@@ -183,13 +183,20 @@ public class SecurityConfig {
                                 "/erp/web-push/vapid-public-key",
                                 "/erp/search",
                                 "/erp/company-chat/messages",
-                                "/erp/assistant/briefing")
+                                "/erp/assistant/briefing",
+                                "/erp/announcement",
+                                "/erp/feedback")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/erp/announcement")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/erp/feedback/*/status")
                         .authenticated()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/erp/messages",
                                 "/erp/company-chat/messages",
                                 "/erp/assistant/chat",
+                                "/erp/feedback",
                                 "/erp/me/account-deletion-request")
                         .authenticated()
                         .requestMatchers(
