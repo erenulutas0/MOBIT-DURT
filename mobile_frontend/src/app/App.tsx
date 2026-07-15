@@ -34,6 +34,8 @@ import {
   linkERPTaskDocumentGroup,
   removeERPTaskDependency,
   createERPAccountRequest,
+  verifyERPAccountEmail,
+  resendERPAccountCode,
   registerMobilePushToken,
   getDocumentGroups,
   getERPAccountRequests,
@@ -162,7 +164,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.19";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.20";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -423,7 +425,7 @@ function flattenFolders(node: TreeNode | null | undefined, depth = 0): { path: s
 
 // ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; notice?: string }) {
-  const [mode, setMode] = useState<"login" | "request">("login");
+  const [mode, setMode] = useState<"login" | "request" | "verify">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [requestName, setRequestName] = useState("");
@@ -431,6 +433,8 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
   const [requestPhone, setRequestPhone] = useState("");
   const [requestPassword, setRequestPassword] = useState("");
   const [requestPasswordConfirm, setRequestPasswordConfirm] = useState("");
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -477,18 +481,61 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
     }
     setLoading(true);
     try {
-      await createERPAccountRequest(validation.payload);
-      setSuccess("Hesap talebiniz admin onayına gönderildi.");
+      const created = await createERPAccountRequest(validation.payload);
       setEmail(validation.payload.email);
       setPassword("");
       setRequestName("");
-      setRequestEmail("");
       setRequestPhone("");
       setRequestPassword("");
       setRequestPasswordConfirm("");
-      setMode("login");
+      if (created.verification_required) {
+        // Email verification is on — move to the code-entry step instead of finishing.
+        setVerifyEmail(validation.payload.email);
+        setVerifyCode("");
+        setSuccess("E-postanıza gönderilen 6 haneli kodu girin.");
+        setMode("verify");
+      } else {
+        setRequestEmail("");
+        setSuccess("Hesap talebiniz admin onayına gönderildi.");
+        setMode("login");
+      }
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Hesap talebi oluşturulamadı.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setError("");
+    setSuccess("");
+    if (verifyCode.trim().length < 4) {
+      setError("Doğrulama kodunu girin.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await verifyERPAccountEmail(verifyEmail, verifyCode.trim());
+      setRequestEmail("");
+      setVerifyCode("");
+      setSuccess("E-postanız doğrulandı. Talebiniz admin onayına gönderildi.");
+      setMode("login");
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Doğrulama başarısız.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError("");
+    setSuccess("");
+    setLoading(true);
+    try {
+      await resendERPAccountCode(verifyEmail);
+      setSuccess("Yeni kod e-postanıza gönderildi.");
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Kod gönderilemedi.");
     } finally {
       setLoading(false);
     }
@@ -510,11 +557,41 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
         </div>
       )}
 
-      <AuthModeToggle mode={mode} onChange={switchMode} />
+      {mode !== "verify" && <AuthModeToggle mode={mode} onChange={switchMode} />}
 
       {/* Form */}
       <div className="space-y-3">
-        {mode === "login" ? (
+        {mode === "verify" ? (
+          <>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              <span className="font-semibold text-foreground">{verifyEmail}</span> adresine gönderdiğimiz 6 haneli doğrulama kodunu girin.
+            </p>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Doğrulama kodu</label>
+              <div className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-4 py-3">
+                <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={verifyCode}
+                  onChange={e => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+                  onKeyDown={e => e.key === "Enter" && handleVerify()}
+                  placeholder="000000"
+                  className="flex-1 bg-transparent text-lg tracking-[0.4em] font-semibold text-foreground placeholder:text-muted-foreground placeholder:tracking-normal outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <button onClick={() => switchMode("request")} className="text-xs font-medium text-muted-foreground">
+                ← Geri
+              </button>
+              <button onClick={handleResendCode} disabled={loading} className="text-xs font-semibold text-primary disabled:opacity-50">
+                Kodu tekrar gönder
+              </button>
+            </div>
+          </>
+        ) : mode === "login" ? (
           <>
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1.5">E-posta</label>
@@ -624,13 +701,13 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
         <AuthFeedback success={success} error={error} />
 
         <button
-          onClick={mode === "login" ? handleLogin : handleAccountRequest}
+          onClick={mode === "login" ? handleLogin : mode === "verify" ? handleVerify : handleAccountRequest}
           disabled={loading}
           className="w-full py-3.5 bg-primary rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-60 transition-opacity mt-2"
         >
           {loading
-            ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {mode === "login" ? "Giriş yapılıyor..." : "Talep gönderiliyor..."}</>
-            : mode === "login" ? "Giriş Yap" : "Talep Oluştur"}
+            ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {mode === "login" ? "Giriş yapılıyor..." : mode === "verify" ? "Doğrulanıyor..." : "Talep gönderiliyor..."}</>
+            : mode === "login" ? "Giriş Yap" : mode === "verify" ? "Doğrula" : "Talep Oluştur"}
         </button>
         {mode === "request" && (
           <p className="text-[11px] text-muted-foreground text-center leading-relaxed px-2">

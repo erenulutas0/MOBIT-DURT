@@ -179,6 +179,7 @@ export type ERPAccountRequest = {
   phone: string | null;
   status: "pending" | "approved" | "rejected" | string;
   requested_role: string;
+  verification_required?: boolean;
   decided_by: string | null;
   decided_at: string | null;
   created_user_id: number | null;
@@ -398,6 +399,24 @@ export async function createERPAccountRequest(payload: {
   });
   if (!response.ok) throw new Error(await accountRequestErrorText(response));
   return response.json();
+}
+
+export async function verifyERPAccountEmail(email: string, code: string): Promise<void> {
+  const response = await fetchWithTimeout(`${apiBaseUrl()}/erp/account-requests/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Doğrulama başarısız."));
+}
+
+export async function resendERPAccountCode(email: string): Promise<void> {
+  const response = await fetchWithTimeout(`${apiBaseUrl()}/erp/account-requests/resend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Kod gönderilemedi."));
 }
 
 export async function getERPAccountRequests(status = "pending"): Promise<ERPAccountRequest[]> {
