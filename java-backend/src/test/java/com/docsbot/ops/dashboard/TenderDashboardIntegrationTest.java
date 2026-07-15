@@ -65,6 +65,10 @@ class TenderDashboardIntegrationTest {
         jdbcTemplate.update("delete from erp_team_members");
         jdbcTemplate.update("delete from erp_teams");
         jdbcTemplate.update("delete from erp_account_requests");
+        // Messages must go before users: their sender/recipient FKs are ON DELETE SET NULL, and a
+        // NULL sender_user_id on a 'user' message violates ck_erp_direct_messages_sender.
+        jdbcTemplate.update("delete from erp_direct_messages");
+        jdbcTemplate.update("delete from company_chat_messages");
         jdbcTemplate.update("delete from erp_users");
         jdbcTemplate.update("delete from auth_audit_events");
         jdbcTemplate.update("delete from documents");

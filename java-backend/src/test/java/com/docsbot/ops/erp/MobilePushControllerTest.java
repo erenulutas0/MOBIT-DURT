@@ -38,6 +38,9 @@ class MobilePushControllerTest {
         jdbcTemplate.update("delete from erp_task_assignments");
         jdbcTemplate.update("delete from erp_tasks");
         jdbcTemplate.update("delete from erp_account_requests");
+        // Messages before users: SET NULL sender FKs would violate the sender check constraints.
+        jdbcTemplate.update("delete from erp_direct_messages");
+        jdbcTemplate.update("delete from company_chat_messages");
         jdbcTemplate.update("delete from erp_users");
     }
 
