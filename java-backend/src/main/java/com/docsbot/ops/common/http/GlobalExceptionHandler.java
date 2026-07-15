@@ -77,6 +77,14 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.UNAUTHORIZED, exception.getMessage(), request, Map.of());
     }
 
+    @ExceptionHandler(AuthExceptions.TooManyRequests.class)
+    ResponseEntity<ApiError> handleTooManyRequests(
+            AuthExceptions.TooManyRequests exception,
+            HttpServletRequest request
+    ) {
+        return response(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), request, Map.of());
+    }
+
     @ExceptionHandler(ErpExceptions.BadRequest.class)
     ResponseEntity<ApiError> handleErpBadRequest(
             ErpExceptions.BadRequest exception,

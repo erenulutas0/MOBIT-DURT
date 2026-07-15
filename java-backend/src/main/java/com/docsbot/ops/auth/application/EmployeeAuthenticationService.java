@@ -35,28 +35,34 @@ public class EmployeeAuthenticationService {
     @Transactional
     public AuthSessionResponse login(String email, String password) {
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        java.time.Instant now = java.time.Instant.now();
+        // Look up the account first (independent of the password) so failures can be counted per
+        // account and a locked account is rejected before any password work is done.
         ErpUser user = userRepository.findByEmailIgnoreCase(normalizedEmail)
                 .filter(candidate -> candidate.getApprovedAt() != null)
                 .filter(candidate -> candidate.getPasswordHash() != null)
-                .filter(candidate -> passwordEncoder.matches(password, candidate.getPasswordHash()))
                 .orElse(null);
-        if (user == null) {
-            auditRecorder.record(
-                    normalizedEmail,
-                    "EMPLOYEE_LOGIN",
-                    "SESSION",
-                    null,
-                    "FAILURE");
+
+        if (user != null && user.isLocked(now)) {
+            auditRecorder.record(user.getEmail(), "EMPLOYEE_LOGIN", "ERP_USER", user.getId().toString(), "LOCKED");
+            throw new AuthExceptions.TooManyRequests(
+                    "Çok fazla hatalı giriş denemesi. Lütfen bir süre sonra tekrar deneyin.");
+        }
+
+        boolean passwordOk = user != null && passwordEncoder.matches(password, user.getPasswordHash());
+        if (!passwordOk) {
+            if (user != null) {
+                user.registerFailedLogin(now);
+            }
+            // Same generic message whether the email is unknown or the password is wrong — no
+            // account enumeration.
+            auditRecorder.record(normalizedEmail, "EMPLOYEE_LOGIN", "SESSION", null, "FAILURE");
             throw new AuthExceptions.Unauthorized("Invalid employee credentials");
         }
-        user.updatePresence(com.docsbot.ops.auth.domain.UserStatus.ONLINE, java.time.Instant.now());
 
-        auditRecorder.record(
-                user.getEmail(),
-                "EMPLOYEE_LOGIN",
-                "ERP_USER",
-                user.getId().toString(),
-                "SUCCESS");
+        user.clearLoginFailures();
+        user.updatePresence(com.docsbot.ops.auth.domain.UserStatus.ONLINE, now);
+        auditRecorder.record(user.getEmail(), "EMPLOYEE_LOGIN", "ERP_USER", user.getId().toString(), "SUCCESS");
         return refreshTokenService.issueSession(
                 "user",
                 user.getEmail(),

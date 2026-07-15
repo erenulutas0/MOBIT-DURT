@@ -1,5 +1,6 @@
 package com.docsbot.ops.auth.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import jakarta.persistence.Column;
@@ -50,6 +51,16 @@ public class ErpUser {
     @Column(name = "document_network_visible", nullable = false)
     private boolean documentNetworkVisible;
 
+    @Column(name = "failed_login_count", nullable = false)
+    private int failedLoginCount;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
+    // After this many consecutive failed logins the account is locked for LOCK_DURATION.
+    private static final int MAX_FAILED_LOGINS = 8;
+    private static final Duration LOCK_DURATION = Duration.ofMinutes(15);
+
     protected ErpUser() {
     }
 
@@ -93,6 +104,29 @@ public class ErpUser {
     public void updatePresence(UserStatus status, Instant now) {
         this.status = status;
         this.lastSeenAt = now;
+    }
+
+    public boolean isLocked(Instant now) {
+        return lockedUntil != null && lockedUntil.isAfter(now);
+    }
+
+    public Instant getLockedUntil() {
+        return lockedUntil;
+    }
+
+    /** Records a failed login; locks the account once the failure threshold is crossed. */
+    public void registerFailedLogin(Instant now) {
+        failedLoginCount += 1;
+        if (failedLoginCount >= MAX_FAILED_LOGINS) {
+            lockedUntil = now.plus(LOCK_DURATION);
+            failedLoginCount = 0;
+        }
+    }
+
+    /** Clears failure state on a successful login (or an expired lock). */
+    public void clearLoginFailures() {
+        failedLoginCount = 0;
+        lockedUntil = null;
     }
 
     public void setDocumentNetworkVisible(boolean visible) {

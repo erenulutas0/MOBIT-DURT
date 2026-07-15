@@ -22,4 +22,10 @@ public final class AuthExceptions {
             super(message);
         }
     }
+
+    public static class TooManyRequests extends RuntimeException {
+        public TooManyRequests(String message) {
+            super(message);
+        }
+    }
 }
