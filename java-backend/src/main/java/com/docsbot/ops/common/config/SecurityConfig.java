@@ -229,13 +229,27 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource() {
+    CorsConfigurationSource corsConfigurationSource(
+            @org.springframework.beans.factory.annotation.Value("${DOCSBOT_WEB_ORIGINS:}") String webOrigins) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(
+        // Mobile (Capacitor) + local dev origins, plus the production web panel served behind the
+        // reverse proxy. Extra origins (e.g. a custom domain) can be added via DOCSBOT_WEB_ORIGINS
+        // as a comma-separated list without a code change.
+        java.util.List<String> allowedOrigins = new java.util.ArrayList<>(List.of(
                 "https://localhost",
                 "http://localhost",
                 "capacitor://localhost",
-                "ionic://localhost"));
+                "ionic://localhost",
+                "https://84-46-251-95.sslip.io"));
+        if (webOrigins != null && !webOrigins.isBlank()) {
+            for (String origin : webOrigins.split(",")) {
+                String trimmed = origin.trim();
+                if (!trimmed.isEmpty() && !allowedOrigins.contains(trimmed)) {
+                    allowedOrigins.add(trimmed);
+                }
+            }
+        }
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedOriginPatterns(List.of(
                 "http://localhost:*",
                 "http://127.0.0.1:*",
