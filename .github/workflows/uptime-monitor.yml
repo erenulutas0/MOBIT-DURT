@@ -1,0 +1,60 @@
+name: Uptime Monitor
+
+# Polls the production /health endpoint. On sustained failure it opens (or comments on) a GitHub
+# issue so the team gets notified; when the service recovers it comments and closes the issue.
+on:
+  schedule:
+    - cron: "*/30 * * * *" # every 30 minutes
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  probe:
+    name: Probe /health
+    runs-on: ubuntu-latest
+    if: github.repository == 'erenulutas0/MOBIT-DURT'
+    env:
+      HEALTH_URL: https://84-46-251-95.sslip.io/health
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ALERT_LABEL: uptime-alert
+    steps:
+      - name: Check health (3 tries)
+        id: check
+        run: |
+          ok=0
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$HEALTH_URL" || echo 000)
+            echo "Attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 10
+          done
+          echo "healthy=$ok" >> "$GITHUB_OUTPUT"
+
+      - name: Open/close alert issue
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          # Ensure the label exists (ignore error if it already does).
+          gh label create "$ALERT_LABEL" --repo "$REPO" --color B60205 --description "Automated uptime alert" 2>/dev/null || true
+          EXISTING=$(gh issue list --repo "$REPO" --label "$ALERT_LABEL" --state open --json number --jq '.[0].number' || echo "")
+
+          if [ "${{ steps.check.outputs.healthy }}" != "1" ]; then
+            if [ -z "$EXISTING" ]; then
+              gh issue create --repo "$REPO" \
+                --title "🔴 Backend erişilemiyor (uptime)" \
+                --label "$ALERT_LABEL" \
+                --body "Otomatik izleme $HEALTH_URL adresine ulaşamadı ($(date -u '+%Y-%m-%d %H:%M UTC')). Sunucu/deploy durumunu kontrol edin."
+            else
+              gh issue comment "$EXISTING" --repo "$REPO" \
+                --body "Hâlâ erişilemiyor ($(date -u '+%Y-%m-%d %H:%M UTC'))."
+            fi
+          else
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$REPO" \
+                --body "✅ Servis tekrar erişilebilir ($(date -u '+%Y-%m-%d %H:%M UTC')). Kapatılıyor."
+              gh issue close "$EXISTING" --repo "$REPO"
+            fi
+            echo "Healthy."
+          fi

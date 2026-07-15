@@ -1,0 +1,64 @@
+name: Off-site DB Backup
+
+# Pulls an encrypted PostgreSQL dump off the VPS and stores it as a retained GitHub artifact —
+# off-site from the server, so a VPS loss/compromise doesn't take the backups with it. The dump is
+# gpg-symmetric-encrypted with the BACKUP_PASSPHRASE secret, so the artifact is useless without it.
+on:
+  schedule:
+    - cron: "30 3 * * *" # daily 03:30 UTC, ~1h after the VPS's own 02:30 cron backup
+  workflow_dispatch:
+
+jobs:
+  backup:
+    name: Dump, encrypt, upload
+    runs-on: ubuntu-latest
+    # Only the private repo should ever hold production data; skip on any public mirror.
+    if: github.repository == 'erenulutas0/MOBIT-DURT'
+    env:
+      DEPLOY_HOST: 84.46.251.95
+      DEPLOY_USER: root
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Dump database over SSH
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'docker exec docsbot-postgres pg_dump -U docsbot docsbot | gzip -c' > db.sql.gz
+          SIZE=$(stat -c%s db.sql.gz)
+          echo "Dump size: ${SIZE} bytes"
+          if [ "$SIZE" -lt 1000 ]; then
+            echo "Dump is suspiciously small (<1KB) — treating as failure."
+            exit 1
+          fi
+
+      - name: Encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_PASSPHRASE}" ]; then
+            echo "BACKUP_PASSPHRASE secret is not set — refusing to store an unencrypted dump."
+            exit 1
+          fi
+          STAMP=$(date -u +%Y%m%d-%H%M)
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "${BACKUP_PASSPHRASE}" \
+            -o "docsbot-db-${STAMP}.sql.gz.gpg" db.sql.gz
+          echo "ARTIFACT_NAME=docsbot-db-${STAMP}" >> "$GITHUB_ENV"
+
+      - name: Upload encrypted backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: "*.sql.gz.gpg"
+          retention-days: 90
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
