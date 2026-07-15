@@ -82,6 +82,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/erp/account-requests")
                         .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/erp/account-requests/verify", "/erp/account-requests/resend")
+                        .permitAll()
                         .requestMatchers("/erp/account-requests/**")
                         .hasRole("ADMIN")
                         .requestMatchers(

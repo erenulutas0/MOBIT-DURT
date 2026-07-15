@@ -12,6 +12,7 @@ public record DocsBotProperties(
         WebPush webPush,
         MobilePush mobilePush,
         Email email,
+        Account account,
         AppUpdate appUpdate,
         Telegram telegram,
         Admin admin,
@@ -75,6 +76,14 @@ public record DocsBotProperties(
             String from,
             String adminTo,
             String subjectPrefix
+    ) {
+    }
+
+    public record Account(
+            boolean emailVerificationEnabled,
+            String fromAddress,
+            String appName,
+            int codeTtlMinutes
     ) {
     }
 

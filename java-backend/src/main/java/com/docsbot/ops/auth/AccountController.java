@@ -56,6 +56,16 @@ public class AccountController {
                 .toList();
     }
 
+    @PostMapping("/verify")
+    void verify(@Valid @RequestBody VerifyRequest request) {
+        accountService.verifyEmail(request.email(), request.code());
+    }
+
+    @PostMapping("/resend")
+    void resend(@Valid @RequestBody ResendRequest request) {
+        accountService.resendCode(request.email());
+    }
+
     @PostMapping("/{requestId}/approve")
     UserResponse approve(@PathVariable long requestId, Authentication authentication) {
         return UserResponse.from(accountService.approve(requestId, authentication.getName()));
@@ -74,6 +84,17 @@ public class AccountController {
     ) {
     }
 
+    record VerifyRequest(
+            @NotBlank @Email @Size(max = 255) String email,
+            @NotBlank @Size(min = 4, max = 10) String code
+    ) {
+    }
+
+    record ResendRequest(
+            @NotBlank @Email @Size(max = 255) String email
+    ) {
+    }
+
     record AccountRequestResponse(
             Long id,
             String name,
@@ -81,6 +102,7 @@ public class AccountController {
             String phone,
             String status,
             @JsonProperty("requested_role") String requestedRole,
+            @JsonProperty("verification_required") boolean verificationRequired,
             @JsonProperty("decided_by") String decidedBy,
             @JsonProperty("decided_at") Instant decidedAt,
             @JsonProperty("created_user_id") Long createdUserId,
@@ -94,6 +116,7 @@ public class AccountController {
                     request.getPhone(),
                     request.getStatus().name().toLowerCase(Locale.ROOT),
                     request.getRequestedRole().name().toLowerCase(Locale.ROOT),
+                    !request.isEmailVerified(),
                     request.getDecidedBy(),
                     request.getDecidedAt(),
                     request.getCreatedUserId(),

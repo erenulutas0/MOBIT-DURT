@@ -91,6 +91,7 @@ class HttpTelegramGatewayTest {
                 new DocsBotProperties.WebPush(false, "", "", "", 0),
                 new DocsBotProperties.MobilePush(false, "", "", "", "", "https://fcm.googleapis.com", "", "", "", "", "", "sandbox", "", 10),
                 new DocsBotProperties.Email(false, false, "docsbot@example.com", null, "[DocsBot Ops]"),
+                null,
                 new DocsBotProperties.AppUpdate(
                         "1.0.7",
                         "1.0.6",

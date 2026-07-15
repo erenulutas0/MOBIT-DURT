@@ -17,6 +17,9 @@ public interface ErpAccountRequestRepository extends JpaRepository<ErpAccountReq
 
     boolean existsByEmailIgnoreCaseAndStatus(String email, AccountRequestStatus status);
 
+    Optional<ErpAccountRequest> findFirstByEmailIgnoreCaseAndStatusOrderByCreatedAtDescIdDesc(
+            String email, AccountRequestStatus status);
+
     List<ErpAccountRequest> findAllByStatusOrderByCreatedAtDescIdDesc(AccountRequestStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -97,6 +97,7 @@ class FcmAccessTokenProviderTest {
                         "",
                         10),
                 new DocsBotProperties.Email(false, false, "docsbot@example.com", null, "[DocsBot Ops]"),
+                null,
                 new DocsBotProperties.AppUpdate(
                         "1.0.7",
                         "1.0.6",

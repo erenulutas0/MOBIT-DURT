@@ -15,6 +15,19 @@ spring:
     multipart:
       max-file-size: ${MAX_FILE_SIZE_BYTES:26214400}
       max-request-size: ${MAX_FILE_SIZE_BYTES:26214400}
+  # SMTP for account/verification emails. Empty host = no JavaMailSender bean = email off (safe).
+  # For Brevo set DOCSBOT_SMTP_HOST=smtp-relay.brevo.com + the SMTP login/key.
+  mail:
+    host: ${DOCSBOT_SMTP_HOST:}
+    port: ${DOCSBOT_SMTP_PORT:587}
+    username: ${DOCSBOT_SMTP_USERNAME:}
+    password: ${DOCSBOT_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 server:
   address: ${JAVA_SERVER_ADDRESS:127.0.0.1}
@@ -78,6 +91,11 @@ docsbot:
     from: ${DOCSBOT_EMAIL_FROM:docsbot@example.com}
     admin-to: ${DOCSBOT_EMAIL_ADMIN_TO:}
     subject-prefix: ${DOCSBOT_EMAIL_SUBJECT_PREFIX:[DocsBot Ops]}
+  account:
+    email-verification-enabled: ${DOCSBOT_ACCOUNT_EMAIL_VERIFICATION_ENABLED:false}
+    from-address: ${DOCSBOT_ACCOUNT_FROM:no-reply@mobit.com.tr}
+    app-name: ${DOCSBOT_ACCOUNT_APP_NAME:Mobit Dürt}
+    code-ttl-minutes: ${DOCSBOT_ACCOUNT_CODE_TTL_MINUTES:15}
   app-update:
     latest-version: ${DOCSBOT_APP_LATEST_VERSION:1.0.7}
     minimum-version: ${DOCSBOT_APP_MINIMUM_VERSION:1.0.7}

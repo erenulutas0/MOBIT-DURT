@@ -2,6 +2,8 @@ package com.docsbot.ops.auth.domain;
 
 import java.time.Instant;
 
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -50,6 +52,22 @@ public class ErpAccountRequest {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = true;
+
+    @Column(name = "verification_code_hash")
+    private String verificationCodeHash;
+
+    @Column(name = "verification_expires_at")
+    private Instant verificationExpiresAt;
+
+    @Column(name = "verification_attempts", nullable = false)
+    private int verificationAttempts;
+
+    private static final int MAX_VERIFICATION_ATTEMPTS = 5;
+
+    public enum VerificationResult { VERIFIED, INVALID_CODE, EXPIRED, LOCKED_OUT, ALREADY_VERIFIED }
+
     protected ErpAccountRequest() {
     }
 
@@ -69,6 +87,44 @@ public class ErpAccountRequest {
         request.requestedRole = UserRole.EMPLOYEE;
         request.createdAt = now;
         return request;
+    }
+
+    /** Starts email verification: marks unverified and stores the hashed code + expiry. */
+    public void startVerification(String codeHash, Instant expiresAt) {
+        this.emailVerified = false;
+        this.verificationCodeHash = codeHash;
+        this.verificationExpiresAt = expiresAt;
+        this.verificationAttempts = 0;
+    }
+
+    /** Checks a submitted code, updating verified/attempt state. */
+    public VerificationResult verifyCode(String rawCode, PasswordEncoder encoder, Instant now) {
+        if (emailVerified) {
+            return VerificationResult.ALREADY_VERIFIED;
+        }
+        if (verificationCodeHash == null || verificationExpiresAt == null || !verificationExpiresAt.isAfter(now)) {
+            return VerificationResult.EXPIRED;
+        }
+        if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+            verificationCodeHash = null;
+            return VerificationResult.LOCKED_OUT;
+        }
+        if (encoder.matches(rawCode, verificationCodeHash)) {
+            emailVerified = true;
+            verificationCodeHash = null;
+            verificationExpiresAt = null;
+            return VerificationResult.VERIFIED;
+        }
+        verificationAttempts += 1;
+        if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+            verificationCodeHash = null;
+            return VerificationResult.LOCKED_OUT;
+        }
+        return VerificationResult.INVALID_CODE;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
     }
 
     public void approve(String decidedBy, Long userId, Instant now) {

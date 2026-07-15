@@ -44,6 +44,7 @@ class ProductionConfigurationValidatorTest {
                         "docsbot@example.com",
                         "",
                         "[DocsBot Ops]"),
+                null,
                 new DocsBotProperties.AppUpdate(
                         "1.0.7",
                         "1.0.6",
@@ -121,6 +122,7 @@ class ProductionConfigurationValidatorTest {
                         "docsbot@example.com",
                         "ops@example.com",
                         "[DocsBot Ops]"),
+                null,
                 new DocsBotProperties.AppUpdate(
                         "1.0.7",
                         "1.0.6",
