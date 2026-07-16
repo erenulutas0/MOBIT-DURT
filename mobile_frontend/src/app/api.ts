@@ -401,6 +401,30 @@ export async function createERPAccountRequest(payload: {
   return response.json();
 }
 
+// Self-service registration: creates an auto-approved account and returns a session, so the user is
+// logged in immediately (no admin approval, no email verification step).
+export async function registerToBackend(payload: {
+  name: string;
+  username: string;
+  email?: string;
+  phone?: string;
+  password: string;
+}): Promise<BackendAuthUser> {
+  const response = await fetchWithTimeout(`${apiBaseUrl()}/erp/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: payload.name,
+      username: payload.username,
+      email: payload.email || null,
+      phone: payload.phone || null,
+      password: payload.password,
+    }),
+  });
+  if (!response.ok) throw new Error(await accountRequestErrorText(response));
+  return toUser(await response.json());
+}
+
 export async function verifyERPAccountEmail(email: string, code: string): Promise<void> {
   const response = await fetchWithTimeout(`${apiBaseUrl()}/erp/account-requests/verify`, {
     method: "POST",

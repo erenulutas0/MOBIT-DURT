@@ -31,6 +31,11 @@ public class ErpUser {
     @Column(nullable = false, length = 32)
     private UserStatus status = UserStatus.OFFLINE;
 
+    // Chosen at self-registration; nullable so legacy accounts (which authenticate by email) are
+    // unaffected. Unique via a lower(username) index; multiple NULLs are allowed.
+    @Column(length = 64)
+    private String username;
+
     @Column(unique = true)
     private String email;
 
@@ -73,6 +78,31 @@ public class ErpUser {
     ) {
         ErpUser user = new ErpUser();
         user.name = name;
+        user.email = email;
+        user.phone = phone;
+        user.passwordHash = passwordHash;
+        user.role = UserRole.EMPLOYEE;
+        user.status = UserStatus.OFFLINE;
+        user.approvedAt = now;
+        user.createdAt = now;
+        return user;
+    }
+
+    /**
+     * A self-registered employee: chooses a username (required) with optional email/phone. The
+     * account is active immediately (approvedAt = now) — self-registration is auto-approved.
+     */
+    public static ErpUser registeredEmployee(
+            String name,
+            String username,
+            String email,
+            String phone,
+            String passwordHash,
+            Instant now
+    ) {
+        ErpUser user = new ErpUser();
+        user.name = name;
+        user.username = username;
         user.email = email;
         user.phone = phone;
         user.passwordHash = passwordHash;
@@ -139,6 +169,10 @@ public class ErpUser {
 
     public String getName() {
         return name;
+    }
+
+    public String getUsername() {
+        return username;
     }
 
     public UserRole getRole() {

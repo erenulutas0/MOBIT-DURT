@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
-export type AuthMode = "login" | "request";
+export type AuthMode = "login" | "request" | "admin";
 
 export function AuthModeToggle({
   mode,
@@ -9,22 +9,21 @@ export function AuthModeToggle({
   mode: AuthMode;
   onChange: (mode: AuthMode) => void;
 }) {
+  const tab = (value: AuthMode, label: string) => (
+    <button
+      type="button"
+      onClick={() => onChange(value)}
+      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${mode === value ? "bg-primary text-white" : "text-muted-foreground"}`}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className="grid grid-cols-2 gap-2 bg-card border border-border rounded-2xl p-1 mb-5">
-      <button
-        type="button"
-        onClick={() => onChange("login")}
-        className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${mode === "login" ? "bg-primary text-white" : "text-muted-foreground"}`}
-      >
-        Giriş
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("request")}
-        className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${mode === "request" ? "bg-primary text-white" : "text-muted-foreground"}`}
-      >
-        Hesap Talebi
-      </button>
+    <div className="grid grid-cols-3 gap-2 bg-card border border-border rounded-2xl p-1 mb-5">
+      {tab("login", "Giriş")}
+      {tab("request", "Kayıt Ol")}
+      {tab("admin", "Admin")}
     </div>
   );
 }

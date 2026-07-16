@@ -78,6 +78,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         if (path.equals("/erp/auth/admin-login")
                 || path.equals("/erp/auth/login")
+                || path.equals("/erp/auth/register")
                 || path.equals("/erp/auth/refresh")
                 || path.equals("/erp/account-requests/verify")
                 || path.equals("/erp/account-requests/resend")) {

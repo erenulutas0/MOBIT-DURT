@@ -13,6 +13,10 @@ public interface ErpUserRepository extends JpaRepository<ErpUser, Long> {
 
     boolean existsByEmailIgnoreCase(String email);
 
+    Optional<ErpUser> findByUsernameIgnoreCase(String username);
+
+    boolean existsByUsernameIgnoreCase(String username);
+
     List<ErpUser> findAllByOrderByCreatedAtDescIdDesc();
 
     List<ErpUser> findAllByOrderByNameAscIdAsc();

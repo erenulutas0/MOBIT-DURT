@@ -34,7 +34,7 @@ import {
   createERPTask,
   linkERPTaskDocumentGroup,
   removeERPTaskDependency,
-  createERPAccountRequest,
+  registerToBackend,
   verifyERPAccountEmail,
   resendERPAccountCode,
   registerMobilePushToken,
@@ -166,7 +166,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.21";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.23";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -427,10 +427,11 @@ function flattenFolders(node: TreeNode | null | undefined, depth = 0): { path: s
 
 // ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; notice?: string }) {
-  const [mode, setMode] = useState<"login" | "request" | "verify">("login");
+  const [mode, setMode] = useState<"login" | "request" | "admin" | "verify">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [requestName, setRequestName] = useState("");
+  const [requestUsername, setRequestUsername] = useState("");
   const [requestEmail, setRequestEmail] = useState("");
   const [requestPhone, setRequestPhone] = useState("");
   const [requestPassword, setRequestPassword] = useState("");
@@ -442,7 +443,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
 
-  const switchMode = (nextMode: "login" | "request") => {
+  const switchMode = (nextMode: "login" | "request" | "admin") => {
     setError("");
     setSuccess("");
     setMode(nextMode);
@@ -467,11 +468,12 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
     }
   };
 
-  const handleAccountRequest = async () => {
+  const handleRegister = async () => {
     setError("");
     setSuccess("");
     const validation = validateAccountRequestForm({
       name: requestName,
+      username: requestUsername,
       email: requestEmail,
       phone: requestPhone,
       password: requestPassword,
@@ -483,27 +485,12 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
     }
     setLoading(true);
     try {
-      const created = await createERPAccountRequest(validation.payload);
-      setEmail(validation.payload.email);
-      setPassword("");
-      setRequestName("");
-      setRequestPhone("");
-      setRequestPassword("");
-      setRequestPasswordConfirm("");
-      if (created.verification_required) {
-        // Email verification is on — move to the code-entry step instead of finishing.
-        setVerifyEmail(validation.payload.email);
-        setVerifyCode("");
-        setSuccess("E-postanıza gönderilen 6 haneli kodu girin.");
-        setMode("verify");
-      } else {
-        setRequestEmail("");
-        setSuccess("Hesap talebiniz admin onayına gönderildi.");
-        setMode("login");
-      }
+      // Self-registration is auto-approved and returns a session — log the user straight in.
+      const user = await registerToBackend(validation.payload);
+      saveSession(user);
+      onLogin({ id: user.id, name: user.name, email: user.email, role: user.role, dept: user.dept });
     } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Hesap talebi oluşturulamadı.");
-    } finally {
+      setError(exception instanceof Error ? exception.message : "Kayıt oluşturulamadı.");
       setLoading(false);
     }
   };
@@ -593,18 +580,22 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
               </button>
             </div>
           </>
-        ) : mode === "login" ? (
+        ) : mode === "login" || mode === "admin" ? (
           <>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">E-posta</label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                {mode === "admin" ? "Kullanıcı adı" : "Kullanıcı adı veya e-posta"}
+              </label>
               <div className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-4 py-3">
                 <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
                 <input
-                  type="email"
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleLogin()}
-                  placeholder="ornek@mobit.com.tr"
+                  placeholder={mode === "admin" ? "admin" : "kullanıcı adınız veya e-postanız"}
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                 />
               </div>
@@ -642,14 +633,29 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">E-posta</label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Kullanıcı adı</label>
+              <div className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-4 py-3">
+                <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  value={requestUsername}
+                  onChange={e => setRequestUsername(e.target.value)}
+                  placeholder="Giriş için kullanacağınız ad (örn. ahmet)"
+                  className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">E-posta (isteğe bağlı)</label>
               <div className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-4 py-3">
                 <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
                 <input
                   type="email"
                   value={requestEmail}
                   onChange={e => setRequestEmail(e.target.value)}
-                  placeholder="ornek@mobit.com.tr"
+                  placeholder="İsteğe bağlı"
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                 />
               </div>
@@ -691,7 +697,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
                   type={showPw ? "text" : "password"}
                   value={requestPasswordConfirm}
                   onChange={e => setRequestPasswordConfirm(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleAccountRequest()}
+                  onKeyDown={e => e.key === "Enter" && handleRegister()}
                   placeholder="Şifrenizi tekrar yazın"
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                 />
@@ -703,17 +709,22 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
         <AuthFeedback success={success} error={error} />
 
         <button
-          onClick={mode === "login" ? handleLogin : mode === "verify" ? handleVerify : handleAccountRequest}
+          onClick={mode === "request" ? handleRegister : mode === "verify" ? handleVerify : handleLogin}
           disabled={loading}
           className="w-full py-3.5 bg-primary rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-60 transition-opacity mt-2"
         >
           {loading
-            ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {mode === "login" ? "Giriş yapılıyor..." : mode === "verify" ? "Doğrulanıyor..." : "Talep gönderiliyor..."}</>
-            : mode === "login" ? "Giriş Yap" : mode === "verify" ? "Doğrula" : "Talep Oluştur"}
+            ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {mode === "request" ? "Kayıt yapılıyor..." : mode === "verify" ? "Doğrulanıyor..." : "Giriş yapılıyor..."}</>
+            : mode === "request" ? "Kayıt Ol ve Gir" : mode === "verify" ? "Doğrula" : mode === "admin" ? "Yönetici Girişi" : "Giriş Yap"}
         </button>
         {mode === "request" && (
           <p className="text-[11px] text-muted-foreground text-center leading-relaxed px-2">
-            Talebiniz yöneticilere iletilir. Onaylandıktan sonra belirlediğiniz şifreyle giriş yapabilirsiniz.
+            Kayıt olduğunuzda hesabınız hemen açılır ve giriş yaparsınız. E-posta isteğe bağlıdır; dilerseniz sonra ekleyip doğrulayabilirsiniz.
+          </p>
+        )}
+        {mode === "admin" && (
+          <p className="text-[11px] text-muted-foreground text-center leading-relaxed px-2">
+            Yönetici hesabıyla giriş — çalışan hesabı değil.
           </p>
         )}
       </div>

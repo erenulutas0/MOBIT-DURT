@@ -72,6 +72,7 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/erp/auth/admin-login",
                                 "/erp/auth/login",
+                                "/erp/auth/register",
                                 "/erp/auth/refresh",
                                 "/erp/auth/logout",
                                 "/webhook/telegram",

@@ -4,6 +4,7 @@ import { validateAccountRequestForm, validateLoginForm, type AccountRequestForm 
 function form(overrides: Partial<AccountRequestForm> = {}): AccountRequestForm {
   return {
     name: "Test User",
+    username: "testuser",
     email: "test@mobit.com.tr",
     phone: "05550000000",
     password: "gucluSifre123",
@@ -13,28 +14,41 @@ function form(overrides: Partial<AccountRequestForm> = {}): AccountRequestForm {
 }
 
 describe("auth form yardımcıları", () => {
-  it("login formunda e-posta ve şifreyi zorunlu tutar", () => {
-    expect(validateLoginForm("", "admin123")).toEqual({ ok: false, error: "E-posta ve şifre zorunludur." });
-    expect(validateLoginForm("admin@mobit.com.tr", "")).toEqual({ ok: false, error: "E-posta ve şifre zorunludur." });
-    expect(validateLoginForm(" admin@mobit.com.tr ", "admin123")).toEqual({ ok: true });
+  it("login formunda kimlik ve şifreyi zorunlu tutar", () => {
+    expect(validateLoginForm("", "admin123")).toEqual({ ok: false, error: "Kullanıcı adı/e-posta ve şifre zorunludur." });
+    expect(validateLoginForm("admin", "")).toEqual({ ok: false, error: "Kullanıcı adı/e-posta ve şifre zorunludur." });
+    expect(validateLoginForm(" admin ", "admin123")).toEqual({ ok: true });
   });
 
-  it("kayıt talebinde zorunlu alanları kontrol eder", () => {
+  it("kayıtta ad, kullanıcı adı ve şifreyi zorunlu tutar (e-posta opsiyonel)", () => {
     expect(validateAccountRequestForm(form({ name: " " }))).toEqual({
       ok: false,
-      error: "Ad soyad, e-posta ve şifre zorunludur.",
+      error: "Ad soyad, kullanıcı adı ve şifre zorunludur.",
     });
-    expect(validateAccountRequestForm(form({ email: " " }))).toEqual({
+    expect(validateAccountRequestForm(form({ username: " " }))).toEqual({
       ok: false,
-      error: "Ad soyad, e-posta ve şifre zorunludur.",
+      error: "Ad soyad, kullanıcı adı ve şifre zorunludur.",
     });
     expect(validateAccountRequestForm(form({ password: "" }))).toEqual({
       ok: false,
-      error: "Ad soyad, e-posta ve şifre zorunludur.",
+      error: "Ad soyad, kullanıcı adı ve şifre zorunludur.",
+    });
+    // Email blank is allowed.
+    expect(validateAccountRequestForm(form({ email: "" })).ok).toBe(true);
+  });
+
+  it("kullanıcı adı kurallarını kontrol eder", () => {
+    expect(validateAccountRequestForm(form({ username: "ab" }))).toEqual({
+      ok: false,
+      error: "Kullanıcı adı en az 3 karakter olmalıdır.",
+    });
+    expect(validateAccountRequestForm(form({ username: "ad soyad" }))).toEqual({
+      ok: false,
+      error: "Kullanıcı adı yalnızca harf, rakam, nokta, alt çizgi veya tire içerebilir.",
     });
   });
 
-  it("kayıt talebinde şifre uzunluğunu ve tekrarını kontrol eder", () => {
+  it("kayıtta şifre uzunluğunu ve tekrarını kontrol eder", () => {
     expect(validateAccountRequestForm(form({ password: "123456789", passwordConfirm: "123456789" }))).toEqual({
       ok: false,
       error: "Şifre en az 10 karakter olmalıdır.",
@@ -45,15 +59,17 @@ describe("auth form yardımcıları", () => {
     });
   });
 
-  it("geçerli kayıt talebinde trim edilmiş backend payload'ı üretir", () => {
+  it("geçerli kayıtta trim edilmiş backend payload'ı üretir", () => {
     expect(validateAccountRequestForm(form({
       name: "  Yeni Kullanıcı  ",
+      username: "  yenikullanici  ",
       email: "  yeni@mobit.com.tr  ",
       phone: "  05551112233  ",
     }))).toEqual({
       ok: true,
       payload: {
         name: "Yeni Kullanıcı",
+        username: "yenikullanici",
         email: "yeni@mobit.com.tr",
         phone: "05551112233",
         password: "gucluSifre123",
