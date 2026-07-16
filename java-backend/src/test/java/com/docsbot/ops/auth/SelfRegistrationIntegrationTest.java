@@ -1,15 +1,12 @@
 package com.docsbot.ops.auth;
 
-import com.docsbot.ops.auth.infrastructure.ErpAccountRequestRepository;
-import com.docsbot.ops.auth.infrastructure.ErpRefreshTokenRepository;
-import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -26,19 +23,16 @@ class SelfRegistrationIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private ErpRefreshTokenRepository refreshTokenRepository;
-
-    @Autowired
-    private ErpUserRepository userRepository;
-
-    @Autowired
-    private ErpAccountRequestRepository accountRequestRepository;
+    private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void cleanDatabase() {
-        refreshTokenRepository.deleteAll();
-        accountRequestRepository.deleteAll();
-        userRepository.deleteAll();
+        // TRUNCATE ... CASCADE clears users plus every row that references them (messages, tokens,
+        // account requests, ...) in one shot. A plain "delete from erp_users" trips the
+        // ck_erp_direct_messages_sender check constraint when earlier test classes left message rows
+        // behind (their sender_user_id gets SET NULL while the other sender columns stay populated),
+        // and that failure surfaces only under CI's test ordering — so avoid ordered deletes entirely.
+        jdbcTemplate.execute("TRUNCATE TABLE erp_users CASCADE");
     }
 
     @Test
