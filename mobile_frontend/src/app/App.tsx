@@ -45,6 +45,8 @@ import {
   getERPNotificationPreferences,
   getERPNotificationUnreadCount,
   getERPOverview,
+  getERPUsers,
+  deleteERPUser,
   getFolderTree,
   getTenderDocumentBlob,
   getTenderDocumentsPage,
@@ -62,7 +64,7 @@ import {
   updateERPTaskDetails,
   sendDocumentGroupMessage,
 } from "./api";
-import type { DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPTask, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
+import type { DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPTask, ERPUser, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
 import {
   employeeStatusLabel,
   formatDate,
@@ -357,19 +359,26 @@ function AnimatedNumber({ value }: { value: number }) {
   return <>{display}</>;
 }
 
-function KPIRow({ items }: { items: { label: string; value: string | number; color?: string; icon?: any }[] }) {
+function KPIRow({ items }: { items: { label: string; value: string | number; color?: string; icon?: any; onClick?: () => void }[] }) {
   return (
     <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
       {items.map((item, i) => {
         const Icon = item.icon;
-        return (
-          <Card key={i} className="p-3">
+        const inner = (
+          <>
             {Icon && <Icon className={`w-4 h-4 mb-2 ${item.color || "text-primary"}`} />}
             <p className={`text-2xl font-bold font-mono tracking-tight ${item.color || "text-foreground"}`}>
               {typeof item.value === "number" ? <AnimatedNumber value={item.value} /> : item.value}
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{item.label}</p>
-          </Card>
+          </>
+        );
+        return item.onClick ? (
+          <button key={i} onClick={item.onClick} className="text-left active:scale-[0.97] transition-transform">
+            <Card className="p-3">{inner}</Card>
+          </button>
+        ) : (
+          <Card key={i} className="p-3">{inner}</Card>
         );
       })}
     </div>
@@ -959,6 +968,10 @@ function ERPTab({
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [overview, setOverview] = useState<ERPOverview | null>(null);
+  // The full user roster (with presence). Fetched for everyone — /erp/users is allowed for any
+  // authenticated user — so employees, not just admins, can see who is online/offline.
+  const [allUsers, setAllUsers] = useState<ERPUser[]>([]);
+  const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
   const [accountRequests, setAccountRequests] = useState<ERPAccountRequest[]>([]);
   const [notificationPrefs, setNotificationPrefs] = useState<ERPNotificationPreference | null>(null);
   const [prefSaving, setPrefSaving] = useState(false);
@@ -990,12 +1003,14 @@ function ERPTab({
     setLoading(true);
     setError("");
     try {
-      const [nextOverview, nextPrefs, nextRequests] = await Promise.all([
+      const [nextOverview, nextUsers, nextPrefs, nextRequests] = await Promise.all([
         getERPOverview(),
+        getERPUsers().catch(() => [] as ERPUser[]),
         getERPNotificationPreferences().catch(() => null),
         isAdmin ? getERPAccountRequests().catch(() => []) : Promise.resolve([]),
       ]);
       setOverview(nextOverview);
+      setAllUsers(nextUsers);
       if (nextPrefs) setNotificationPrefs(nextPrefs);
       setAccountRequests(nextRequests);
     } catch (exception) {
@@ -1014,6 +1029,26 @@ function ERPTab({
     window.addEventListener(PUSH_RECEIVED_EVENT, handler);
     return () => window.removeEventListener(PUSH_RECEIVED_EVENT, handler);
   }, [user.id, user.role]);
+
+  const handleDeleteUser = async (target: ERPUser) => {
+    if (!isAdmin || deletingUserId) return;
+    if (target.id === user.id) {
+      window.alert("Kendi hesabınızı buradan silemezsiniz.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `"${target.name}" hesabını kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`);
+    if (!confirmed) return;
+    setDeletingUserId(target.id);
+    try {
+      await deleteERPUser(target.id);
+      setAllUsers(prev => prev.filter(item => item.id !== target.id));
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Hesap silinemedi.");
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
 
   const visibleTasks = useMemo(() => {
     const tasks = overview?.tasks || [];
@@ -1039,7 +1074,8 @@ function ERPTab({
     .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
     .slice(0, 3);
   const employeeSearchTerm = employeeSearch.toLocaleLowerCase("tr-TR").trim();
-  const filteredEmployees = (overview?.users || [])
+  const onlineUserCount = allUsers.filter(item => item.status === "online").length;
+  const filteredEmployees = allUsers
     .filter(employee => {
       if (!employeeSearchTerm) return true;
       return [
@@ -1417,7 +1453,7 @@ function ERPTab({
               { label: "Gecikmiş",       value: overdueTasks.length, icon: AlertTriangle, color: "text-red-400" },
             ]} />
             <KPIRow items={[
-              { label: "Çevrimiçi",      value: (overview?.users || []).filter(item => item.status === "online").length, icon: Wifi,      color: "text-emerald-400" },
+              { label: "Çevrimiçi",      value: onlineUserCount, icon: Wifi,      color: "text-emerald-400", onClick: () => navTo("employees") },
               { label: "Yardım Mesajı",  value: (overview?.help_messages || []).length, icon: HelpCircle,color: "text-amber-400" },
               { label: "Bildirim",       value: unreadNotifications, icon: Bell,  color: "text-teal-400" },
             ]} />
@@ -1426,7 +1462,7 @@ function ERPTab({
         {!isAdmin && overview && (
           <KPIRow items={[
             { label: "Aktif",      value: activeTasks.length, icon: ClipboardList, color: "text-blue-400" },
-            { label: "Onay",       value: pendingTasks.length, icon: CheckSquare,  color: "text-violet-400" },
+            { label: "Çevrimiçi",  value: onlineUserCount, icon: Wifi, color: "text-emerald-400", onClick: () => navTo("employees") },
             { label: "Bildirim",   value: unreadNotifications, icon: Bell,        color: "text-teal-400" },
           ]} />
         )}
@@ -1486,6 +1522,13 @@ function ERPTab({
                 </div>
                 <span className="text-sm font-semibold text-foreground">Bildirimler</span>
               </button>
+              <button onClick={() => navTo("employees")}
+                className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-blue-400" />
+                </div>
+                <span className="text-sm font-semibold text-foreground">Çalışanlar</span>
+              </button>
             </>
           )}
         </div>
@@ -1507,14 +1550,10 @@ function ERPTab({
     </div>
   );
 
-  // EMPLOYEES (admin only)
+  // EMPLOYEES — visible to everyone (presence roster); admins can also delete accounts here.
   if (screen === "employees") return (
     <div className="flex flex-col min-h-full">
-      <TopBar title="Çalışanlar" onBack={back} actions={
-        <button className="w-9 h-9 flex items-center justify-center rounded-full bg-primary">
-          <Plus className="w-4 h-4 text-white" />
-        </button>
-      } />
+      <TopBar title="Çalışanlar" onBack={back} />
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-2.5">
           <Search className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -1526,16 +1565,16 @@ function ERPTab({
           />
         </div>
         <p className="mt-2 text-[10px] text-muted-foreground">
-          {filteredEmployees.length} / {(overview?.users || []).length} çalışan gösteriliyor
+          {filteredEmployees.length} / {allUsers.length} kişi · {onlineUserCount} çevrimiçi
         </p>
       </div>
       <div className="flex-1 px-4 pt-2 pb-4">
         <LoadingOrError />
-        {(overview?.users || []).length === 0 ? (
+        {allUsers.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="Çalışan bulunamadı"
-            desc="Henüz kayıtlı çalışan yok. Yeni çalışan ekleyin."
+            title="Kullanıcı bulunamadı"
+            desc="Henüz kayıtlı kullanıcı yok."
             action="Yenile"
             onAction={refresh}
           />
@@ -1549,7 +1588,13 @@ function ERPTab({
           <div className="space-y-3">
             {filteredEmployees.map(employee => (
               <Card key={employee.id} className="p-4 flex items-center gap-3">
-                <Avatar name={employee.name} color={employee.role === "admin" ? "bg-teal-600" : "bg-slate-700"} />
+                <div className="relative shrink-0">
+                  <Avatar name={employee.name} color={employee.role === "admin" ? "bg-teal-600" : "bg-slate-700"} />
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${employee.status === "online" ? "bg-emerald-500" : "bg-slate-500"}`}
+                    aria-hidden="true"
+                  />
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-foreground truncate">{employee.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
@@ -1557,6 +1602,18 @@ function ERPTab({
                   </p>
                 </div>
                 <Badge label={employeeStatusLabel(employee.status)} />
+                {isAdmin && employee.id !== user.id && (
+                  <button
+                    onClick={() => void handleDeleteUser(employee)}
+                    disabled={deletingUserId === employee.id}
+                    aria-label={`${employee.name} hesabını sil`}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-red-500/10 text-red-400 active:scale-90 transition-transform disabled:opacity-50 shrink-0"
+                  >
+                    {deletingUserId === employee.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Trash2 className="w-4 h-4" />}
+                  </button>
+                )}
               </Card>
             ))}
           </div>

@@ -610,6 +610,11 @@ export async function getERPUsers(): Promise<ERPUser[]> {
   return response.json();
 }
 
+export async function deleteERPUser(userId: number): Promise<void> {
+  const response = await apiFetch(`/erp/users/${userId}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await errorText(response, "Hesap silinemedi."));
+}
+
 export async function getERPNotificationPreferences(): Promise<ERPNotificationPreference> {
   const response = await apiFetch("/erp/notification-preferences");
   if (!response.ok) throw new Error(await errorText(response, "Bildirim tercihleri yüklenemedi."));
