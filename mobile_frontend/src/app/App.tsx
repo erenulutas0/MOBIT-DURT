@@ -74,6 +74,7 @@ import {
   tenderStatusLabel,
 } from "./utils/formatters";
 import { validateAccountRequestForm, validateLoginForm } from "./utils/authForms";
+import { FONT_SCALE_OPTIONS, loadFontScale, saveFontScale } from "./utils/fontScale";
 import { buildTaskAgenda } from "./utils/taskCalendar";
 import {
   dependencyCandidates,
@@ -3657,6 +3658,12 @@ function ProfileTab({
   const [accountDeletionMessage, setAccountDeletionMessage] = useState("");
   const [accountDeletionError, setAccountDeletionError] = useState("");
   const [profilePhoto, setProfilePhoto] = useState(() => readProfilePhoto(user.id || user.email));
+  const [fontScale, setFontScale] = useState(() => loadFontScale());
+
+  const changeFontScale = (value: number) => {
+    setFontScale(value);
+    saveFontScale(value);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -3814,6 +3821,31 @@ function ProfileTab({
               {prefError}
             </p>
           )}
+        </div>
+
+        <div>
+          <SectionHeader title="Yazı Boyutu" />
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground mb-3">
+              Uygulamadaki yazıları küçültüp büyütebilirsiniz. Seçiminiz hemen uygulanır.
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {FONT_SCALE_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => changeFontScale(option.value)}
+                  className={`py-2.5 rounded-xl border text-center transition-colors ${
+                    fontScale === option.value
+                      ? "bg-primary border-primary text-white"
+                      : "bg-card border-border text-muted-foreground"
+                  }`}
+                >
+                  <span className="block font-bold leading-none" style={{ fontSize: `${13 * option.value}px` }}>A</span>
+                  <span className="block text-[10px] mt-1 leading-tight">{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </Card>
         </div>
 
         <div>

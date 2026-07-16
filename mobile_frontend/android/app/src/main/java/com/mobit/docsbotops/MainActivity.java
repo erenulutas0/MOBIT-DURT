@@ -38,23 +38,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         applySystemBarPadding();
-        applyDeviceFontScale();
         ensureMicrophonePermission();
-    }
-
-    /**
-     * Make the WebView honour the device's accessibility text-size setting. A WebView ignores the
-     * system font scale by default, so on a phone whose owner has enlarged their system font every
-     * other app grows while ours stays at 100% — looking tiny by comparison. We mirror that scale
-     * onto the WebView (capped so a very large setting doesn't break the denser layouts).
-     */
-    private void applyDeviceFontScale() {
-        float fontScale = getResources().getConfiguration().fontScale;
-        int zoom = Math.round(100 * fontScale);
-        zoom = Math.max(100, Math.min(zoom, 130));
-        if (getBridge() != null && getBridge().getWebView() != null) {
-            getBridge().getWebView().getSettings().setTextZoom(zoom);
-        }
     }
 
     private void ensureMicrophonePermission() {
