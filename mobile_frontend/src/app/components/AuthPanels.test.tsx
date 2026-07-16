@@ -4,17 +4,19 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthFeedback, AuthModeToggle } from "./AuthPanels";
 
 describe("AuthPanels", () => {
-  it("giriş ve hesap talebi modlarını Türkçe gösterir ve seçimleri döndürür", async () => {
+  it("giriş, kayıt ve admin modlarını Türkçe gösterir ve seçimleri döndürür", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
 
     render(<AuthModeToggle mode="login" onChange={onChange} />);
 
-    await user.click(screen.getByRole("button", { name: "Hesap Talebi" }));
+    await user.click(screen.getByRole("button", { name: "Kayıt Ol" }));
+    await user.click(screen.getByRole("button", { name: "Admin" }));
     await user.click(screen.getByRole("button", { name: "Giriş" }));
 
     expect(onChange).toHaveBeenNthCalledWith(1, "request");
-    expect(onChange).toHaveBeenNthCalledWith(2, "login");
+    expect(onChange).toHaveBeenNthCalledWith(2, "admin");
+    expect(onChange).toHaveBeenNthCalledWith(3, "login");
   });
 
   it("başarı mesajını hata mesajına göre öncelikli gösterir", () => {
