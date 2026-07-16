@@ -949,6 +949,18 @@ export async function updateDocumentGroup(payload: {
   return response.json();
 }
 
+// Archiving closes the room (chat input disabled, content preserved). Used when an admin
+// terminates the task a workspace belongs to.
+export async function archiveDocumentGroup(groupId: number, archived = true): Promise<DocumentGroupDetail> {
+  const response = await apiFetch(`/document-groups/${groupId}/archive`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ archived }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Alan arşivlenemedi."));
+  return response.json();
+}
+
 export async function addDocumentGroupMember(
   groupId: number,
   userId: number,

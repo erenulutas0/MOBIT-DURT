@@ -27,6 +27,7 @@ import type { AuthUser, DirectMessageOpenRequest, Role, RoomOpenRequest } from "
 import {
   SESSION_EXPIRED_EVENT,
   approveERPAccountRequest,
+  archiveDocumentGroup,
   clearStoredSession,
   createDocumentGroup,
   getBackendHealth,
@@ -169,7 +170,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.23";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.24";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -978,6 +979,16 @@ function ERPTab({
   const [prefSaving, setPrefSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Transient success banner (green): confirms actions like task creation so a slow network
+  // doesn't leave the user guessing (and double-submitting).
+  const [notice, setNotice] = useState("");
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice = (message: string) => {
+    setNotice(message);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 6000);
+  };
+  const [cancellingTaskId, setCancellingTaskId] = useState<number | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskInstructions, setTaskInstructions] = useState("");
   const [taskPriority, setTaskPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
@@ -1086,7 +1097,10 @@ function ERPTab({
         employeeStatusLabel(employee.status),
       ].join(" ").toLocaleLowerCase("tr-TR").includes(employeeSearchTerm);
     })
-    .sort((left, right) => left.name.localeCompare(right.name, "tr", { sensitivity: "base" }));
+    // Online people first, each block alphabetical — presence is what this list is for.
+    .sort((left, right) =>
+      Number(right.status === "online") - Number(left.status === "online")
+      || left.name.localeCompare(right.name, "tr", { sensitivity: "base" }));
   const taskAssignableUsers = (overview?.users || [])
     .filter(employee => employee.approved_at && employee.role !== "admin")
     .sort((left, right) => left.name.localeCompare(right.name, "tr", { sensitivity: "base" }));
@@ -1232,29 +1246,41 @@ function ERPTab({
         deadlineAt: taskDeadlineIso,
         parentTaskId: createTaskParentId,
       });
+      // The task exists from here on. Workspace creation gets its own try/catch so a network
+      // hiccup there can't masquerade as "task failed" — that used to make users resubmit and
+      // create duplicate tasks.
       let createdGroupId: number | null = null;
+      let groupError = false;
       if (createTaskGroup && taskAssigneeIds.length > 1) {
-        const detail = await createDocumentGroup({
-          name: taskGroupName.trim() || `${taskTitle.trim()} çalışma alanı`,
-          description: description.slice(0, 1000),
-          memberUserIds: taskAssigneeIds,
-        });
-        createdGroupId = detail.group.id;
-        await sendDocumentGroupMessage(detail.group.id, [
-          `Görev: ${task.title}`,
-          leader ? `Sorumlu: ${leader.name}` : "",
-          taskDeadlineIso ? `Teslim: ${formatDate(taskDeadlineIso)} (${deadlineRemainingLabel(taskDeadlineIso)})` : "",
-          "",
-          taskInstructions.trim(),
-        ].filter(Boolean).join("\n"));
         try {
-          await linkERPTaskDocumentGroup(task.id, detail.group.id);
-        } catch (linkException) {
-          console.warn("Görev odaya bağlanamadı.", linkException);
+          const detail = await createDocumentGroup({
+            name: taskGroupName.trim() || `${taskTitle.trim()} çalışma alanı`,
+            description: description.slice(0, 1000),
+            memberUserIds: taskAssigneeIds,
+          });
+          createdGroupId = detail.group.id;
+          await sendDocumentGroupMessage(detail.group.id, [
+            `Görev: ${task.title}`,
+            leader ? `Sorumlu: ${leader.name}` : "",
+            taskDeadlineIso ? `Teslim: ${formatDate(taskDeadlineIso)} (${deadlineRemainingLabel(taskDeadlineIso)})` : "",
+            "",
+            taskInstructions.trim(),
+          ].filter(Boolean).join("\n"));
+          try {
+            await linkERPTaskDocumentGroup(task.id, detail.group.id);
+          } catch (linkException) {
+            console.warn("Görev odaya bağlanamadı.", linkException);
+          }
+        } catch (groupException) {
+          console.warn("Çalışma alanı oluşturulamadı.", groupException);
+          groupError = true;
         }
       }
       await refresh();
       resetTaskForm();
+      showNotice(groupError
+        ? `✓ "${task.title}" görevi oluşturuldu — ancak çalışma alanı oluşturulamadı (bağlantı hatası). Alanı Mesajlar → Alanlar'dan ekleyebilirsiniz. Görevi TEKRAR OLUŞTURMAYIN.`
+        : `✓ "${task.title}" görevi başarıyla oluşturuldu.`);
       if (createdGroupId) {
         onOpenDocumentRoom(createdGroupId, "chat");
       } else {
@@ -1265,6 +1291,40 @@ function ERPTab({
       setError(exception instanceof Error ? exception.message : "Görev oluşturulamadı.");
     } finally {
       setTaskSaving(false);
+    }
+  };
+
+  /**
+   * Admin task termination: sets the task to cancelled; if a workspace (alan) is linked, posts an
+   * informational message to its chat and offers to archive it (chat closes, content preserved).
+   */
+  const handleCancelTask = async (task: ERPTask) => {
+    if (!isAdmin || cancellingTaskId) return;
+    if (!window.confirm(`"${task.title}" görevini sonlandırmak istediğinize emin misiniz?`)) return;
+    setCancellingTaskId(task.id);
+    try {
+      await updateERPTaskDetails(task.id, { status: "cancelled" });
+      if (task.document_group_id) {
+        try {
+          await sendDocumentGroupMessage(task.document_group_id,
+            "⚠️ Bu görev admin tarafından sonlandırılmıştır.");
+        } catch (messageException) {
+          console.warn("Alan bilgilendirme mesajı gönderilemedi.", messageException);
+        }
+        if (window.confirm("Göreve bağlı çalışma alanı da kapatılsın mı? (Sohbet arşivlenir, içerik saklanır)")) {
+          try {
+            await archiveDocumentGroup(task.document_group_id);
+          } catch (archiveException) {
+            window.alert(archiveException instanceof Error ? archiveException.message : "Alan arşivlenemedi.");
+          }
+        }
+      }
+      showNotice(`✓ "${task.title}" görevi sonlandırıldı.`);
+      await refresh();
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Görev sonlandırılamadı.");
+    } finally {
+      setCancellingTaskId(null);
     }
   };
 
@@ -1381,7 +1441,21 @@ function ERPTab({
                   {task.description || "Açıklama eklenmemiş."}
                 </p>
               </div>
-              <Badge label={taskStatusLabel(task.status)} />
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge label={taskStatusLabel(task.status)} />
+                {isAdmin && !["done", "cancelled"].includes(task.status) && (
+                  <button
+                    onClick={event => { event.stopPropagation(); void handleCancelTask(task); }}
+                    disabled={cancellingTaskId === task.id}
+                    aria-label={`${task.title} görevini sonlandır`}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-red-500/10 text-red-400 active:scale-90 transition-transform disabled:opacity-50"
+                  >
+                    {cancellingTaskId === task.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Trash2 className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-2 mt-3 text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1.5 min-w-0">
@@ -1410,6 +1484,11 @@ function ERPTab({
   const LoadingOrError = () => (
     <>
       {loading && !overview && <DashboardSkeleton />}
+      {notice && (
+        <Card className="p-4 border-emerald-500/30 bg-emerald-500/10">
+          <p className="text-sm font-semibold text-emerald-300">{notice}</p>
+        </Card>
+      )}
       {error && (
         <Card className="p-4 border-red-500/30 bg-red-500/10">
           <p className="text-sm font-semibold text-red-300">Operasyon bağlantısı kurulamadı</p>
@@ -1588,7 +1667,7 @@ function ERPTab({
         ) : (
           <div className="space-y-3">
             {filteredEmployees.map(employee => (
-              <Card key={employee.id} className="p-4 flex items-center gap-3">
+              <Card key={employee.id} className={`p-4 flex items-center gap-3 ${employee.status === "online" ? "" : "opacity-55 saturate-50"}`}>
                 <div className="relative shrink-0">
                   <Avatar name={employee.name} color={employee.role === "admin" ? "bg-teal-600" : "bg-slate-700"} />
                   <span
@@ -2647,8 +2726,21 @@ function KnowledgeGraph({
     strength === "strong" ? { opacity: 0.5, width: 1.2 } : strength === "med" ? { opacity: 0.28, width: 0.8 } : { opacity: 0.12, width: 0.5 };
 
   return (
-    <div className="relative flex flex-col h-full min-h-0 overflow-hidden" style={{ background: "#0A0A12" }}>
-      <style>{`@keyframes graphPulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.15; } }`}</style>
+    <div className="relative flex flex-col h-full min-h-0 overflow-hidden" style={{ background: "#05060D" }}>
+      <style>{`
+        @keyframes graphPulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.15; } }
+        @keyframes kgTwinkle { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.15; } }
+        @keyframes kgDrift {
+          0% { transform: translate(0px, 0px) scale(1); }
+          50% { transform: translate(14px, -10px) scale(1.06); }
+          100% { transform: translate(0px, 0px) scale(1); }
+        }
+        @keyframes kgDrift2 {
+          0% { transform: translate(0px, 0px) scale(1.05); }
+          50% { transform: translate(-16px, 12px) scale(1); }
+          100% { transform: translate(0px, 0px) scale(1.05); }
+        }
+      `}</style>
       <TopBar
         title={graphData.dynamic ? "Canlı Bilgi Grafiği" : "Bilgi Grafiği"}
         onBack={onBack}
@@ -2680,6 +2772,55 @@ function KnowledgeGraph({
       </div>
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
+        {/* Fixed backdrop — stays put while the graph pans/zooms above it, giving depth. */}
+        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+          {/* Deep base + slowly drifting nebula plumes in the app's category hues */}
+          <div className="absolute inset-0" style={{
+            background: "linear-gradient(175deg, #0B1022 0%, #070A16 45%, #05060D 100%)",
+          }} />
+          <div className="absolute -inset-[20%]" style={{
+            background: "radial-gradient(ellipse 55% 40% at 22% 18%, rgba(20,184,166,0.16), transparent 62%)",
+            animation: "kgDrift 26s ease-in-out infinite",
+          }} />
+          <div className="absolute -inset-[20%]" style={{
+            background: "radial-gradient(ellipse 50% 42% at 80% 30%, rgba(139,92,246,0.13), transparent 60%)",
+            animation: "kgDrift2 32s ease-in-out infinite",
+          }} />
+          <div className="absolute -inset-[20%]" style={{
+            background: "radial-gradient(ellipse 70% 50% at 50% 100%, rgba(59,130,246,0.10), transparent 65%)",
+            animation: "kgDrift 40s ease-in-out infinite reverse",
+          }} />
+          {/* Star field: two parallax dot layers + a few twinkling brights */}
+          <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <pattern id="kgStarsFar" width="90" height="90" patternUnits="userSpaceOnUse">
+                <circle cx="12" cy="20" r="0.7" fill="rgba(226,232,240,0.35)" />
+                <circle cx="48" cy="8" r="0.5" fill="rgba(226,232,240,0.22)" />
+                <circle cx="74" cy="42" r="0.6" fill="rgba(191,219,254,0.30)" />
+                <circle cx="30" cy="64" r="0.5" fill="rgba(226,232,240,0.20)" />
+                <circle cx="66" cy="80" r="0.7" fill="rgba(204,251,241,0.28)" />
+              </pattern>
+              <pattern id="kgStarsNear" width="140" height="140" patternUnits="userSpaceOnUse">
+                <circle cx="24" cy="30" r="1.1" fill="rgba(226,232,240,0.5)" />
+                <circle cx="96" cy="72" r="0.9" fill="rgba(191,219,254,0.42)" />
+                <circle cx="60" cy="118" r="1.0" fill="rgba(204,251,241,0.45)" />
+              </pattern>
+              <radialGradient id="kgVignette" cx="50%" cy="46%" r="72%">
+                <stop offset="62%" stopColor="rgba(0,0,0,0)" />
+                <stop offset="100%" stopColor="rgba(0,0,0,0.55)" />
+              </radialGradient>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#kgStarsFar)" />
+            <rect width="100%" height="100%" fill="url(#kgStarsNear)" />
+            <g>
+              <circle cx="18%" cy="26%" r="1.6" fill="#99F6E4" style={{ animation: "kgTwinkle 4.2s ease-in-out infinite" }} />
+              <circle cx="72%" cy="14%" r="1.3" fill="#DDD6FE" style={{ animation: "kgTwinkle 5.6s ease-in-out 1.2s infinite" }} />
+              <circle cx="86%" cy="58%" r="1.5" fill="#BFDBFE" style={{ animation: "kgTwinkle 4.8s ease-in-out 0.6s infinite" }} />
+              <circle cx="34%" cy="78%" r="1.2" fill="#99F6E4" style={{ animation: "kgTwinkle 6.4s ease-in-out 2s infinite" }} />
+            </g>
+            <rect width="100%" height="100%" fill="url(#kgVignette)" />
+          </svg>
+        </div>
         <div
           className="absolute inset-0"
           onTouchStart={handleTouchStart}
@@ -2696,28 +2837,46 @@ function KnowledgeGraph({
         >
           <svg viewBox="0 0 360 280" width="100%" height="100%" className="w-full h-full">
             <defs>
-              <pattern id="kgGrid" width="20" height="20" patternUnits="userSpaceOnUse">
-                <circle cx="0" cy="0" r="0.6" fill="rgba(255,255,255,0.06)" />
-              </pattern>
+              {/* Soft neon glow shared by nodes and strong edges */}
+              <filter id="kgGlow" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="2.4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <filter id="kgGlowSoft" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="1.1" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
             </defs>
-            <rect width="360" height="280" fill="#0A0A12" onClick={() => setSelectedNode(null)} />
-            <rect width="360" height="280" fill="url(#kgGrid)" style={{ pointerEvents: "none" }} />
+            <rect width="360" height="280" fill="transparent" onClick={() => setSelectedNode(null)} />
             {graphEdges.map(edge => {
               const source = nodeMap.get(edge.s);
               const target = nodeMap.get(edge.t);
               if (!source || !target) return null;
               const style = edgeStyle(edge.str);
               const dimmed = activeCat !== "all" && source.cat !== activeCat && target.cat !== activeCat;
+              // Organic curve: bow each link slightly perpendicular to its direction.
+              const dx = target.x - source.x;
+              const dy = target.y - source.y;
+              const length = Math.sqrt(dx * dx + dy * dy) || 1;
+              const bow = Math.min(9, length * 0.14);
+              const controlX = (source.x + target.x) / 2 - (dy / length) * bow;
+              const controlY = (source.y + target.y) / 2 + (dx / length) * bow;
               return (
-                <line
+                <path
                   key={`${edge.s}-${edge.t}`}
-                  x1={source.x}
-                  y1={source.y}
-                  x2={target.x}
-                  y2={target.y}
+                  d={`M ${source.x} ${source.y} Q ${controlX} ${controlY} ${target.x} ${target.y}`}
+                  fill="none"
                   stroke={KG_CAT_COLORS[source.cat]}
                   strokeWidth={style.width}
+                  strokeLinecap="round"
                   opacity={dimmed ? 0.04 : style.opacity}
+                  filter={edge.str === "strong" && !dimmed ? "url(#kgGlowSoft)" : undefined}
                 />
               );
             })}
@@ -2726,23 +2885,33 @@ function KnowledgeGraph({
               const isSelected = selectedNode?.id === node.id;
               const dimmed = activeCat !== "all" && node.cat !== activeCat;
               return (
-                <g key={node.id} onClick={() => selectNode(node)} style={{ opacity: dimmed ? 0.2 : 1, cursor: "pointer" }}>
-                  <circle cx={node.x} cy={node.y} r={node.r + 7} fill={color} opacity={isSelected ? undefined : 0.06}
+                <g key={node.id} onClick={() => selectNode(node)} style={{ opacity: dimmed ? 0.16 : 1, cursor: "pointer" }}>
+                  {/* Halo */}
+                  <circle cx={node.x} cy={node.y} r={node.r + 8} fill={color} opacity={isSelected ? undefined : 0.07}
                     style={isSelected ? { animation: "graphPulse 2s ease-in-out infinite" } : undefined} />
-                  <circle cx={node.x} cy={node.y} r={node.r + 3} fill={color} opacity={0.12} />
-                  <circle cx={node.x} cy={node.y} r={node.r} fill={`${color}22`} stroke={color} strokeWidth={isSelected ? 2 : 1} strokeOpacity={isSelected ? 1 : 0.7} />
-                  {isSelected && <circle cx={node.x} cy={node.y} r={node.r + 5} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.5} />}
+                  <circle cx={node.x} cy={node.y} r={node.r + 3.5} fill={color} opacity={0.14} />
+                  {/* Core: glassy disc with neon rim + specular highlight */}
+                  <circle cx={node.x} cy={node.y} r={node.r} fill={`${color}2E`} stroke={color}
+                    strokeWidth={isSelected ? 2 : 1.2} strokeOpacity={isSelected ? 1 : 0.85}
+                    filter="url(#kgGlow)" />
+                  <circle cx={node.x - node.r * 0.32} cy={node.y - node.r * 0.36} r={Math.max(1.1, node.r * 0.22)}
+                    fill="rgba(255,255,255,0.35)" style={{ pointerEvents: "none" }} />
+                  {isSelected && (
+                    <circle cx={node.x} cy={node.y} r={node.r + 5.5} fill="none" stroke={color} strokeWidth={1.4}
+                      strokeOpacity={0.6} strokeDasharray="3 4" strokeLinecap="round" />
+                  )}
                   {(node.r >= 8 || isSelected) && (
                     <text
                       x={node.x}
-                      y={node.y + node.r + 9}
+                      y={node.y + node.r + 10}
                       textAnchor="middle"
-                      fill="#E5E7EB"
-                      stroke="#0b0b14"
-                      strokeWidth={0.7}
+                      fill="#F1F5F9"
+                      stroke="#05060D"
+                      strokeWidth={1}
                       paintOrder="stroke"
                       fontSize={8}
-                      fontWeight={600}
+                      fontWeight={700}
+                      letterSpacing={0.2}
                       style={{ pointerEvents: "none" }}
                     >
                       {node.label.length > 16 ? `${node.label.slice(0, 15)}…` : node.label}
