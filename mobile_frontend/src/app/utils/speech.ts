@@ -9,13 +9,33 @@ const VOICE_NUDGE_KEY = "docsbot.voiceNudge";
 let currentAudio: HTMLAudioElement | null = null;
 let currentUrl: string | null = null;
 
-/** Strips markdown/emoji clutter so the TTS reads prose, not symbols. */
+// Piper reads letter-by-letter Turkish ("AI" → "a ı"), which sounds wrong for common English
+// tech terms. Rewrite them phonetically before synthesis. Word-boundary matched and
+// case-sensitive where casing matters, so Turkish words are never touched.
+const PRONUNCIATIONS: Array<[RegExp, string]> = [
+  [/\bAI\b/g, "ey-ay"],
+  [/\bIT\b/g, "ay-ti"],
+  [/\bOK\b/gi, "okey"],
+  [/\bWhatsApp\b/gi, "vatsap"],
+  [/\be-?mail\b/gi, "i-meyl"],
+  [/\bonline\b/gi, "onlayn"],
+  [/\boffline\b/gi, "oflayn"],
+  [/\bdeadline\b/gi, "dedlayn"],
+  [/\bupdate\b/gi, "apdeyt"],
+  [/\blink\b/gi, "link"],
+];
+
+/** Strips markdown/emoji clutter and fixes English-term pronunciation so the TTS reads prose. */
 export function cleanForSpeech(text: string): string {
-  return text
+  let cleaned = text
     .replace(/[*_#>`~|]/g, " ")
     .replace(/https?:\/\/\S+/g, "")
     // Pictographs & symbols read as garbage — drop them.
-    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, " ")
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, " ");
+  for (const [pattern, replacement] of PRONUNCIATIONS) {
+    cleaned = cleaned.replace(pattern, replacement);
+  }
+  return cleaned
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 600);

@@ -36,7 +36,11 @@ public class TenderIngestionService {
             "STOK_ENERJI",
             "DEPART",
             "AREA",
-            "MOBISER");
+            "MOBISER",
+            // Company workflows created from the mobile Alanlar flow default to GENEL
+            // (TenderController.createCompanyWorkflow); uploads into their rooms carry that unit,
+            // so rejecting it here broke every image/document/voice share in workspace chats.
+            "GENEL");
     private static final DateTimeFormatter DATE_CODE = DateTimeFormatter.BASIC_ISO_DATE;
 
     private final TenderRepository tenderRepository;

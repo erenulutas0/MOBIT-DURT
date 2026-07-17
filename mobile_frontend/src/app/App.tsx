@@ -40,6 +40,7 @@ import {
   resendERPAccountCode,
   registerMobilePushToken,
   getDocumentGroups,
+  getDocumentGroupMessages,
   getERPAccountRequests,
   getMobileAppUpdateInfo,
   getERPAnnouncement,
@@ -65,7 +66,7 @@ import {
   updateERPTaskDetails,
   sendDocumentGroupMessage,
 } from "./api";
-import type { DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPTask, ERPUser, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
+import type { DocumentGroupMessage, DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPTask, ERPUser, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
 import {
   employeeStatusLabel,
   formatDate,
@@ -172,7 +173,7 @@ const TASK_FILTER_TO_STATUS: Record<string, string | null> = {
 const MOBILE_DEVICE_ID_KEY = "docsbot.mobile.device_id";
 // CI stamps VITE_APP_VERSION to keep the in-app version aligned with the release; local builds
 // fall back to this committed default.
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.24";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.25";
 const NATIVE_PUSH_ENABLED = import.meta.env.VITE_ENABLE_NATIVE_PUSH === "true";
 
 function nativeMobilePlatform(): "android" | "ios" | null {
@@ -1051,6 +1052,30 @@ function ERPTab({
     window.addEventListener(PUSH_RECEIVED_EVENT, handler);
     return () => window.removeEventListener(PUSH_RECEIVED_EVENT, handler);
   }, [user.id, user.role]);
+
+  // Task detail shows the linked workspace's latest chat messages, so "Mesajlar" is never
+  // mysteriously empty when the conversation actually lives in the alan.
+  const [taskRoomMessages, setTaskRoomMessages] = useState<DocumentGroupMessage[]>([]);
+  const selectedTaskGroupId = useMemo(
+    () => (overview?.tasks || []).find(item => item.id === selectedTaskId)?.document_group_id || null,
+    [overview, selectedTaskId]);
+  useEffect(() => {
+    if (screen !== "task-detail" || !selectedTaskGroupId) {
+      setTaskRoomMessages([]);
+      return;
+    }
+    let active = true;
+    getDocumentGroupMessages(selectedTaskGroupId)
+      .then(messages => {
+        if (active) setTaskRoomMessages(messages.slice(-5));
+      })
+      .catch(() => {
+        if (active) setTaskRoomMessages([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [screen, selectedTaskGroupId]);
 
   const handleDeleteUser = async (target: ERPUser) => {
     if (!isAdmin || deletingUserId) return;
@@ -2386,10 +2411,41 @@ function ERPTab({
                 </Card>
               )}
 
+              {task.document_group_id && (
+                <div>
+                  <SectionHeader
+                    title="Çalışma Alanı Sohbeti"
+                    action="Alana Git"
+                    onAction={() => onOpenDocumentRoom(task.document_group_id!, "chat")}
+                  />
+                  {taskRoomMessages.length === 0 ? (
+                    <Card className="p-3">
+                      <p className="text-xs text-muted-foreground">Alanda henüz mesaj yok. "Alana Git" ile sohbeti başlatın.</p>
+                    </Card>
+                  ) : (
+                    <div className="space-y-2">
+                      {taskRoomMessages.map(message => (
+                        <Card key={message.id} className="p-3" onPress={() => onOpenDocumentRoom(task.document_group_id!, "chat")}>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-xs font-semibold text-foreground">{message.author_name}</span>
+                            <span className="text-[10px] text-muted-foreground">{formatDate(message.created_at)}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                            {message.message_kind === "voice" ? "🎙️ Sesli mesaj" : message.body}
+                          </p>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
-                <SectionHeader title="Mesajlar" />
+                <SectionHeader title="Görev Notları" />
                 {comments.length === 0 ? (
-                  <EmptyState icon={MessageSquare} title="Mesaj yok" desc="Bu görevde henüz yardım mesajı veya yönetici notu bulunmuyor." />
+                  <EmptyState icon={MessageSquare} title="Not yok" desc={task.document_group_id
+                    ? "Görev sohbeti yukarıdaki çalışma alanında yürüyor; burası yardım mesajları ve yönetici notları içindir."
+                    : "Bu görevde henüz yardım mesajı veya yönetici notu bulunmuyor."} />
                 ) : (
                   <div className="space-y-2">
                     {comments.map(comment => (

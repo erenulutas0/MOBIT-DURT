@@ -20,17 +20,40 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       ALERT_LABEL: uptime-alert
     steps:
-      - name: Check health (3 tries)
+      - name: Check endpoints (3 tries each)
         id: check
         run: |
-          ok=0
-          for i in 1 2 3; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$HEALTH_URL" || echo 000)
-            echo "Attempt $i: HTTP $code"
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            sleep 10
-          done
+          BASE="https://84-46-251-95.sslip.io"
+          # url|expected_code|label — 401s prove the route reaches the backend (auth wall), which
+          # also guards against the Caddy misroute class of failure (SPA fallback returns 200 html).
+          CHECKS=$(cat <<LIST
+          $BASE/health|200|backend-health
+          $BASE/|200|web-panel
+          $BASE/api/erp/auth/admin-login|405|api-route
+          $BASE/document-groups|401|alanlar-route
+          $BASE/erp/assistant/speech|401|speech-route
+          LIST
+          )
+          ok=1
+          failures=""
+          while IFS='|' read -r url expected label; do
+            # The heredoc keeps YAML indentation — strip it off every field.
+            url=$(echo $url | xargs); expected=$(echo $expected | xargs); label=$(echo $label | xargs)
+            [ -z "$url" ] && continue
+            got=""
+            for i in 1 2 3; do
+              got=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url" || echo 000)
+              [ "$got" = "$expected" ] && break
+              sleep 8
+            done
+            echo "$label: got $got (expected $expected)"
+            if [ "$got" != "$expected" ]; then
+              ok=0
+              failures="$failures $label=$got(exp:$expected)"
+            fi
+          done <<< "$CHECKS"
           echo "healthy=$ok" >> "$GITHUB_OUTPUT"
+          echo "failures=$failures" >> "$GITHUB_OUTPUT"
 
       - name: Open/close alert issue
         run: |
@@ -41,14 +64,15 @@ jobs:
           EXISTING=$(gh issue list --repo "$REPO" --label "$ALERT_LABEL" --state open --json number --jq '.[0].number' || echo "")
 
           if [ "${{ steps.check.outputs.healthy }}" != "1" ]; then
+            DETAIL="${{ steps.check.outputs.failures }}"
             if [ -z "$EXISTING" ]; then
               gh issue create --repo "$REPO" \
-                --title "🔴 Backend erişilemiyor (uptime)" \
+                --title "🔴 Servis kontrolü başarısız (uptime)" \
                 --label "$ALERT_LABEL" \
-                --body "Otomatik izleme $HEALTH_URL adresine ulaşamadı ($(date -u '+%Y-%m-%d %H:%M UTC')). Sunucu/deploy durumunu kontrol edin."
+                --body "Otomatik izleme şu kontrollerde hata gördü:$DETAIL ($(date -u '+%Y-%m-%d %H:%M UTC')). Sunucu/Caddy/deploy durumunu kontrol edin."
             else
               gh issue comment "$EXISTING" --repo "$REPO" \
-                --body "Hâlâ erişilemiyor ($(date -u '+%Y-%m-%d %H:%M UTC'))."
+                --body "Hâlâ sorunlu:$DETAIL ($(date -u '+%Y-%m-%d %H:%M UTC'))."
             fi
           else
             if [ -n "$EXISTING" ]; then

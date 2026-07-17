@@ -1,0 +1,46 @@
+name: CI Failure Alert
+
+# Whenever a quality gate, deploy, or mobile build finishes red, open (or update) a GitHub issue so
+# failures are impossible to miss — same alerting pattern as the uptime monitor.
+on:
+  workflow_run:
+    workflows:
+      - "Backend Quality Gate"
+      - "Mobile Quality Gate"
+      - "Web Quality Gate"
+      - "Deploy Backend to VPS"
+      - "Build Mobile AAB/APK"
+      - "Off-site DB Backup"
+    types: [completed]
+
+permissions:
+  issues: write
+
+jobs:
+  alert:
+    name: Open issue on failure
+    runs-on: ubuntu-latest
+    if: github.repository == 'erenulutas0/MOBIT-DURT' && github.event.workflow_run.conclusion == 'failure'
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ALERT_LABEL: ci-alert
+    steps:
+      - name: Create or update alert issue
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          NAME="${{ github.event.workflow_run.name }}"
+          URL="${{ github.event.workflow_run.html_url }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          gh label create "$ALERT_LABEL" --repo "$REPO" --color D93F0B --description "Automated CI failure alert" 2>/dev/null || true
+          TITLE="🔴 CI hatası: $NAME"
+          EXISTING=$(gh issue list --repo "$REPO" --label "$ALERT_LABEL" --state open --search "$TITLE in:title" --json number --jq '.[0].number' || echo "")
+          BODY="**$NAME** başarısız oldu ($(date -u '+%Y-%m-%d %H:%M UTC')).
+          Branch: \`$BRANCH\` · Commit: \`${SHA:0:8}\`
+          Log: $URL"
+          if [ -z "$EXISTING" ]; then
+            gh issue create --repo "$REPO" --title "$TITLE" --label "$ALERT_LABEL" --body "$BODY"
+          else
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+          fi
