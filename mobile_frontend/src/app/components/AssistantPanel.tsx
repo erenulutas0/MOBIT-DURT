@@ -20,20 +20,16 @@ import {
   type AssistantBriefing,
   type AssistantTaskItem,
 } from "../api";
-import { speakText, stopSpeaking } from "../utils/speech";
+import { speakLong, stopAllSpeech } from "../utils/speech";
 import { Volume2, Square } from "lucide-react";
 
 /**
- * Turns the structured briefing into natural spoken Turkish — the assistant "reads your day":
- * greeting, late items by name, today's deliveries, the week ahead, unblocked work and unread
- * counts. Titles are capped at three per section so the speech stays tight.
+ * Turns the structured briefing into a FULL spoken report — every section, every task title, in
+ * order. speakLong() chunks it sentence-by-sentence, so length is not a problem.
  */
 export function briefingToSpeech(userName: string, briefing: AssistantBriefing): string {
   const firstName = (userName || "").trim().split(/\s+/)[0] || "Merhaba";
-  const titles = (items: AssistantTaskItem[]) => {
-    const names = items.slice(0, 3).map(item => item.title).join(", ");
-    return items.length > 3 ? `${names} ve ${items.length - 3} görev daha` : names;
-  };
+  const titles = (items: AssistantTaskItem[]) => items.map(item => item.title).join(", ");
   const parts: string[] = [`Merhaba ${firstName}.`];
   const total = briefing.overdue.length + briefing.due_today.length + briefing.due_this_week.length
     + briefing.ready_to_start.length + briefing.blocked.length;
@@ -41,23 +37,29 @@ export function briefingToSpeech(userName: string, briefing: AssistantBriefing):
     parts.push("Harika görünüyor, bekleyen işiniz yok. İyi çalışmalar!");
     return parts.join(" ");
   }
-  parts.push("Günün özetini veriyorum.");
+  parts.push("Genel raporu okuyorum.");
   if (briefing.overdue.length > 0) {
-    parts.push(`${briefing.overdue.length} geciken göreviniz var: ${titles(briefing.overdue)}.`);
+    parts.push(`Birinci bölüm, geciken görevler. ${briefing.overdue.length} görev gecikti. Bunlar: ${titles(briefing.overdue)}.`);
   }
   if (briefing.due_today.length > 0) {
     parts.push(`Bugün teslim edilmesi gerekenler: ${titles(briefing.due_today)}.`);
   }
   if (briefing.due_this_week.length > 0) {
-    parts.push(`Bu hafta ${briefing.due_this_week.length} görev teslim edilecek.`);
+    parts.push(`Bu hafta teslim edilecekler: ${titles(briefing.due_this_week)}.`);
   }
   if (briefing.ready_to_start.length > 0) {
-    parts.push(`${briefing.ready_to_start.length} görevin önü açıldı, başlayabilirsiniz.`);
+    parts.push(`Önü açılan görevler: ${titles(briefing.ready_to_start)}. Bunlara başlanabilir.`);
+  }
+  if (briefing.blocked.length > 0) {
+    parts.push(`Bekleyen, bağımlı görevler: ${titles(briefing.blocked)}.`);
   }
   if (briefing.unread_messages > 0) {
     parts.push(`${briefing.unread_messages} okunmamış mesajınız var.`);
   }
-  parts.push("Kolay gelsin!");
+  if (briefing.unread_notifications > 0) {
+    parts.push(`${briefing.unread_notifications} okunmamış bildiriminiz var.`);
+  }
+  parts.push("Rapor bitti. Kolay gelsin!");
   return parts.join(" ");
 }
 
@@ -101,17 +103,17 @@ export function AssistantPanel({
   const threadEndRef = useRef<HTMLDivElement>(null);
 
   // Stop any in-flight speech when the panel closes.
-  useEffect(() => () => stopSpeaking(), []);
+  useEffect(() => () => stopAllSpeech(), []);
 
   const speak = useCallback(async (text: string) => {
     if (speaking) {
-      stopSpeaking();
+      stopAllSpeech();
       setSpeaking(false);
       return;
     }
     setSpeaking(true);
     try {
-      await speakText(text);
+      await speakLong(text);
     } catch (exception) {
       window.alert(exception instanceof Error ? exception.message : "Sesli asistan şu an kullanılamıyor.");
     } finally {

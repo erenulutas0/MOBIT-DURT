@@ -196,14 +196,23 @@ public class MessageMediaStorage {
     }
 
     private String normalizeMimeType(String dataUrlMimeType, String declaredMimeType) {
-        String normalized = dataUrlMimeType == null ? "" : dataUrlMimeType.trim().toLowerCase(Locale.ROOT);
+        // Compare base types only: Android's MediaRecorder declares e.g. "audio/webm;codecs=opus"
+        // while the data URL header carries just "audio/webm" — a strict equality check rejected
+        // every voice message recorded on such devices.
+        String normalized = baseMimeType(dataUrlMimeType);
         if (declaredMimeType != null && !declaredMimeType.isBlank()) {
-            String declared = declaredMimeType.trim().toLowerCase(Locale.ROOT);
+            String declared = baseMimeType(declaredMimeType);
             if (!declared.equals(normalized)) {
                 throw new ErpExceptions.BadRequest("Message media type does not match declared type");
             }
         }
         return normalized;
+    }
+
+    private String baseMimeType(String value) {
+        String lowered = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        int parameterStart = lowered.indexOf(';');
+        return (parameterStart >= 0 ? lowered.substring(0, parameterStart) : lowered).trim();
     }
 
     private void validateKind(String messageKind, String mimeType) {

@@ -79,7 +79,7 @@ import {
 } from "./utils/formatters";
 import { validateAccountRequestForm, validateLoginForm } from "./utils/authForms";
 import { FONT_SCALE_OPTIONS, loadFontScale, saveFontScale } from "./utils/fontScale";
-import { isVoiceNudgeEnabled, setVoiceNudgeEnabled, speakText } from "./utils/speech";
+import { isSpeaking, isVoiceNudgeEnabled, setVoiceNudgeEnabled, speakLong, speakText, stopAllSpeech } from "./utils/speech";
 import { updateERPUserPresence } from "./api";
 import { buildTaskAgenda } from "./utils/taskCalendar";
 import {
@@ -114,7 +114,7 @@ import {
   Filter, Clock, Shield,
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
-  Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp,
+  Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp, Volume2,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -1170,6 +1170,42 @@ function ERPTab({
   const selectedTaskLeader = selectedTaskAssignees.find(employee => employee.id === taskLeaderId) || selectedTaskAssignees[0] || null;
   const taskDeadlineIso = taskDeadlineLocal ? new Date(taskDeadlineLocal).toISOString() : null;
 
+  /** Narrates everything someone needs to know about a task: status, priority, deadline,
+   *  assignees with roles/titles, workspace, and the description. Read via speakLong. */
+  const speakTask = async (task: ERPTask) => {
+    if (isSpeaking()) {
+      stopAllSpeech();
+      return;
+    }
+    const assignees = (overview?.assignments || [])
+      .filter(item => item.task_id === task.id && item.assignee_user_id != null)
+      .map(item => {
+        const person = allUsers.find(candidate => candidate.id === item.assignee_user_id)
+          || (overview?.users || []).find(candidate => candidate.id === item.assignee_user_id);
+        if (!person) return null;
+        const roleTitle = (item.title || "").trim();
+        return roleTitle ? `${person.name}, ${roleTitle}` : person.name;
+      })
+      .filter(Boolean)
+      .join("; ");
+    const parts: string[] = [`${task.title} görevi.`];
+    parts.push(`Durum: ${taskStatusLabel(task.status)}.`);
+    parts.push(`Öncelik: ${taskPriorityLabel(task.priority)}.`);
+    if (task.deadline_at) {
+      parts.push(`Teslim tarihi: ${formatDate(task.deadline_at)}. ${deadlineRemainingLabel(task.deadline_at)}.`);
+    } else {
+      parts.push("Teslim tarihi belirlenmemiş.");
+    }
+    if (assignees) parts.push(`Görevliler: ${assignees}.`);
+    if (task.document_group_id) parts.push("Bu görevin bir çalışma alanı var; sohbet ve dokümanlar orada.");
+    if (task.description) parts.push(`Açıklama: ${task.description}`);
+    try {
+      await speakLong(parts.join(" "));
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Sesli anlatım şu an kullanılamıyor.");
+    }
+  };
+
   /**
    * Quick 12-hour grace for an overdue task — deliberately separate from setting a brand-new
    * deadline (that goes through the full edit screen). Announces the extension in the linked
@@ -1546,6 +1582,13 @@ function ERPTab({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <Badge label={taskStatusLabel(task.status)} />
+                <button
+                  onClick={event => { event.stopPropagation(); void speakTask(task); }}
+                  aria-label={`${task.title} görevini sesli anlat`}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-500/10 text-violet-300 active:scale-90 transition-transform"
+                >
+                  <Volume2 className="w-4 h-4" />
+                </button>
                 {isAdmin && !["done", "cancelled"].includes(task.status) && (
                   <button
                     onClick={event => { event.stopPropagation(); void handleCancelTask(task); }}
@@ -2262,6 +2305,13 @@ function ERPTab({
                     <p className="text-xs text-muted-foreground mt-1">#{task.id}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => void speakTask(task)}
+                      className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-500/15 text-violet-300 active:scale-95 transition-transform"
+                      title="Görevi sesli anlat"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                    </button>
                     {isAdmin && task.status !== "done" && task.status !== "cancelled" && (
                       <button
                         onClick={() => openEditTask(task)}

@@ -12,6 +12,9 @@ import com.docsbot.ops.auth.AuthSessionResponse;
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.domain.UserStatus;
 import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
+import com.docsbot.ops.erp.application.NotificationService;
+
+import org.springframework.beans.factory.ObjectProvider;
 
 @Service
 @Profile("postgres")
@@ -21,6 +24,7 @@ public class EmployeeAuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final AuthAuditRecorder auditRecorder;
+    private final NotificationService notificationService;
 
     public EmployeeAuthenticationService(
             ErpUserRepository userRepository,
@@ -28,10 +32,33 @@ public class EmployeeAuthenticationService {
             RefreshTokenService refreshTokenService,
             AuthAuditRecorder auditRecorder
     ) {
+        this(userRepository, passwordEncoder, refreshTokenService, auditRecorder, (NotificationService) null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public EmployeeAuthenticationService(
+            ErpUserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            RefreshTokenService refreshTokenService,
+            AuthAuditRecorder auditRecorder,
+            ObjectProvider<NotificationService> notificationService
+    ) {
+        this(userRepository, passwordEncoder, refreshTokenService, auditRecorder,
+                notificationService.getIfAvailable());
+    }
+
+    EmployeeAuthenticationService(
+            ErpUserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            RefreshTokenService refreshTokenService,
+            AuthAuditRecorder auditRecorder,
+            NotificationService notificationService
+    ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
         this.auditRecorder = auditRecorder;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -106,6 +133,18 @@ public class EmployeeAuthenticationService {
         }
         user.updatePresence(UserStatus.ONLINE, now);
         auditRecorder.record(user.getUsername(), "EMPLOYEE_REGISTER", "ERP_USER", user.getId().toString(), "SUCCESS");
+        // Self-registration is auto-approved, so nothing lands in "Hesap Talepleri" — tell the
+        // admin a new account exists (they manage title/deletion from the Çalışanlar screen).
+        if (notificationService != null) {
+            notificationService.notifyAdmin(
+                    "account_registered",
+                    "Yeni kayıt: " + user.getName(),
+                    user.getName() + " (" + user.getUsername() + ") uygulamaya kaydoldu. Ünvanını Çalışanlar ekranından atayabilirsiniz.",
+                    null,
+                    "NORMAL",
+                    "account-registered:" + user.getId(),
+                    now);
+        }
         return refreshTokenService.issueSession(
                 "user",
                 user.getUsername(),

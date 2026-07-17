@@ -106,6 +106,38 @@ export function isSpeaking(): boolean {
   return currentAudio !== null && !currentAudio.paused && !currentAudio.ended;
 }
 
+// Long-form narration: synthesize sentence-grouped chunks sequentially so arbitrarily long reports
+// are read in full (each Piper request stays small and fast). A new speakLong/stop invalidates the
+// running sequence via the token.
+let sequenceToken = 0;
+
+export async function speakLong(text: string): Promise<void> {
+  const token = ++sequenceToken;
+  const sentences = text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
+  const chunks: string[] = [];
+  let current = "";
+  for (const sentence of sentences) {
+    if (current && (current.length + sentence.length + 1) > 420) {
+      chunks.push(current);
+      current = sentence;
+    } else {
+      current = current ? `${current} ${sentence}` : sentence;
+    }
+  }
+  if (current) chunks.push(current);
+  for (const chunk of chunks) {
+    if (token !== sequenceToken) return;
+    await speakText(chunk);
+    if (token !== sequenceToken) return;
+  }
+}
+
+/** Stops current audio AND cancels any in-flight speakLong sequence. */
+export function stopAllSpeech(): void {
+  sequenceToken++;
+  stopSpeaking();
+}
+
 export function isVoiceNudgeEnabled(): boolean {
   try {
     return window.localStorage.getItem(VOICE_NUDGE_KEY) === "1";
