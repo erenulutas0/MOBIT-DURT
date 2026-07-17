@@ -22,6 +22,8 @@ export type ERPUser = {
   status: "online" | "offline" | "away" | string;
   email: string | null;
   phone: string | null;
+  // Optional so local placeholder literals (admin pseudo-user etc.) stay valid.
+  title?: string | null;
   document_network_visible: boolean;
   last_seen_at: string | null;
   approved_at: string | null;
@@ -449,9 +451,24 @@ export async function getERPAccountRequests(status = "pending"): Promise<ERPAcco
   return response.json();
 }
 
-export async function approveERPAccountRequest(requestId: number): Promise<ERPUser> {
-  const response = await apiFetch(`/erp/account-requests/${requestId}/approve`, { method: "POST" });
+export async function approveERPAccountRequest(requestId: number, title?: string): Promise<ERPUser> {
+  const response = await apiFetch(`/erp/account-requests/${requestId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title?.trim() || null }),
+  });
   if (!response.ok) throw new Error(await errorText(response, "Hesap talebi onaylanamadı."));
+  return response.json();
+}
+
+// Admin-only ünvan management; empty string clears the title.
+export async function updateERPUserTitle(userId: number, title: string): Promise<ERPUser> {
+  const response = await apiFetch(`/erp/users/${userId}/title`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title.trim() || null }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Ünvan güncellenemedi."));
   return response.json();
 }
 

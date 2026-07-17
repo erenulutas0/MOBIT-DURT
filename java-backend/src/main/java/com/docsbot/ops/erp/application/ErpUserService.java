@@ -91,6 +91,23 @@ class ErpUserService {
         }
     }
 
+    /** Admin-only ünvan management; blank clears the title. */
+    @Transactional
+    ErpUser updateTitle(ErpPrincipal principal, long userId, String title) {
+        ErpValidation.requireAdmin(principal);
+        ErpUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("User not found"));
+        user.setTitle(title);
+        activityRecorder.record(
+                principal,
+                "USER_TITLE_UPDATED",
+                "USER",
+                String.valueOf(userId),
+                null,
+                "title=" + (user.getTitle() == null ? "" : user.getTitle()));
+        return user;
+    }
+
     @Transactional
     void deleteUser(ErpPrincipal principal, long userId) {
         ErpValidation.requireAdmin(principal);

@@ -175,6 +175,22 @@ public class ErpController {
                 request.status()));
     }
 
+    /** Admin-only ünvan assignment; blank/absent title clears it. */
+    @PatchMapping("/users/{userId}/title")
+    ErpDtos.UserResponse updateUserTitle(
+            JwtAuthenticationToken authentication,
+            @PathVariable long userId,
+            @Valid @RequestBody UpdateUserTitleRequest request
+    ) {
+        return ErpDtos.UserResponse.from(erpService.updateUserTitle(
+                ErpPrincipal.from(authentication),
+                userId,
+                request.title()));
+    }
+
+    record UpdateUserTitleRequest(@Size(max = 120) String title) {
+    }
+
     @PatchMapping("/users/{userId}/document-network-visibility")
     ErpDtos.UserResponse updateDocumentNetworkVisibility(
             JwtAuthenticationToken authentication,

@@ -128,6 +128,9 @@ docsbot:
     upload-window-seconds: ${DOCSBOT_RATE_LIMIT_UPLOAD_WINDOW_SECONDS:300}
     assistant-limit: ${DOCSBOT_RATE_LIMIT_ASSISTANT_LIMIT:30}
     assistant-window-seconds: ${DOCSBOT_RATE_LIMIT_ASSISTANT_WINDOW_SECONDS:60}
+    # Behind Caddy every request reaches us from the proxy's address; without this set to 1 all
+    # users share ONE rate bucket and a handful of assistant calls 429s the whole company.
+    trusted-proxy-hops: ${DOCSBOT_RATE_LIMIT_TRUSTED_PROXY_HOPS:0}
   telegram:
     enabled: ${TELEGRAM_POLLING_ENABLED:false}
     token: ${TELEGRAM_BOT_TOKEN:}

@@ -23,6 +23,24 @@ const PRONUNCIATIONS: Array<[RegExp, string]> = [
   [/\bdeadline\b/gi, "dedlayn"],
   [/\bupdate\b/gi, "apdeyt"],
   [/\blink\b/gi, "link"],
+  // Tech / business terms that otherwise get read letter-by-letter in Turkish.
+  [/\bintegration\b/gi, "integreyşın"],
+  [/\bscaling\b/gi, "skeyling"],
+  [/\bdeployment\b/gi, "diploymınt"],
+  [/\bdeploy\b/gi, "diploy"],
+  [/\bsoftware\b/gi, "softver"],
+  [/\bhardware\b/gi, "hardver"],
+  [/\bserver\b/gi, "sörvır"],
+  [/\bdatabase\b/gi, "deytabeys"],
+  [/\bbackup\b/gi, "bekap"],
+  [/\bfeedback\b/gi, "fiidbek"],
+  [/\bmeeting\b/gi, "miiting"],
+  [/\bbudget\b/gi, "bacıt"],
+  [/\bupload\b/gi, "aplod"],
+  [/\bdownload\b/gi, "davnlod"],
+  [/\bdashboard\b/gi, "deşbord"],
+  [/\breview\b/gi, "rivyu"],
+  [/\brelease\b/gi, "riliis"],
 ];
 
 /** Strips markdown/emoji clutter and fixes English-term pronunciation so the TTS reads prose. */

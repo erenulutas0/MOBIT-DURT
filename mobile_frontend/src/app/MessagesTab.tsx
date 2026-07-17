@@ -54,6 +54,7 @@ import {
   SectionHeader,
   Skeleton,
   TopBar,
+  ZoomableImage,
   blobToDataUrl,
   isPdfFile,
   readProfilePhoto,
@@ -349,75 +350,6 @@ function GroupImagePreview({
     <button onClick={onOpen} className="mt-3 overflow-hidden rounded-xl border border-border bg-muted block">
       <img src={url} alt={document.document.original_filename || "Görsel"} className="max-h-64 w-full object-cover" />
     </button>
-  );
-}
-
-// Pinch-to-zoom + pan image for the preview lightbox (important for reviewers inspecting scanned
-// documents). Two-pointer pinch scales 1×–5×; single-pointer drags when zoomed; double-tap toggles.
-function ZoomableImage({ src, alt }: { src: string; alt: string }) {
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const gesture = useRef({ dist: 1, scale: 1 });
-  const pan = useRef<{ x: number; y: number } | null>(null);
-
-  const clampScale = (value: number) => Math.min(5, Math.max(1, value));
-
-  const handleDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      gesture.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, scale };
-    } else if (scale > 1) {
-      pan.current = { x: event.clientX - offset.x, y: event.clientY - offset.y };
-    }
-  };
-  const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!pointers.current.has(event.pointerId)) return;
-    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      setScale(clampScale(gesture.current.scale * (dist / gesture.current.dist)));
-    } else if (scale > 1 && pan.current) {
-      setOffset({ x: event.clientX - pan.current.x, y: event.clientY - pan.current.y });
-    }
-  };
-  const handleUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    pointers.current.delete(event.pointerId);
-    pan.current = null;
-    if (pointers.current.size === 0 && scale <= 1.01) setOffset({ x: 0, y: 0 });
-  };
-  const toggleZoom = () => {
-    if (scale > 1) {
-      setScale(1);
-      setOffset({ x: 0, y: 0 });
-    } else {
-      setScale(2.5);
-    }
-  };
-
-  return (
-    <div
-      className="w-full h-full overflow-hidden flex items-center justify-center touch-none select-none"
-      onPointerDown={handleDown}
-      onPointerMove={handleMove}
-      onPointerUp={handleUp}
-      onPointerCancel={handleUp}
-      onDoubleClick={toggleZoom}
-    >
-      <img
-        src={src}
-        alt={alt}
-        draggable={false}
-        className="max-w-full max-h-full object-contain"
-        style={{
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-          transition: pan.current ? "none" : "transform 0.12s ease-out",
-        }}
-      />
-    </div>
   );
 }
 
@@ -1337,6 +1269,43 @@ function MessagesTab({
       setDirectMessages(prev => mergeMessagesById(prev, [sent]));
     } catch (exception) {
       setRoomError(exception instanceof Error ? exception.message : "Ses mesajı gönderilemedi.");
+    } finally {
+      setVoiceSending(false);
+    }
+  };
+
+  /** DM attachment (image/document): same media pipeline the voice messages and forwards use. */
+  const sendDirectAttachment = async (file: File | undefined) => {
+    if (!file) return;
+    setRoomError("");
+    setRoomNotice("");
+    if (user.role === "admin" && !selectedDirectUser) {
+      setRoomError("Dosya göndermek için bir kişi seçin.");
+      return;
+    }
+    if (selectedDirectUser && selectedDirectUser.id === user.id) {
+      setRoomError("Kendinize mesaj gönderemezsiniz.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setRoomError("Dosya 10 MB'tan büyük olamaz. Büyük dosyaları çalışma alanına yükleyin.");
+      return;
+    }
+    setVoiceSending(true);
+    try {
+      const mediaData = await blobToDataUrl(file);
+      const mimeType = file.type || "application/octet-stream";
+      const sent = await sendERPDirectMessage({
+        body: mimeType.startsWith("image/") ? "Fotoğraf" : file.name,
+        recipientUserId: selectedDirectUser?.id ?? null,
+        messageKind: mimeType.startsWith("image/") ? "image" : "file",
+        mediaMimeType: mimeType,
+        mediaData,
+        clientMessageId: createClientMessageId(),
+      });
+      setDirectMessages(prev => mergeMessagesById(prev, [sent]));
+    } catch (exception) {
+      setRoomError(exception instanceof Error ? exception.message : "Dosya gönderilemedi.");
     } finally {
       setVoiceSending(false);
     }
@@ -2892,9 +2861,20 @@ function MessagesTab({
         </div>
       )}
       <div className="shrink-0 border-t border-border px-4 py-3 flex items-end gap-2.5 bg-background">
-        <button className="w-9 h-9 flex items-center justify-center rounded-full bg-muted shrink-0">
+        <label className="w-9 h-9 flex items-center justify-center rounded-full bg-muted shrink-0 cursor-pointer active:scale-95 transition-transform">
           <Paperclip className="w-4 h-4 text-muted-foreground" />
-        </button>
+          <input
+            type="file"
+            accept="application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt,image/*"
+            className="hidden"
+            disabled={voiceSending}
+            onChange={event => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              void sendDirectAttachment(file);
+            }}
+          />
+        </label>
         {isRecording ? (
           <div className="flex-1 bg-red-500/10 border border-red-500/20 rounded-2xl px-4 py-2.5 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0" />

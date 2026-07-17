@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Bell, ChevronLeft, Clock, FileText } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bell, ChevronLeft, Clock, FileText, X } from "lucide-react";
 
 type Role = "admin" | "user";
 type AuthUser = { id: number | null; name: string; email: string; role: Role; dept: string };
@@ -123,15 +123,92 @@ function readProfilePhoto(userIdOrEmail: number | string | null | undefined) {
   }
 }
 
+// Pinch-to-zoom + pan image for preview lightboxes (important for reviewers inspecting scanned
+// documents). Two-pointer pinch scales 1×–5×; single-pointer drags when zoomed; double-tap toggles.
+function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const gesture = useRef({ dist: 1, scale: 1 });
+  const pan = useRef<{ x: number; y: number } | null>(null);
+
+  const clampScale = (value: number) => Math.min(5, Math.max(1, value));
+
+  const handleDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      gesture.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, scale };
+    } else if (scale > 1) {
+      pan.current = { x: event.clientX - offset.x, y: event.clientY - offset.y };
+    }
+  };
+  const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      setScale(clampScale(gesture.current.scale * (dist / gesture.current.dist)));
+    } else if (scale > 1 && pan.current) {
+      setOffset({ x: event.clientX - pan.current.x, y: event.clientY - pan.current.y });
+    }
+  };
+  const handleUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(event.pointerId);
+    pan.current = null;
+    if (pointers.current.size === 0 && scale <= 1.01) setOffset({ x: 0, y: 0 });
+  };
+  const toggleZoom = () => {
+    if (scale > 1) {
+      setScale(1);
+      setOffset({ x: 0, y: 0 });
+    } else {
+      setScale(2.5);
+    }
+  };
+
+  return (
+    <div
+      className="w-full h-full overflow-hidden flex items-center justify-center touch-none select-none"
+      onPointerDown={handleDown}
+      onPointerMove={handleMove}
+      onPointerUp={handleUp}
+      onPointerCancel={handleUp}
+      onDoubleClick={toggleZoom}
+    >
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        className="max-w-full max-h-full object-contain"
+        style={{
+          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+          transition: pan.current ? "none" : "transform 0.12s ease-out",
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * PDF viewer: every page rendered crisp (2× scale), streamed in as it renders, with a page counter.
+ * Tapping a page opens it full-screen with pinch-zoom/pan — the "sayfa sayfa tam ekran" flow.
+ */
 function PdfCanvasPreview({ url }: { url: string }) {
   const [pages, setPages] = useState<string[]>([]);
+  const [totalPages, setTotalPages] = useState(0);
   const [error, setError] = useState("");
+  const [fullscreenPage, setFullscreenPage] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const render = async () => {
       setError("");
       setPages([]);
+      setTotalPages(0);
+      setFullscreenPage(null);
       try {
         const [pdfjsLib, pdfWorker] = await Promise.all([
           import("pdfjs-dist"),
@@ -139,20 +216,23 @@ function PdfCanvasPreview({ url }: { url: string }) {
         ]);
         pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker.default;
         const pdf = await pdfjsLib.getDocument(url).promise;
-        const nextPages: string[] = [];
-        const count = Math.min(pdf.numPages, 5);
-        for (let pageNumber = 1; pageNumber <= count; pageNumber += 1) {
+        if (cancelled) return;
+        setTotalPages(pdf.numPages);
+        // Stream pages into state one by one so the first page is visible immediately even in a
+        // long document; 2× scale keeps text readable when zoomed in full screen.
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
           const page = await pdf.getPage(pageNumber);
-          const viewport = page.getViewport({ scale: 1.35 });
+          const viewport = page.getViewport({ scale: 2 });
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           if (!context) continue;
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           await page.render({ canvasContext: context, viewport }).promise;
-          nextPages.push(canvas.toDataURL("image/png"));
+          if (cancelled) return;
+          const rendered = canvas.toDataURL("image/jpeg", 0.9);
+          setPages(prev => [...prev, rendered]);
         }
-        if (!cancelled) setPages(nextPages);
       } catch {
         if (!cancelled) setError("PDF görüntülenemedi. İndirerek açabilirsiniz.");
       }
@@ -165,10 +245,58 @@ function PdfCanvasPreview({ url }: { url: string }) {
   if (pages.length === 0) return <EmptyState icon={Clock} title="PDF hazırlanıyor" desc="Sayfalar oluşturuluyor." />;
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-950 px-3 py-4 space-y-3">
+    <div className="h-full overflow-y-auto bg-slate-950 px-3 py-4 space-y-4">
+      <p className="text-center text-[11px] text-slate-400">
+        Sayfaya dokunun: tam ekran + yakınlaştırma
+      </p>
       {pages.map((page, index) => (
-        <img key={index} src={page} alt={`PDF sayfa ${index + 1}`} className="w-full rounded-lg bg-white" />
+        <button key={index} onClick={() => setFullscreenPage(index)} className="block w-full text-left">
+          <img src={page} alt={`PDF sayfa ${index + 1}`} className="w-full rounded-lg bg-white" />
+          <p className="mt-1 text-center text-[10px] text-slate-400">
+            Sayfa {index + 1} / {totalPages || pages.length}
+          </p>
+        </button>
       ))}
+      {pages.length < totalPages && (
+        <p className="text-center text-[11px] text-slate-400 animate-pulse">
+          Sayfa {pages.length + 1} hazırlanıyor…
+        </p>
+      )}
+      {fullscreenPage !== null && pages[fullscreenPage] && (
+        <div className="fixed inset-0 z-[70] bg-black flex flex-col">
+          <div className="shrink-0 flex items-center justify-between px-4 pt-12 pb-3">
+            <p className="text-sm font-semibold text-white">
+              Sayfa {fullscreenPage + 1} / {totalPages || pages.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setFullscreenPage(page => (page !== null && page > 0 ? page - 1 : page))}
+                disabled={fullscreenPage === 0}
+                className="px-3 h-9 rounded-full bg-white/10 text-sm font-bold text-white disabled:opacity-30"
+              >
+                ‹ Önceki
+              </button>
+              <button
+                onClick={() => setFullscreenPage(page => (page !== null && page < pages.length - 1 ? page + 1 : page))}
+                disabled={fullscreenPage >= pages.length - 1}
+                className="px-3 h-9 rounded-full bg-white/10 text-sm font-bold text-white disabled:opacity-30"
+              >
+                Sonraki ›
+              </button>
+              <button
+                onClick={() => setFullscreenPage(null)}
+                className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center"
+                aria-label="Tam ekrandan çık"
+              >
+                <X className="w-4 h-4 text-white" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ZoomableImage src={pages[fullscreenPage]} alt={`PDF sayfa ${fullscreenPage + 1}`} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -192,5 +320,5 @@ function NotificationBell({ count, onClick }: { count: number; onClick: () => vo
   );
 }
 
-export { Avatar, Card, SectionHeader, Skeleton, TopBar, EmptyState, NotificationBell, isPdfFile, blobToDataUrl, profilePhotoKey, readProfilePhoto, PdfCanvasPreview };
+export { Avatar, Card, SectionHeader, Skeleton, TopBar, EmptyState, NotificationBell, isPdfFile, blobToDataUrl, profilePhotoKey, readProfilePhoto, PdfCanvasPreview, ZoomableImage };
 export type { Role, AuthUser, DirectMessageOpenRequest, RoomOpenRequest };

@@ -50,6 +50,7 @@ import {
   getERPPerformance,
   getERPUsers,
   deleteERPUser,
+  updateERPUserTitle,
   getFolderTree,
   getTenderDocumentBlob,
   getTenderDocumentsPage,
@@ -1169,6 +1170,32 @@ function ERPTab({
   const selectedTaskLeader = selectedTaskAssignees.find(employee => employee.id === taskLeaderId) || selectedTaskAssignees[0] || null;
   const taskDeadlineIso = taskDeadlineLocal ? new Date(taskDeadlineLocal).toISOString() : null;
 
+  /**
+   * Quick 12-hour grace for an overdue task — deliberately separate from setting a brand-new
+   * deadline (that goes through the full edit screen). Announces the extension in the linked
+   * workspace chat so the team hears about it where the work happens.
+   */
+  const grantTwelveHourExtension = async (task: ERPTask) => {
+    if (!isAdmin) return;
+    if (!window.confirm(`"${task.title}" görevine şu andan itibaren 12 saat ek süre verilsin mi?`)) return;
+    const newDeadline = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    try {
+      await updateERPTaskDetails(task.id, { deadline_at: newDeadline.toISOString() });
+      if (task.document_group_id) {
+        try {
+          await sendDocumentGroupMessage(task.document_group_id,
+            `⏰ Admin bu göreve 12 saat ek süre verdi. Yeni teslim: ${formatDate(newDeadline.toISOString())}`);
+        } catch (messageException) {
+          console.warn("Ek süre duyurusu gönderilemedi.", messageException);
+        }
+      }
+      showNotice(`✓ "${task.title}" görevine 12 saat ek süre verildi.`);
+      await refresh();
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Ek süre verilemedi.");
+    }
+  };
+
   const openEditTask = (task: ERPTask) => {
     setEditTitle(task.title);
     setEditDescription(task.description || "");
@@ -1445,14 +1472,29 @@ function ERPTab({
   };
 
   const approveAccountRequest = async (requestId: number) => {
+    // Ünvan is assigned at approval; leave empty (or cancel) to set it later from Çalışanlar.
+    const title = window.prompt("Bu kişiye bir ünvan verin (opsiyonel, boş bırakılabilir):", "");
     setLoading(true);
     setError("");
     try {
-      await approveERPAccountRequest(requestId);
+      await approveERPAccountRequest(requestId, title || undefined);
       await refresh();
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Hesap talebi onaylanamadı.");
       setLoading(false);
+    }
+  };
+
+  const editUserTitle = async (target: ERPUser) => {
+    if (!isAdmin) return;
+    const next = window.prompt(`${target.name} için ünvan (boş = kaldır):`, target.title || "");
+    if (next === null) return;
+    try {
+      const updated = await updateERPUserTitle(target.id, next);
+      setAllUsers(prev => prev.map(item => (item.id === target.id ? { ...item, title: updated.title } : item)));
+      showNotice(`✓ ${target.name} ünvanı güncellendi.`);
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Ünvan güncellenemedi.");
     }
   };
 
@@ -1746,10 +1788,19 @@ function ERPTab({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-foreground truncate">{employee.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {employee.email || "E-posta yok"} · {employee.role === "admin" ? "Admin" : "Kullanıcı"}
+                    {employee.title || (employee.role === "admin" ? "Admin" : "Ünvan yok")} · {employee.email || "E-posta yok"}
                   </p>
                 </div>
                 <Badge label={employeeStatusLabel(employee.status)} />
+                {isAdmin && (
+                  <button
+                    onClick={() => void editUserTitle(employee)}
+                    aria-label={`${employee.name} ünvanını düzenle`}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-500/10 text-blue-400 active:scale-90 transition-transform shrink-0"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
                 {isAdmin && employee.id !== user.id && (
                   <button
                     onClick={() => void handleDeleteUser(employee)}
@@ -2227,6 +2278,30 @@ function ERPTab({
                   {task.description || "Bu görev için açıklama girilmemiş."}
                 </p>
               </Card>
+
+              {/* Overdue rescue: a quick 12h grace and a full re-deadline are different decisions —
+                  keep them as two visibly separate actions. */}
+              {isAdmin && task.status === "overdue" && (
+                <Card className="p-3 border-red-500/30 bg-red-500/10">
+                  <p className="text-xs font-semibold text-red-300 mb-2">
+                    Bu görev gecikti. Ne yapmak istersiniz?
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => void grantTwelveHourExtension(task)}
+                      className="py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-xs font-bold text-amber-200 active:scale-[0.97] transition-transform"
+                    >
+                      ⏰ +12 Saat Ek Süre
+                    </button>
+                    <button
+                      onClick={() => openEditTask(task)}
+                      className="py-2.5 rounded-xl bg-blue-500/20 border border-blue-500/40 text-xs font-bold text-blue-200 active:scale-[0.97] transition-transform"
+                    >
+                      📅 Yeni Deadline Belirle
+                    </button>
+                  </div>
+                </Card>
+              )}
 
               <Card className="divide-y divide-border">
                 {[

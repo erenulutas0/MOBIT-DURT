@@ -67,6 +67,10 @@ public class ErpService {
         userService.deleteUser(principal, userId);
     }
 
+    public ErpUser updateUserTitle(ErpPrincipal principal, long userId, String title) {
+        return userService.updateTitle(principal, userId, title);
+    }
+
     public void requestAccountDeletion(ErpPrincipal principal) {
         userService.requestAccountDeletion(principal);
     }

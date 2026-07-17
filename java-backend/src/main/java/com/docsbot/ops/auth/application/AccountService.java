@@ -189,6 +189,11 @@ public class AccountService {
 
     @Transactional
     public ErpUser approve(long requestId, String decidedBy) {
+        return approve(requestId, decidedBy, null);
+    }
+
+    @Transactional
+    public ErpUser approve(long requestId, String decidedBy, String title) {
         ErpAccountRequest request = getPendingForUpdate(requestId);
         if (emailVerificationEnabled() && !request.isEmailVerified()) {
             throw new AuthExceptions.Conflict("E-posta doğrulanmadan hesap onaylanamaz.");
@@ -198,12 +203,14 @@ public class AccountService {
         }
 
         Instant now = clock.instant();
-        ErpUser user = userRepository.saveAndFlush(ErpUser.approvedEmployee(
+        ErpUser user = ErpUser.approvedEmployee(
                 request.getName(),
                 request.getEmail(),
                 request.getPhone(),
                 request.getPasswordHash(),
-                now));
+                now);
+        user.setTitle(title);
+        user = userRepository.saveAndFlush(user);
         request.approve(decidedBy, user.getId(), now);
         auditRecorder.record(
                 decidedBy,

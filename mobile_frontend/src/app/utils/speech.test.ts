@@ -9,6 +9,14 @@ describe("cleanForSpeech", () => {
     expect(cleanForSpeech("deadline yaklaşıyor, update bekliyoruz")).toBe("dedlayn yaklaşıyor, apdeyt bekliyoruz");
   });
 
+  it("teknik/iş terimlerini fonetik okur", () => {
+    expect(cleanForSpeech("IT AI integration problem")).toBe("ay-ti ey-ay integreyşın problem");
+    expect(cleanForSpeech("Server scaling ve database backup planı"))
+      .toBe("sörvır skeyling ve deytabeys bekap planı");
+    expect(cleanForSpeech("Meeting sonrası feedback bekliyoruz"))
+      .toBe("miiting sonrası fiidbek bekliyoruz");
+  });
+
   it("Türkçe kelimeleri bozmaz", () => {
     // "ait", "bitti" gibi kelimeler AI/IT kalıplarına yakalanmamalı (word boundary + case).
     expect(cleanForSpeech("Bana ait görev bitti")).toBe("Bana ait görev bitti");

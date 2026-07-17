@@ -224,7 +224,9 @@ public class SecurityConfig {
                                 "/erp/notifications/*/read",
                                 "/erp/notifications/read-all",
                                 "/erp/messages/*/read",
-                                "/erp/notification-preferences")
+                                "/erp/notification-preferences",
+                                "/erp/users/*/document-network-visibility",
+                                "/erp/users/*/title")
                         .authenticated()
                         .anyRequest()
                         .denyAll())

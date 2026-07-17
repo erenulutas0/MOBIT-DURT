@@ -41,6 +41,10 @@ public class ErpUser {
 
     private String phone;
 
+    // Job title (ünvan); admin-managed, empty until assigned.
+    @Column(length = 120)
+    private String title;
+
     @Column(name = "password_hash")
     private String passwordHash;
 
@@ -189,6 +193,14 @@ public class ErpUser {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = (title == null || title.isBlank()) ? null : title.trim();
     }
 
     public String getPasswordHash() {

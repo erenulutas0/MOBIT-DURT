@@ -67,8 +67,19 @@ public class AccountController {
     }
 
     @PostMapping("/{requestId}/approve")
-    UserResponse approve(@PathVariable long requestId, Authentication authentication) {
-        return UserResponse.from(accountService.approve(requestId, authentication.getName()));
+    UserResponse approve(
+            @PathVariable long requestId,
+            Authentication authentication,
+            @RequestBody(required = false) ApproveRequest request
+    ) {
+        return UserResponse.from(accountService.approve(
+                requestId,
+                authentication.getName(),
+                request == null ? null : request.title()));
+    }
+
+    // Optional ünvan assigned at approval time; body itself is optional for older clients.
+    record ApproveRequest(@Size(max = 120) String title) {
     }
 
     @PostMapping("/{requestId}/reject")
