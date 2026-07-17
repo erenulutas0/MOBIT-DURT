@@ -622,16 +622,34 @@ export async function updateERPUserPresence(userId: number, status: "online" | "
 
 /**
  * Turkish TTS (self-hosted Piper). Returns a playable WAV blob; throws with the backend's message
- * when the synthesizer is off (503) so callers can quietly skip speech.
+ * when the synthesizer is off (503) so callers can quietly skip speech. Synthesis of a long text on
+ * the VPS CPU can take well beyond the default 15s API timeout — allow up to 60s here.
  */
 export async function getAssistantSpeech(text: string): Promise<Blob> {
   const response = await apiFetch("/erp/assistant/speech", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
-  });
+  }, true, 60_000);
   if (!response.ok) throw new Error(await errorText(response, "Ses oluşturulamadı."));
   return response.blob();
+}
+
+export type ERPPerformanceRow = {
+  user_id: number;
+  name: string;
+  on_time: number;
+  late: number;
+  overdue_open: number;
+  open_active: number;
+  score: number | null;
+};
+
+// Admin-only: per-user task performance for the given period ("week" | "month").
+export async function getERPPerformance(period: "week" | "month"): Promise<ERPPerformanceRow[]> {
+  const response = await apiFetch(`/erp/performance?period=${period}`);
+  if (!response.ok) throw new Error(await errorText(response, "Performans verisi yüklenemedi."));
+  return response.json();
 }
 
 export async function deleteERPUser(userId: number): Promise<void> {
@@ -1349,18 +1367,23 @@ async function refreshSession(): Promise<BackendAuthUser | null> {
 /** Fired when the access token is rejected and the refresh token cannot revive the session. */
 export const SESSION_EXPIRED_EVENT = "docsbot:session-expired";
 
-async function apiFetch(path: string, init: RequestInit = {}, retryOnUnauthorized = true): Promise<Response> {
+async function apiFetch(
+  path: string,
+  init: RequestInit = {},
+  retryOnUnauthorized = true,
+  timeoutMs?: number,
+): Promise<Response> {
   const headers = new Headers(init.headers);
   const token = (await loadStoredUserAsync())?.accessToken;
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetchWithTimeout(`${apiBaseUrl()}${path}`, { ...init, headers });
+  const response = await fetchWithTimeout(`${apiBaseUrl()}${path}`, { ...init, headers }, timeoutMs);
   if (response.status === 401 && token && retryOnUnauthorized) {
     const refreshed = await refreshSession();
     if (refreshed?.accessToken) {
       const retryHeaders = new Headers(init.headers);
       retryHeaders.set("Authorization", `Bearer ${refreshed.accessToken}`);
-      return fetchWithTimeout(`${apiBaseUrl()}${path}`, { ...init, headers: retryHeaders });
+      return fetchWithTimeout(`${apiBaseUrl()}${path}`, { ...init, headers: retryHeaders }, timeoutMs);
     }
     clearStoredSession();
     window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
@@ -1455,9 +1478,13 @@ async function readSseStream(
   }
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number = API_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } finally {

@@ -47,6 +47,7 @@ import {
   getERPNotificationPreferences,
   getERPNotificationUnreadCount,
   getERPOverview,
+  getERPPerformance,
   getERPUsers,
   deleteERPUser,
   getFolderTree,
@@ -66,7 +67,7 @@ import {
   updateERPTaskDetails,
   sendDocumentGroupMessage,
 } from "./api";
-import type { DocumentGroupMessage, DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPTask, ERPUser, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
+import type { DocumentGroupMessage, DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPPerformanceRow, ERPTask, ERPUser, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
 import {
   employeeStatusLabel,
   formatDate,
@@ -112,7 +113,7 @@ import {
   Filter, Clock, Shield,
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
-  Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles,
+  Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -121,7 +122,7 @@ type Tab = "home" | "erp" | "tender" | "messages" | "profile";
 type ERPScreen =
   | "overview" | "employees" | "employee-detail"
   | "tasks" | "calendar" | "create-task" | "task-detail" | "edit-task" | "approvals" | "approval-detail"
-  | "account-requests" | "notifications";
+  | "account-requests" | "notifications" | "performance";
 type TenderScreen =
   | "dashboard" | "documents" | "document-detail"
   | "document-groups" | "folder-tree" | "upload"
@@ -1053,6 +1054,31 @@ function ERPTab({
     return () => window.removeEventListener(PUSH_RECEIVED_EVENT, handler);
   }, [user.id, user.role]);
 
+  // Admin-only performance data (scores are never sent to, or shown for, normal users).
+  const [performancePeriod, setPerformancePeriod] = useState<"week" | "month">("week");
+  const [performanceRows, setPerformanceRows] = useState<ERPPerformanceRow[]>([]);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [performanceError, setPerformanceError] = useState("");
+  useEffect(() => {
+    if (screen !== "performance" || !isAdmin) return;
+    let active = true;
+    setPerformanceLoading(true);
+    setPerformanceError("");
+    getERPPerformance(performancePeriod)
+      .then(rows => {
+        if (active) setPerformanceRows(rows);
+      })
+      .catch(exception => {
+        if (active) setPerformanceError(exception instanceof Error ? exception.message : "Performans verisi yüklenemedi.");
+      })
+      .finally(() => {
+        if (active) setPerformanceLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [screen, performancePeriod, isAdmin]);
+
   // Task detail shows the linked workspace's latest chat messages, so "Mesajlar" is never
   // mysteriously empty when the conversation actually lives in the alan.
   const [taskRoomMessages, setTaskRoomMessages] = useState<DocumentGroupMessage[]>([]);
@@ -1619,6 +1645,13 @@ function ERPTab({
                   <UserPlus className="w-5 h-5 text-amber-400" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Hesap Talepleri</span>
+              </button>
+              <button onClick={() => navTo("performance")}
+                className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-rose-400" />
+                </div>
+                <span className="text-sm font-semibold text-foreground">Performans</span>
               </button>
             </>
           ) : (
@@ -2464,6 +2497,78 @@ function ERPTab({
               </div>
             </>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // PERFORMANCE (admin only) — accountability scores; hidden from and denied to normal users.
+  if (screen === "performance" && isAdmin) {
+    const scoreColor = (score: number | null) =>
+      score === null ? "text-muted-foreground"
+        : score >= 80 ? "text-emerald-400"
+        : score >= 50 ? "text-amber-400"
+        : "text-red-400";
+    return (
+      <div className="flex flex-col min-h-full">
+        <TopBar title="Performans" onBack={back} />
+        <div className="px-4 pt-3 pb-2">
+          <div className="grid grid-cols-2 gap-2 bg-card border border-border rounded-2xl p-1">
+            {(["week", "month"] as const).map(period => (
+              <button
+                key={period}
+                onClick={() => setPerformancePeriod(period)}
+                className={`py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  performancePeriod === period ? "bg-primary text-white" : "text-muted-foreground"
+                }`}
+              >
+                {period === "week" ? "Son 7 Gün" : "Son 30 Gün"}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-muted-foreground leading-relaxed">
+            Puan = zamanında bitenler tam, geç bitenler yarım sayılır; deadline'ı geçmiş açık işler paydaya ceza olarak girer. Bu ekran yalnızca yöneticiye görünür.
+          </p>
+        </div>
+        <div className="flex-1 px-4 pt-2 pb-4 space-y-3">
+          {performanceError && (
+            <Card className="p-4 border-red-500/30 bg-red-500/10">
+              <p className="text-xs text-red-300">{performanceError}</p>
+            </Card>
+          )}
+          {performanceLoading && performanceRows.length === 0 && (
+            <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-20" />)}</div>
+          )}
+          {!performanceLoading && performanceRows.length === 0 && !performanceError && (
+            <EmptyState icon={TrendingUp} title="Veri yok" desc="Bu dönemde puanlanacak görev hareketi bulunmuyor." />
+          )}
+          {performanceRows.map(row => (
+            <Card key={row.user_id} className="p-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={row.name} color="bg-slate-700" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground truncate">{row.name}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    ✅ {row.on_time} zamanında · 🕓 {row.late} geç · 🔴 {row.overdue_open} gecikmiş açık · {row.open_active} devam eden
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className={`text-2xl font-bold font-mono ${scoreColor(row.score)}`}>
+                    {row.score === null ? "—" : row.score}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">puan</p>
+                </div>
+              </div>
+              {row.score !== null && (
+                <div className="mt-3 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${row.score >= 80 ? "bg-emerald-500" : row.score >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                    style={{ width: `${row.score}%` }}
+                  />
+                </div>
+              )}
+            </Card>
+          ))}
         </div>
       </div>
     );

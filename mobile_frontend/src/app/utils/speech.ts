@@ -35,10 +35,17 @@ export function cleanForSpeech(text: string): string {
   for (const [pattern, replacement] of PRONUNCIATIONS) {
     cleaned = cleaned.replace(pattern, replacement);
   }
-  return cleaned
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 600);
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  // Long texts both take ages to synthesize on the VPS CPU and used to be chopped mid-word at the
+  // cap. Cut at the last sentence boundary before the cap instead, so speech always ends cleanly.
+  const MAX_LENGTH = 600;
+  if (cleaned.length > MAX_LENGTH) {
+    const head = cleaned.slice(0, MAX_LENGTH);
+    const lastSentenceEnd = Math.max(
+      head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "));
+    cleaned = lastSentenceEnd > 200 ? head.slice(0, lastSentenceEnd + 1) : head;
+  }
+  return cleaned;
 }
 
 export function stopSpeaking(): void {

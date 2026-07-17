@@ -186,7 +186,8 @@ public class SecurityConfig {
                                 "/erp/company-chat/messages",
                                 "/erp/assistant/briefing",
                                 "/erp/announcement",
-                                "/erp/feedback")
+                                "/erp/feedback",
+                                "/erp/performance")
                         .authenticated()
                         .requestMatchers(HttpMethod.PUT, "/erp/announcement")
                         .authenticated()

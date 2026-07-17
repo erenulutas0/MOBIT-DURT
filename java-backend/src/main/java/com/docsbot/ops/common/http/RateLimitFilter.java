@@ -61,6 +61,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(decision.retryAfterSeconds()));
+        // This filter sits outside the Spring Security chain, so its 429 would otherwise carry no
+        // CORS headers — browsers then surface it as an opaque "Failed to fetch" instead of a
+        // readable rate-limit error. Echo the origin so clients can show the real message.
+        String origin = request.getHeader(HttpHeaders.ORIGIN);
+        if (origin != null && !origin.isBlank()) {
+            response.setHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+            response.setHeader(HttpHeaders.VARY, HttpHeaders.ORIGIN);
+        }
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         response.getWriter().write("""
