@@ -2,15 +2,18 @@ package com.docsbot.ops.erp.application.assistant;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Turkish text-to-speech via a self-hosted Piper HTTP server (open-source, CPU-friendly).
@@ -25,6 +28,7 @@ public class AssistantSpeechService {
     public static final int MAX_TEXT_LENGTH = 600;
 
     private final HttpClient httpClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final String ttsUrl;
 
     public AssistantSpeechService(@Value("${docsbot.assistant.tts-url:}") String ttsUrl) {
@@ -53,10 +57,18 @@ public class AssistantSpeechService {
         if (trimmed.length() > MAX_TEXT_LENGTH) {
             trimmed = trimmed.substring(0, MAX_TEXT_LENGTH);
         }
-        HttpRequest request = HttpRequest.newBuilder(URI.create(
-                        ttsUrl + "/?text=" + URLEncoder.encode(trimmed, StandardCharsets.UTF_8)))
+        // Piper's http_server expects a JSON body {"text": "..."} and returns a WAV (GET is 405,
+        // raw-text POST is 500). Build it with Jackson so quotes/newlines are escaped safely.
+        String jsonBody;
+        try {
+            jsonBody = objectMapper.writeValueAsString(Map.of("text", trimmed));
+        } catch (JsonProcessingException exception) {
+            throw new SpeechUnavailable("Metin ses isteğine dönüştürülemedi.");
+        }
+        HttpRequest request = HttpRequest.newBuilder(URI.create(ttsUrl + "/"))
                 .timeout(Duration.ofSeconds(30))
-                .GET()
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
                 .build();
         try {
             HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
