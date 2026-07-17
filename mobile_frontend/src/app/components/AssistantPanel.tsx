@@ -20,6 +20,46 @@ import {
   type AssistantBriefing,
   type AssistantTaskItem,
 } from "../api";
+import { speakText, stopSpeaking } from "../utils/speech";
+import { Volume2, Square } from "lucide-react";
+
+/**
+ * Turns the structured briefing into natural spoken Turkish — the assistant "reads your day":
+ * greeting, late items by name, today's deliveries, the week ahead, unblocked work and unread
+ * counts. Titles are capped at three per section so the speech stays tight.
+ */
+export function briefingToSpeech(userName: string, briefing: AssistantBriefing): string {
+  const firstName = (userName || "").trim().split(/\s+/)[0] || "Merhaba";
+  const titles = (items: AssistantTaskItem[]) => {
+    const names = items.slice(0, 3).map(item => item.title).join(", ");
+    return items.length > 3 ? `${names} ve ${items.length - 3} görev daha` : names;
+  };
+  const parts: string[] = [`Merhaba ${firstName}.`];
+  const total = briefing.overdue.length + briefing.due_today.length + briefing.due_this_week.length
+    + briefing.ready_to_start.length + briefing.blocked.length;
+  if (total === 0 && briefing.unread_messages === 0) {
+    parts.push("Harika görünüyor, bekleyen işiniz yok. İyi çalışmalar!");
+    return parts.join(" ");
+  }
+  parts.push("Günün özetini veriyorum.");
+  if (briefing.overdue.length > 0) {
+    parts.push(`${briefing.overdue.length} geciken göreviniz var: ${titles(briefing.overdue)}.`);
+  }
+  if (briefing.due_today.length > 0) {
+    parts.push(`Bugün teslim edilmesi gerekenler: ${titles(briefing.due_today)}.`);
+  }
+  if (briefing.due_this_week.length > 0) {
+    parts.push(`Bu hafta ${briefing.due_this_week.length} görev teslim edilecek.`);
+  }
+  if (briefing.ready_to_start.length > 0) {
+    parts.push(`${briefing.ready_to_start.length} görevin önü açıldı, başlayabilirsiniz.`);
+  }
+  if (briefing.unread_messages > 0) {
+    parts.push(`${briefing.unread_messages} okunmamış mesajınız var.`);
+  }
+  parts.push("Kolay gelsin!");
+  return parts.join(" ");
+}
 
 type ChatTurn = { role: "user" | "assistant"; text: string; target?: "tasks" | "messages" };
 
@@ -57,7 +97,27 @@ export function AssistantPanel({
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const threadEndRef = useRef<HTMLDivElement>(null);
+
+  // Stop any in-flight speech when the panel closes.
+  useEffect(() => () => stopSpeaking(), []);
+
+  const speak = useCallback(async (text: string) => {
+    if (speaking) {
+      stopSpeaking();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    try {
+      await speakText(text);
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Sesli asistan şu an kullanılamıyor.");
+    } finally {
+      setSpeaking(false);
+    }
+  }, [speaking]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,6 +181,18 @@ export function AssistantPanel({
             <p className="text-sm font-bold text-foreground truncate">Mobit-Asistan</p>
             <p className="text-xs text-violet-300/80 truncate">{userName}</p>
           </div>
+          {briefing && (
+            <button
+              onClick={() => void speak(briefingToSpeech(userName, briefing))}
+              className={`px-3 h-9 rounded-full flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-colors ${
+                speaking ? "bg-red-500/20 text-red-300" : "bg-violet-500/25 text-violet-200"
+              }`}
+              aria-label={speaking ? "Konuşmayı durdur" : "Günü sesli anlat"}
+            >
+              {speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-4 h-4" />}
+              {speaking ? "Durdur" : "Sesli Anlat"}
+            </button>
+          )}
           <button
             onClick={() => void load()}
             className="p-2 text-muted-foreground active:scale-95"
@@ -265,13 +337,24 @@ export function AssistantPanel({
                 >
                   {turn.text}
                 </div>
-                {turn.role === "assistant" && turn.target && (
-                  <button
-                    onClick={() => (turn.target === "messages" ? onOpenMessages() : onOpenTasks())}
-                    className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200 active:scale-95"
-                  >
-                    {turn.target === "messages" ? "Mesajlara git" : "Görevlere git"} →
-                  </button>
+                {turn.role === "assistant" && (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <button
+                      onClick={() => void speak(turn.text)}
+                      className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-200 active:scale-95"
+                      aria-label="Cevabı seslendir"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                    </button>
+                    {turn.target && (
+                      <button
+                        onClick={() => (turn.target === "messages" ? onOpenMessages() : onOpenTasks())}
+                        className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200 active:scale-95"
+                      >
+                        {turn.target === "messages" ? "Mesajlara git" : "Görevlere git"} →
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

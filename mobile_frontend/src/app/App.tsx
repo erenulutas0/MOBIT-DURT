@@ -76,6 +76,8 @@ import {
 } from "./utils/formatters";
 import { validateAccountRequestForm, validateLoginForm } from "./utils/authForms";
 import { FONT_SCALE_OPTIONS, loadFontScale, saveFontScale } from "./utils/fontScale";
+import { isVoiceNudgeEnabled, setVoiceNudgeEnabled, speakText } from "./utils/speech";
+import { updateERPUserPresence } from "./api";
 import { buildTaskAgenda } from "./utils/taskCalendar";
 import {
   dependencyCandidates,
@@ -284,10 +286,18 @@ async function registerNativePushNotifications(onAction: (target: NotificationNa
   }
 
   await PushNotifications.removeAllListeners();
-  await PushNotifications.addListener("pushNotificationReceived", () => {
+  await PushNotifications.addListener("pushNotificationReceived", notification => {
     // Foreground push: the OS does not show a banner, so let open views
     // refresh their data instead.
     window.dispatchEvent(new CustomEvent(PUSH_RECEIVED_EVENT));
+    // "Dürt" mode: read the notification aloud via the Turkish TTS. Best-effort — if the
+    // synthesizer is down we stay silent rather than nagging with errors.
+    if (isVoiceNudgeEnabled()) {
+      const spoken = [notification.title, notification.body].filter(Boolean).join(". ");
+      if (spoken) {
+        void speakText(spoken).catch(() => {});
+      }
+    }
   });
   await PushNotifications.addListener("registration", token => {
     void registerMobilePushToken({
@@ -3828,10 +3838,23 @@ function ProfileTab({
   const [accountDeletionError, setAccountDeletionError] = useState("");
   const [profilePhoto, setProfilePhoto] = useState(() => readProfilePhoto(user.id || user.email));
   const [fontScale, setFontScale] = useState(() => loadFontScale());
+  const [voiceNudge, setVoiceNudge] = useState(() => isVoiceNudgeEnabled());
 
   const changeFontScale = (value: number) => {
     setFontScale(value);
     saveFontScale(value);
+  };
+
+  const toggleVoiceNudge = () => {
+    const next = !voiceNudge;
+    setVoiceNudge(next);
+    setVoiceNudgeEnabled(next);
+    if (next) {
+      // Immediate audible confirmation — also proves the TTS pipeline works on this device.
+      void speakText("Sesli bildirimler açıldı. Bildirimleriniz artık sesli okunacak.").catch(() => {
+        window.alert("Sesli asistan sunucuda henüz yapılandırılmamış — ayar kaydedildi, TTS aktif olunca çalışacak.");
+      });
+    }
   };
 
   useEffect(() => {
@@ -3967,6 +3990,14 @@ function ProfileTab({
                 disabled: !notificationPrefs,
                 saving: prefSavingKey === "email_enabled",
                 toggle: () => void toggleProfileNotificationPreference("email_enabled"),
+              },
+              {
+                label: "Sesli Bildirim (Dürt)",
+                desc: "Uygulama açıkken bildirimleri sesli oku",
+                val: voiceNudge,
+                disabled: false,
+                saving: false,
+                toggle: toggleVoiceNudge,
               },
             ].map((s, i) => (
               <div key={i} className="flex items-center justify-between px-4 py-4">
@@ -4196,6 +4227,28 @@ export default function App() {
       console.warn("Native push setup failed.", error);
     });
   }, [authUser?.email]);
+
+  // Presence heartbeat: report "online" while the app is visible (every 2 min) and "offline" when
+  // it goes to background or closes. The backend additionally decays stale ONLINE after 5 min, so a
+  // killed app or dead battery can't leave someone looking online forever.
+  useEffect(() => {
+    const userId = authUser?.id;
+    if (!userId || userId <= 0) return;
+    const send = (status: "online" | "offline") => {
+      void updateERPUserPresence(userId, status).catch(() => undefined);
+    };
+    send("online");
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") send("online");
+    }, 120_000);
+    const onVisibility = () => send(document.visibilityState === "visible" ? "online" : "offline");
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      send("offline");
+    };
+  }, [authUser?.id]);
 
   // Unread-notification badge shown in every tab header. Refreshes on login, on tab switch, and
   // every 60s so the count stays current wherever the user is.

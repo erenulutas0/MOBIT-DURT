@@ -16,9 +16,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+
 import com.docsbot.ops.erp.application.AssistantService;
 import com.docsbot.ops.erp.application.ErpPrincipal;
 import com.docsbot.ops.erp.application.assistant.AssistantChatService;
+import com.docsbot.ops.erp.application.assistant.AssistantSpeechService;
 import com.docsbot.ops.erp.domain.ErpTask;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -29,12 +33,36 @@ public class AssistantController {
 
     private final AssistantService assistantService;
     private final AssistantChatService assistantChatService;
+    private final AssistantSpeechService speechService;
 
     public AssistantController(
             AssistantService assistantService,
-            AssistantChatService assistantChatService) {
+            AssistantChatService assistantChatService,
+            AssistantSpeechService speechService) {
         this.assistantService = assistantService;
         this.assistantChatService = assistantChatService;
+        this.speechService = speechService;
+    }
+
+    /**
+     * Turkish TTS for assistant briefings and spoken notifications. Returns audio/wav, or 503 when
+     * the Piper synthesizer is not configured/reachable so clients degrade to silent mode.
+     */
+    @PostMapping("/speech")
+    ResponseEntity<byte[]> speech(@Valid @RequestBody SpeechRequest request) {
+        try {
+            byte[] audio = speechService.synthesize(request.text());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("audio/wav"))
+                    .body(audio);
+        } catch (AssistantSpeechService.SpeechUnavailable exception) {
+            return ResponseEntity.status(503)
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body(exception.getMessage().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    record SpeechRequest(@NotBlank @Size(max = 2000) String text) {
     }
 
     @GetMapping("/briefing")

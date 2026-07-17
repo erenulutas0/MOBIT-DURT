@@ -610,6 +610,30 @@ export async function getERPUsers(): Promise<ERPUser[]> {
   return response.json();
 }
 
+// Presence heartbeat: employees may only update their own status (backend-enforced).
+export async function updateERPUserPresence(userId: number, status: "online" | "offline" | "away"): Promise<void> {
+  const response = await apiFetch(`/erp/users/${userId}/presence`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Durum güncellenemedi."));
+}
+
+/**
+ * Turkish TTS (self-hosted Piper). Returns a playable WAV blob; throws with the backend's message
+ * when the synthesizer is off (503) so callers can quietly skip speech.
+ */
+export async function getAssistantSpeech(text: string): Promise<Blob> {
+  const response = await apiFetch("/erp/assistant/speech", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Ses oluşturulamadı."));
+  return response.blob();
+}
+
 export async function deleteERPUser(userId: number): Promise<void> {
   const response = await apiFetch(`/erp/users/${userId}`, { method: "DELETE" });
   if (!response.ok) throw new Error(await errorText(response, "Hesap silinemedi."));

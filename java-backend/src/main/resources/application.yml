@@ -109,6 +109,8 @@ docsbot:
     # Conversational-assistant answer provider. "rule-based" = zero-cost, no LLM (default).
     # Switch to an LLM-backed responder (e.g. "claude") once an API key + budget are in place.
     provider: ${DOCSBOT_ASSISTANT_PROVIDER:rule-based}
+    # Self-hosted Piper TTS HTTP server (e.g. http://docsbot-piper:5000). Empty = speech off (503).
+    tts-url: ${DOCSBOT_TTS_URL:}
   retention:
     activity-event-days: ${DOCSBOT_RETENTION_ACTIVITY_EVENT_DAYS:180}
     push-outbox-days: ${DOCSBOT_RETENTION_PUSH_OUTBOX_DAYS:30}

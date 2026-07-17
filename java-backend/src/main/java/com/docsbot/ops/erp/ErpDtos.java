@@ -1,10 +1,12 @@
 package com.docsbot.ops.erp;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 
 import com.docsbot.ops.auth.domain.ErpUser;
+import com.docsbot.ops.auth.domain.UserStatus;
 import com.docsbot.ops.erp.domain.ErpActivityEvent;
 import com.docsbot.ops.erp.domain.ErpCompanyChatMessage;
 import com.docsbot.ops.erp.domain.ErpDirectMessage;
@@ -34,12 +36,30 @@ public final class ErpDtos {
             @JsonProperty("approved_at") Instant approvedAt,
             @JsonProperty("created_at") Instant createdAt
     ) {
+        /**
+         * ONLINE decays to OFFLINE for display once the last heartbeat is older than this. Clients
+         * send presence on app open/close, but a killed app or dead battery never says goodbye —
+         * without the decay everyone looks online forever.
+         */
+        private static final Duration ONLINE_STALE_AFTER = Duration.ofMinutes(5);
+
+        private static UserStatus effectiveStatus(ErpUser user) {
+            UserStatus status = user.getStatus();
+            if (status != UserStatus.ONLINE) {
+                return status;
+            }
+            Instant lastSeen = user.getLastSeenAt();
+            boolean stale = lastSeen == null
+                    || lastSeen.isBefore(Instant.now().minus(ONLINE_STALE_AFTER));
+            return stale ? UserStatus.OFFLINE : UserStatus.ONLINE;
+        }
+
         public static UserResponse from(ErpUser user) {
             return new UserResponse(
                     user.getId(),
                     user.getName(),
                     user.getRole().name().toLowerCase(Locale.ROOT),
-                    user.getStatus().name().toLowerCase(Locale.ROOT),
+                    effectiveStatus(user).name().toLowerCase(Locale.ROOT),
                     user.getEmail(),
                     user.getPhone(),
                     user.isDocumentNetworkVisible(),
