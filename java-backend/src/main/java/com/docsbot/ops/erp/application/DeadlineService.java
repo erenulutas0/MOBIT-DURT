@@ -96,7 +96,7 @@ public class DeadlineService {
         this.clock = clock;
     }
 
-    static List<Duration> parseThresholdHours(String value) {
+    public static List<Duration> parseThresholdHours(String value) {
         return java.util.Arrays.stream(value.split(","))
                 .map(String::trim)
                 .filter(part -> !part.isEmpty())

@@ -217,6 +217,28 @@ public class TenderController {
                 .orElseThrow(() -> new ErpExceptions.NotFound("Tender not found"));
     }
 
+    /** Admin sets/clears the tender's submission deadline (son teklif tarihi). */
+    @org.springframework.web.bind.annotation.PatchMapping("/tenders/{tenderId}/deadline")
+    TenderDtos.TenderResponse updateSubmissionDeadline(
+            JwtAuthenticationToken authentication,
+            @org.springframework.web.bind.annotation.PathVariable String tenderId,
+            @Valid @RequestBody UpdateTenderDeadlineRequest request
+    ) {
+        if (!ErpPrincipal.from(authentication).admin()) {
+            throw new ErpExceptions.Forbidden("Admin access is required");
+        }
+        Tender tender = tenderRepository.findByTenderId(tenderId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Tender not found"));
+        tender.setSubmissionDeadlineAt(request.submissionDeadlineAt());
+        return TenderDtos.TenderResponse.from(tenderRepository.saveAndFlush(tender));
+    }
+
+    record UpdateTenderDeadlineRequest(
+            @com.fasterxml.jackson.annotation.JsonProperty("submission_deadline_at")
+            java.time.Instant submissionDeadlineAt
+    ) {
+    }
+
     @PostMapping("/tenders/company")
     TenderDtos.TenderResponse createCompanyWorkflow(
             JwtAuthenticationToken authentication,

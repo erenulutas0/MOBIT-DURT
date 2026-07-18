@@ -37,6 +37,7 @@ import {
 } from "./api";
 import type { CommunicationSearchResult, CompanyChatMessage, DocumentGroupDetail, DocumentGroupDocument, DocumentGroupDocumentVersion, DocumentGroupMember, DocumentGroupMessage, DocumentGroupSummary, ERPDirectMessage, ERPUser, Tender } from "./api";
 import { dayKey, formatDate, formatDayLabel, formatVoiceDuration } from "./utils/formatters";
+import { setTenderSubmissionDeadline } from "./api";
 import { reconcileNewestWindow } from "./utils/messageReconcile";
 import {
   forwardedBodyText,
@@ -2254,6 +2255,35 @@ function MessagesTab({
         ...roomUsers.filter(item => item.id !== user.id && item.role !== "admin"),
       ];
 
+  /** Admin sets the linked company's submission deadline (son teklif tarihi) from the room. */
+  const setCompanyDeadline = async () => {
+    const tenderId = selectedGroup?.group.tender_id;
+    if (!tenderId) return;
+    const input = window.prompt("Son teklif tarihi (GG.AA.YYYY SS:dd — boş bırak = kaldır):", "");
+    if (input === null) return;
+    let iso: string | null = null;
+    if (input.trim()) {
+      const match = input.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})[ T](\d{1,2}):(\d{2})$/);
+      if (!match) {
+        setRoomError("Tarih biçimi GG.AA.YYYY SS:dd olmalı (örn. 25.07.2026 14:00).");
+        return;
+      }
+      const parsed = new Date(+match[3], +match[2] - 1, +match[1], +match[4], +match[5]);
+      if (Number.isNaN(parsed.getTime())) {
+        setRoomError("Geçersiz tarih.");
+        return;
+      }
+      iso = parsed.toISOString();
+    }
+    try {
+      const updated = await setTenderSubmissionDeadline(tenderId, iso);
+      setRoomTenders(prev => prev.map(item => (item.tender_id === tenderId ? updated : item)));
+      setRoomNotice(iso ? "📌 Son teklif tarihi kaydedildi — hatırlatmalar otomatik gelecek." : "Son teklif tarihi kaldırıldı.");
+    } catch (exception) {
+      setRoomError(exception instanceof Error ? exception.message : "Teslim tarihi kaydedilemedi.");
+    }
+  };
+
   const updateSelectedGroupCompany = async (selection: { tenderId: string; companyName: string; year?: number }) => {
     if (!selectedGroup) return;
     const hasDocuments = selectedGroup.documents.length > 0;
@@ -3097,6 +3127,20 @@ function MessagesTab({
             onSelect={selection => void updateSelectedGroupCompany(selection)}
             onCreateCompany={createRoomCompany}
           />
+        )}
+        {user.role === "admin" && selectedGroup.group.tender_id && (
+          <button
+            onClick={() => void setCompanyDeadline()}
+            className="w-full flex items-center justify-between rounded-xl bg-amber-500/10 border border-amber-500/25 px-3 py-2 active:scale-[0.99] transition-transform"
+          >
+            <span className="text-xs font-semibold text-amber-200">
+              📌 Son teklif: {(() => {
+                const tender = roomTenders.find(item => item.tender_id === selectedGroup.group.tender_id);
+                return tender?.submission_deadline_at ? formatDate(tender.submission_deadline_at) : "belirlenmedi";
+              })()}
+            </span>
+            <span className="text-[10px] font-bold text-amber-300">Düzenle</span>
+          </button>
         )}
         <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
           {([

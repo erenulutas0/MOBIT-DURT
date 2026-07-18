@@ -32,6 +32,9 @@ public class Tender {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    // Son teklif tarihi; admin-set, drives the tender reminder cron.
+    private Instant submissionDeadlineAt;
+
     protected Tender() {
     }
 
@@ -65,4 +68,6 @@ public class Tender {
     public String getTitle() { return title; }
     public String getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getSubmissionDeadlineAt() { return submissionDeadlineAt; }
+    public void setSubmissionDeadlineAt(Instant value) { this.submissionDeadlineAt = value; }
 }

@@ -291,13 +291,15 @@ public final class TenderDtos {
             @JsonProperty("internal_unit") String internalUnit,
             String title,
             String status,
-            @JsonProperty("created_at") Instant createdAt
+            @JsonProperty("created_at") Instant createdAt,
+            @JsonProperty("submission_deadline_at") Instant submissionDeadlineAt
     ) {
         static TenderResponse from(Tender value) {
             return new TenderResponse(
                     value.getId(), value.getTenderId(), value.getOrganization(),
                     value.getYear(), value.getSequence(), value.getInternalUnit(),
-                    value.getTitle(), value.getStatus(), value.getCreatedAt());
+                    value.getTitle(), value.getStatus(), value.getCreatedAt(),
+                    value.getSubmissionDeadlineAt());
         }
     }
 

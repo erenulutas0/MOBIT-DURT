@@ -226,6 +226,7 @@ export type Tender = {
   title: string | null;
   status: string;
   created_at: string;
+  submission_deadline_at?: string | null;
 };
 
 export type TenderDocumentPage = {
@@ -973,6 +974,17 @@ export async function createCompanyWorkflow(payload: {
     }),
   });
   if (!response.ok) throw new Error(await errorText(response, "Şirket oluşturulamadı."));
+  return response.json();
+}
+
+// Admin sets/clears a tender's submission deadline (son teklif tarihi); null clears.
+export async function setTenderSubmissionDeadline(tenderId: string, isoDeadline: string | null): Promise<Tender> {
+  const response = await apiFetch(`/tenders/${encodeURIComponent(tenderId)}/deadline`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ submission_deadline_at: isoDeadline }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Teslim tarihi kaydedilemedi."));
   return response.json();
 }
 
