@@ -125,9 +125,23 @@ export async function speakLong(text: string): Promise<void> {
     }
   }
   if (current) chunks.push(current);
-  for (const chunk of chunks) {
+  for (let index = 0; index < chunks.length; index += 1) {
     if (token !== sequenceToken) return;
-    await speakText(chunk);
+    try {
+      await speakText(chunks[index]);
+    } catch (error) {
+      // Transient failure (rate limit / network blip): wait and retry the chunk once so a long
+      // report survives hiccups. If the very first chunk fails twice, surface the error; a
+      // mid-report failure after retry just ends the narration gracefully.
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      if (token !== sequenceToken) return;
+      try {
+        await speakText(chunks[index]);
+      } catch (retryError) {
+        if (index === 0) throw retryError;
+        return;
+      }
+    }
     if (token !== sequenceToken) return;
   }
 }

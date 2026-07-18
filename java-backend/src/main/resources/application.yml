@@ -129,9 +129,14 @@ docsbot:
     # Speech chunks + chat share this bucket; long spoken reports need headroom.
     assistant-limit: ${DOCSBOT_RATE_LIMIT_ASSISTANT_LIMIT:60}
     assistant-window-seconds: ${DOCSBOT_RATE_LIMIT_ASSISTANT_WINDOW_SECONDS:60}
-    # Behind Caddy every request reaches us from the proxy's address; without this set to 1 all
-    # users share ONE rate bucket and a handful of assistant calls 429s the whole company.
-    trusted-proxy-hops: ${DOCSBOT_RATE_LIMIT_TRUSTED_PROXY_HOPS:0}
+    # Default 1: production runs behind exactly one trusted proxy (Caddy) and the backend port is
+    # not published to the internet, so honoring the proxy-appended X-Forwarded-For entry is safe.
+    # Without it every user shares ONE bucket (the proxy's IP) and a couple of assistant calls
+    # 429 the whole company. Set 0 only if the backend is ever exposed directly.
+    trusted-proxy-hops: ${DOCSBOT_RATE_LIMIT_TRUSTED_PROXY_HOPS:1}
+    # Speech synthesizes chunk-by-chunk (one request per few sentences) — needs its own headroom.
+    speech-limit: ${DOCSBOT_RATE_LIMIT_SPEECH_LIMIT:120}
+    speech-window-seconds: ${DOCSBOT_RATE_LIMIT_SPEECH_WINDOW_SECONDS:60}
   telegram:
     enabled: ${TELEGRAM_POLLING_ENABLED:false}
     token: ${TELEGRAM_BOT_TOKEN:}

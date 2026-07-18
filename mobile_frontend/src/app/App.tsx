@@ -969,11 +969,13 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
 function ERPTab({
   user,
   onOpenDirectMessage,
+  onOpenDirectChat,
   onOpenDocumentRoom,
   openRequest,
 }: {
   user: AuthUser;
   onOpenDirectMessage: (messageId: number) => void;
+  onOpenDirectChat: (userId: number, userName: string) => void;
   onOpenDocumentRoom: (groupId: number, view: "chat" | "documents") => void;
   openRequest?: ERPOpenRequest | null;
 }) {
@@ -987,6 +989,8 @@ function ERPTab({
   // authenticated user — so employees, not just admins, can see who is online/offline.
   const [allUsers, setAllUsers] = useState<ERPUser[]>([]);
   const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
+  // WhatsApp-style profile sheet opened by tapping someone's avatar in Çalışanlar.
+  const [profileUser, setProfileUser] = useState<ERPUser | null>(null);
   const [accountRequests, setAccountRequests] = useState<ERPAccountRequest[]>([]);
   const [notificationPrefs, setNotificationPrefs] = useState<ERPNotificationPreference | null>(null);
   const [prefSaving, setPrefSaving] = useState(false);
@@ -1821,13 +1825,17 @@ function ERPTab({
           <div className="space-y-3">
             {filteredEmployees.map(employee => (
               <Card key={employee.id} className={`p-4 flex items-center gap-3 ${employee.status === "online" ? "" : "opacity-55 saturate-50"}`}>
-                <div className="relative shrink-0">
-                  <Avatar name={employee.name} color={employee.role === "admin" ? "bg-teal-600" : "bg-slate-700"} />
+                <button className="relative shrink-0 active:scale-95 transition-transform" onClick={() => setProfileUser(employee)} aria-label={`${employee.name} profilini gör`}>
+                  {readProfilePhoto(employee.id || employee.email) ? (
+                    <img src={readProfilePhoto(employee.id || employee.email)} alt={employee.name} className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <Avatar name={employee.name} color={employee.role === "admin" ? "bg-teal-600" : "bg-slate-700"} />
+                  )}
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${employee.status === "online" ? "bg-emerald-500" : "bg-slate-500"}`}
                     aria-hidden="true"
                   />
-                </div>
+                </button>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-foreground truncate">{employee.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
@@ -1861,6 +1869,58 @@ function ERPTab({
           </div>
         )}
       </div>
+      {/* WhatsApp-style profile sheet — everyone can view; actions per role. */}
+      {profileUser && (
+        <div className="fixed inset-0 z-[60] bg-black/70 flex items-end" onClick={() => setProfileUser(null)}>
+          <div className="w-full bg-card rounded-t-3xl p-6 pb-10" onClick={event => event.stopPropagation()}>
+            <div className="flex flex-col items-center text-center">
+              {readProfilePhoto(profileUser.id || profileUser.email) ? (
+                <img src={readProfilePhoto(profileUser.id || profileUser.email)} alt={profileUser.name}
+                  className="w-28 h-28 rounded-full object-cover border-2 border-border" />
+              ) : (
+                <div className="w-28 h-28 rounded-full bg-slate-700 flex items-center justify-center text-3xl font-bold text-white">
+                  {profileUser.name.split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase()}
+                </div>
+              )}
+              <p className="mt-3 text-lg font-bold text-foreground">{profileUser.name}</p>
+              <p className="text-sm text-muted-foreground">
+                {profileUser.title || (profileUser.role === "admin" ? "Admin" : "Ünvan atanmamış")}
+              </p>
+              <div className="mt-2"><Badge label={employeeStatusLabel(profileUser.status)} /></div>
+            </div>
+            <div className="mt-4 space-y-1 text-center">
+              <p className="text-xs text-muted-foreground">{profileUser.email || "E-posta yok"}</p>
+              <p className="text-xs text-muted-foreground">{profileUser.phone || "Telefon yok"}</p>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              {profileUser.id !== user.id ? (
+                <button
+                  onClick={() => { const target = profileUser; setProfileUser(null); onOpenDirectChat(target.id, target.name); }}
+                  className="py-3 rounded-xl bg-primary text-sm font-bold text-white active:scale-[0.97] transition-transform"
+                >
+                  💬 Mesaj At
+                </button>
+              ) : (
+                <div className="py-3 rounded-xl bg-muted text-sm font-semibold text-muted-foreground text-center">Bu sizsiniz</div>
+              )}
+              <button
+                onClick={() => setProfileUser(null)}
+                className="py-3 rounded-xl bg-muted text-sm font-bold text-foreground active:scale-[0.97] transition-transform"
+              >
+                Kapat
+              </button>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => { const target = profileUser; setProfileUser(null); void editUserTitle(target); }}
+                className="mt-2 w-full py-2.5 rounded-xl bg-blue-500/15 text-xs font-bold text-blue-300 active:scale-[0.98] transition-transform"
+              >
+                ✏️ Ünvanı Düzenle
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -4125,6 +4185,20 @@ function ProfileTab({
   const [profilePhoto, setProfilePhoto] = useState(() => readProfilePhoto(user.id || user.email));
   const [fontScale, setFontScale] = useState(() => loadFontScale());
   const [voiceNudge, setVoiceNudge] = useState(() => isVoiceNudgeEnabled());
+  // Own ünvan comes from the roster (admin-assigned) — the session token predates any assignment.
+  const [selfTitle, setSelfTitle] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user.id) return;
+    let active = true;
+    getERPUsers()
+      .then(list => {
+        if (active) setSelfTitle(list.find(item => item.id === user.id)?.title || null);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [user.id]);
 
   const changeFontScale = (value: number) => {
     setFontScale(value);
@@ -4223,7 +4297,9 @@ function ProfileTab({
             />
           </label>
           <h2 className="text-lg font-bold text-foreground mt-3">{user.name}</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">{user.role === "admin" ? "Sistem Yöneticisi" : "Çalışan"}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {selfTitle || (user.role === "admin" ? "Sistem Yöneticisi" : "Çalışan")}
+          </p>
           <div className="flex items-center gap-2 mt-2">
             <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Mobit · {user.dept}</span>
@@ -4238,6 +4314,7 @@ function ProfileTab({
           <Card className="divide-y divide-border">
             {[
               { label: "Ad Soyad", value: user.name,  icon: User },
+              { label: "Ünvan",    value: selfTitle || "Henüz atanmadı", icon: User },
               { label: "E-posta",  value: user.email, icon: Mail },
               { label: "Şube",     value: "Mobit",    icon: Building2 },
               { label: "Rol",      value: user.role === "admin" ? "Sistem Yöneticisi" : "Çalışan", icon: Shield },
@@ -4619,6 +4696,11 @@ export default function App() {
     setTab("home");
   };
 
+  const openDirectChatWithUser = (userId: number, userName: string) => {
+    setDirectMessageOpenRequest({ messageId: 0, userId, userName, nonce: Date.now() });
+    setTab("messages");
+  };
+
   const openDirectMessageFromNotification = (messageId: number) => {
     setDirectMessageOpenRequest({ messageId, nonce: Date.now() });
     setTab("messages");
@@ -4670,7 +4752,7 @@ export default function App() {
                   <div className={`tab-enter flex-1 min-h-0 ${t === "messages" ? "overflow-hidden" : "overflow-y-auto"}`}>
                     <TabErrorBoundary tabKey={tab}>
                       {t === "home"     && <HomeTab     user={authUser} setTab={setTab} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} />}
-                      {t === "erp"      && <ERPTab      user={authUser} onOpenDirectMessage={openDirectMessageFromNotification} onOpenDocumentRoom={openDocumentRoomFromNotification} openRequest={erpOpenRequest} />}
+                      {t === "erp"      && <ERPTab      user={authUser} onOpenDirectMessage={openDirectMessageFromNotification} onOpenDirectChat={openDirectChatWithUser} onOpenDocumentRoom={openDocumentRoomFromNotification} openRequest={erpOpenRequest} />}
                       {t === "tender"   && <TenderTab   user={authUser} onOpenRoom={openDocumentRoomFromNotification} />}
                       {t === "messages" && <MessagesTab user={authUser} openRequest={directMessageOpenRequest} roomOpenRequest={roomOpenRequest} profilePhotoVersion={profilePhotoVersion} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} />}
                       {t === "profile"  && <ProfileTab  user={authUser} onLogout={handleLogout} onProfilePhotoChange={() => setProfilePhotoVersion(value => value + 1)} unreadNotifications={unreadNotifCount} onOpenNotifications={openNotificationsFromAnywhere} onOpenHelp={() => setShowHelp(true)} />}

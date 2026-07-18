@@ -13,6 +13,8 @@ public class RateLimitProperties {
      * to dodge rate limiting. Set to 1 when running behind a single reverse proxy (nginx/Caddy).
      */
     private int trustedProxyHops = 0;
+    private int speechLimit = 120;
+    private int speechWindowSeconds = 60;
     private int authLimit = 120;
     private int authWindowSeconds = 60;
     private int accountRequestLimit = 60;
@@ -32,6 +34,22 @@ public class RateLimitProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public int getSpeechLimit() {
+        return speechLimit;
+    }
+
+    public void setSpeechLimit(int speechLimit) {
+        this.speechLimit = speechLimit;
+    }
+
+    public int getSpeechWindowSeconds() {
+        return speechWindowSeconds;
+    }
+
+    public void setSpeechWindowSeconds(int speechWindowSeconds) {
+        this.speechWindowSeconds = speechWindowSeconds;
     }
 
     public int getTrustedProxyHops() {

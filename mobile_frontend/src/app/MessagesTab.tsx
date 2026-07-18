@@ -2483,6 +2483,26 @@ function MessagesTab({
   useEffect(() => {
     if (!openRequest) return;
     const openFromNotification = async () => {
+      // Person-directed open (profile "Mesaj At"): jump straight into that user's thread.
+      if (openRequest.userId) {
+        if (roomUsers.length === 0) {
+          await refreshRoomUsers();
+        }
+        setActiveTab("all");
+        openPersonThread(roomUsers.find(candidate => candidate.id === openRequest.userId) || {
+          id: openRequest.userId,
+          name: openRequest.userName || "Çalışan",
+          role: "user",
+          status: "offline",
+          email: null,
+          phone: null,
+          document_network_visible: false,
+          last_seen_at: null,
+          approved_at: null,
+          created_at: new Date().toISOString(),
+        });
+        return;
+      }
       let messages = directMessages;
       if (messages.length === 0) {
         messages = await getERPDirectMessages(100);

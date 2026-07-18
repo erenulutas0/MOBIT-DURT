@@ -4,7 +4,9 @@ import { Bell, ChevronLeft, Clock, FileText, X } from "lucide-react";
 type Role = "admin" | "user";
 type AuthUser = { id: number | null; name: string; email: string; role: Role; dept: string };
 
-type DirectMessageOpenRequest = { messageId: number; nonce: number };
+// messageId opens the thread containing that message; userId/userName instead opens (or starts)
+// the person's thread directly — used by "Mesaj At" on profile sheets.
+type DirectMessageOpenRequest = { messageId: number; nonce: number; userId?: number; userName?: string };
 type RoomOpenRequest = { groupId: number; view: "chat" | "documents"; nonce: number };
 
 /** Muted-tone identity palette; a stable hash keeps each person's color consistent. */

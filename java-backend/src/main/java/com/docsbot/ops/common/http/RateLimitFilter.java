@@ -103,8 +103,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
             // submission fans out an admin notification — don't let one client flood that.
             return Rule.of("feedback", properties.getAssistantLimit(), properties.getAssistantWindowSeconds());
         }
-        if (path.equals("/erp/assistant/chat") || path.equals("/erp/assistant/speech")) {
-            // Speech shares the assistant bucket — each synthesis pins the Piper CPU for a bit.
+        if (path.equals("/erp/assistant/speech")) {
+            // Spoken reports synthesize chunk-by-chunk, so speech gets its own roomier bucket —
+            // sharing the assistant bucket made one full report starve the chat.
+            return Rule.of("speech", properties.getSpeechLimit(), properties.getSpeechWindowSeconds());
+        }
+        if (path.equals("/erp/assistant/chat")) {
             return Rule.of("assistant", properties.getAssistantLimit(), properties.getAssistantWindowSeconds());
         }
         if (path.equals("/erp/messages")
