@@ -621,6 +621,43 @@ export async function updateERPTaskDetails(taskId: number, payload: ERPTaskEditP
   return response.json();
 }
 
+// Completion loop + standard reports. The final report rides the completion request's note; interim
+// reports are task comments with kind "interim_report" (they render in the task's notes section).
+export async function requestERPTaskCompletion(taskId: number, note: string): Promise<ERPTask> {
+  const response = await apiFetch(`/erp/tasks/${taskId}/completion-request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Tamamlama talebi gönderilemedi."));
+  return response.json();
+}
+
+export async function approveERPTaskCompletion(taskId: number): Promise<ERPTask> {
+  const response = await apiFetch(`/erp/tasks/${taskId}/approve-completion`, { method: "POST" });
+  if (!response.ok) throw new Error(await errorText(response, "Tamamlama onaylanamadı."));
+  return response.json();
+}
+
+export async function rejectERPTaskCompletion(taskId: number, note: string): Promise<ERPTask> {
+  const response = await apiFetch(`/erp/tasks/${taskId}/reject-completion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Tamamlama reddedilemedi."));
+  return response.json();
+}
+
+export async function addERPTaskComment(taskId: number, body: string, kind: string): Promise<void> {
+  const response = await apiFetch(`/erp/tasks/${taskId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, kind }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Rapor eklenemedi."));
+}
+
 export async function getERPUsers(): Promise<ERPUser[]> {
   const response = await apiFetch("/erp/users");
   if (!response.ok) throw new Error(await errorText(response, "Kullanıcı listesi yüklenemedi."));

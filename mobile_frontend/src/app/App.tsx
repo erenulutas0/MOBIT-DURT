@@ -51,6 +51,10 @@ import {
   getERPUsers,
   deleteERPUser,
   updateERPUserTitle,
+  requestERPTaskCompletion,
+  approveERPTaskCompletion,
+  rejectERPTaskCompletion,
+  addERPTaskComment,
   getFolderTree,
   getTenderDocumentBlob,
   getTenderDocumentsPage,
@@ -270,6 +274,16 @@ async function createNativePushChannels() {
     importance: 5,
     vibration: true,
   });
+}
+
+/**
+ * Clears delivered notifications from the Android tray/launcher badge. Called whenever the app
+ * comes to the foreground: the in-app bell is the source of truth once the user is looking at the
+ * app, so a stale "49" on the icon after everything was read in-app is just noise.
+ */
+function clearDeliveredNativeNotifications() {
+  if (!nativeMobilePlatform() || !NATIVE_PUSH_ENABLED) return;
+  void PushNotifications.removeAllDeliveredNotifications().catch(() => undefined);
 }
 
 async function registerNativePushNotifications(onAction: (target: NotificationNavigationTarget) => void) {
@@ -1173,6 +1187,67 @@ function ERPTab({
   const selectedTaskAssignees = taskAssignableUsers.filter(employee => taskAssigneeIds.includes(employee.id));
   const selectedTaskLeader = selectedTaskAssignees.find(employee => employee.id === taskLeaderId) || selectedTaskAssignees[0] || null;
   const taskDeadlineIso = taskDeadlineLocal ? new Date(taskDeadlineLocal).toISOString() : null;
+
+  /**
+   * Standard report flows (patron madde 6): the interim report asks a fixed 4-question template so
+   * everyone reports the same way; the final report is mandatory when requesting completion.
+   */
+  const submitInterimReport = async (task: ERPTask) => {
+    const done = window.prompt("ARA RAPOR 1/4 — Bugüne kadar ne yapıldı?");
+    if (done === null || !done.trim()) return;
+    const blocker = window.prompt("2/4 — Engel/bekleyen bir şey var mı? (yoksa 'yok' yazın)") ?? "";
+    const next = window.prompt("3/4 — Sonraki adım ne?") ?? "";
+    const percent = window.prompt("4/4 — Tahmini ilerleme (%0-100)?") ?? "";
+    const body = [
+      "📝 ARA RAPOR",
+      `Yapılan: ${done.trim()}`,
+      blocker.trim() ? `Engel: ${blocker.trim()}` : "",
+      next.trim() ? `Sonraki adım: ${next.trim()}` : "",
+      percent.trim() ? `İlerleme: %${percent.replace(/[^0-9]/g, "") || "?"}` : "",
+    ].filter(Boolean).join("\n");
+    try {
+      await addERPTaskComment(task.id, body, "interim_report");
+      showNotice("✓ Ara rapor eklendi.");
+      await refresh();
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Ara rapor eklenemedi.");
+    }
+  };
+
+  const submitCompletionRequest = async (task: ERPTask) => {
+    const summary = window.prompt(
+      "NİHAİ RAPOR (zorunlu) — İşin sonucunu özetleyin:\n(Ne teslim edildi, önemli notlar)");
+    if (summary === null) return;
+    if (!summary.trim()) {
+      window.alert("Nihai rapor boş olamaz — tamamlama talebi için kısa bir sonuç özeti gerekli.");
+      return;
+    }
+    try {
+      await requestERPTaskCompletion(task.id, `✅ NİHAİ RAPOR\n${summary.trim()}`);
+      showNotice("✓ Tamamlama talebi ve nihai rapor yöneticiye gönderildi.");
+      await refresh();
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Tamamlama talebi gönderilemedi.");
+    }
+  };
+
+  const decideCompletion = async (task: ERPTask, approve: boolean) => {
+    if (!isAdmin) return;
+    try {
+      if (approve) {
+        await approveERPTaskCompletion(task.id);
+        showNotice(`✓ "${task.title}" tamamlandı olarak onaylandı.`);
+      } else {
+        const reason = window.prompt("Ret nedeni (çalışana iletilir):");
+        if (reason === null) return;
+        await rejectERPTaskCompletion(task.id, reason.trim() || "Yeterli bulunmadı.");
+        showNotice(`"${task.title}" tamamlama talebi reddedildi.`);
+      }
+      await refresh();
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "İşlem tamamlanamadı.");
+    }
+  };
 
   /** Narrates everything someone needs to know about a task: status, priority, deadline,
    *  assignees with roles/titles, workspace, and the description. Read via speakLong. */
@@ -2388,6 +2463,46 @@ function ERPTab({
                   {task.description || "Bu görev için açıklama girilmemiş."}
                 </p>
               </Card>
+
+              {/* Standard reporting loop: interim reports any time while active; the completion
+                  request carries the mandatory final report; admin decides on pending approvals. */}
+              {!["done", "cancelled", "pending_approval"].includes(task.status) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => void submitInterimReport(task)}
+                    className="py-2.5 rounded-xl bg-muted border border-border text-xs font-bold text-foreground active:scale-[0.97] transition-transform"
+                  >
+                    📝 Ara Rapor Ekle
+                  </button>
+                  <button
+                    onClick={() => void submitCompletionRequest(task)}
+                    className="py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-200 active:scale-[0.97] transition-transform"
+                  >
+                    ✅ Tamamla (Nihai Rapor)
+                  </button>
+                </div>
+              )}
+              {isAdmin && task.status === "pending_approval" && (
+                <Card className="p-3 border-violet-500/30 bg-violet-500/10">
+                  <p className="text-xs font-semibold text-violet-200 mb-2">
+                    Tamamlama talebi bekliyor — nihai rapor aşağıdaki notlarda.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => void decideCompletion(task, true)}
+                      className="py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-200 active:scale-[0.97] transition-transform"
+                    >
+                      ✔ Onayla
+                    </button>
+                    <button
+                      onClick={() => void decideCompletion(task, false)}
+                      className="py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-xs font-bold text-red-200 active:scale-[0.97] transition-transform"
+                    >
+                      ✖ Reddet
+                    </button>
+                  </div>
+                </Card>
+              )}
 
               {/* Overdue rescue: a quick 12h grace and a full re-deadline are different decisions —
                   keep them as two visibly separate actions. */}
@@ -4601,10 +4716,15 @@ export default function App() {
       void updateERPUserPresence(userId, status).catch(() => undefined);
     };
     send("online");
+    clearDeliveredNativeNotifications();
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") send("online");
     }, 120_000);
-    const onVisibility = () => send(document.visibilityState === "visible" ? "online" : "offline");
+    const onVisibility = () => {
+      const visible = document.visibilityState === "visible";
+      send(visible ? "online" : "offline");
+      if (visible) clearDeliveredNativeNotifications();
+    };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearInterval(interval);

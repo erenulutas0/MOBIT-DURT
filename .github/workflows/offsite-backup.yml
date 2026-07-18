@@ -37,6 +37,34 @@ jobs:
             exit 1
           fi
 
+      - name: Archive uploaded files over SSH
+        run: |
+          set -euo pipefail
+          # The DB alone is not enough: tender documents, workspace files and message media live on
+          # disk. Tar every candidate data dir that exists so a VPS loss can't erase the archive.
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" '
+            set -e
+            DIRS=""
+            for d in /opt/docsbot/data /opt/docsbot/uploads /opt/docsbot/vault; do
+              [ -d "$d" ] && DIRS="$DIRS $d"
+            done
+            if [ -z "$DIRS" ]; then
+              echo "NO_DATA_DIRS" >&2
+              exit 42
+            fi
+            tar -czf - $DIRS
+          ' > files.tar.gz || {
+            if [ "$?" = "42" ]; then
+              echo "::warning::No data directories found on the VPS — files backup skipped."
+              rm -f files.tar.gz
+            else
+              exit 1
+            fi
+          }
+          if [ -f files.tar.gz ]; then
+            echo "Files archive size: $(stat -c%s files.tar.gz) bytes"
+          fi
+
       - name: Encrypt
         env:
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
@@ -50,13 +78,18 @@ jobs:
           gpg --batch --yes --symmetric --cipher-algo AES256 \
             --passphrase "${BACKUP_PASSPHRASE}" \
             -o "docsbot-db-${STAMP}.sql.gz.gpg" db.sql.gz
-          echo "ARTIFACT_NAME=docsbot-db-${STAMP}" >> "$GITHUB_ENV"
+          if [ -f files.tar.gz ]; then
+            gpg --batch --yes --symmetric --cipher-algo AES256 \
+              --passphrase "${BACKUP_PASSPHRASE}" \
+              -o "docsbot-files-${STAMP}.tar.gz.gpg" files.tar.gz
+          fi
+          echo "ARTIFACT_NAME=docsbot-backup-${STAMP}" >> "$GITHUB_ENV"
 
       - name: Upload encrypted backup artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
-          path: "*.sql.gz.gpg"
+          path: "*.gpg"
           retention-days: 90
 
       - name: Clean up SSH key

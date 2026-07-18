@@ -1,0 +1,69 @@
+name: Backend Error Scan
+
+# Uptime monitoring catches downtime; this catches error STORMS while the service is technically
+# "up" (e.g. a rate-limit misconfig or DB pool exhaustion flooding ERROR logs). Scans the last 24h
+# of backend logs daily and opens/updates an issue when the count crosses the threshold.
+on:
+  schedule:
+    - cron: "0 5 * * *" # daily 05:00 UTC (08:00 Istanbul)
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  scan:
+    name: Scan backend logs
+    runs-on: ubuntu-latest
+    if: github.repository == 'erenulutas0/MOBIT-DURT'
+    env:
+      DEPLOY_HOST: 84.46.251.95
+      DEPLOY_USER: root
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ALERT_LABEL: error-alert
+      THRESHOLD: 20
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Count errors in the last 24h
+        id: scan
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'docker logs docsbot-backend --since 24h 2>&1 | grep -F "\"level\":\"ERROR\"" | tail -200' > errors.log || true
+          COUNT=$(wc -l < errors.log | tr -d " ")
+          echo "Error lines in last 24h: ${COUNT}"
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          # A short, de-noised sample for the issue body (messages only, no stack traces).
+          grep -o '"message":"[^"]\{0,160\}' errors.log | sort | uniq -c | sort -rn | head -5 > sample.txt || true
+
+      - name: Open/update alert issue
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          COUNT="${{ steps.scan.outputs.count }}"
+          gh label create "$ALERT_LABEL" --repo "$REPO" --color E99695 --description "Automated backend error-storm alert" 2>/dev/null || true
+          EXISTING=$(gh issue list --repo "$REPO" --label "$ALERT_LABEL" --state open --json number --jq '.[0].number' || echo "")
+          if [ "$COUNT" -ge "$THRESHOLD" ]; then
+            BODY="Son 24 saatte backend loglarında **${COUNT} ERROR** satırı var (eşik: ${THRESHOLD}). En sık mesajlar:
+          \`\`\`
+          $(cat sample.txt)
+          \`\`\`
+          Sunucuda inceleme: \`docker logs docsbot-backend --since 24h | grep ERROR\`"
+            if [ -z "$EXISTING" ]; then
+              gh issue create --repo "$REPO" --title "🟠 Backend hata fırtınası (${COUNT} ERROR / 24s)" --label "$ALERT_LABEL" --body "$BODY"
+            else
+              gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+            fi
+          else
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$REPO" --body "✅ Hata sayısı normale döndü (${COUNT}/24s). Kapatılıyor."
+              gh issue close "$EXISTING" --repo "$REPO"
+            fi
+            echo "Healthy: ${COUNT} errors."
+          fi
