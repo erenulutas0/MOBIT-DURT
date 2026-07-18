@@ -40,6 +40,7 @@ public class DeadlineService {
     private final NotificationService notificationService;
     private final ErpActivityRecorder activityRecorder;
     private final List<Duration> dueSoonThresholds;
+    private final List<Duration> escalationThresholds;
     private final ZoneId digestZone;
     private final Clock clock;
 
@@ -51,6 +52,7 @@ public class DeadlineService {
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
             @Value("${docsbot.deadline-due-soon-thresholds-hours:72,48,24,12,6,1}") String thresholdHours,
+            @Value("${docsbot.deadline-escalation-thresholds-hours:4,12,24,48,96}") String escalationHours,
             @Value("${docsbot.admin-weekly-digest-zone:Europe/Istanbul}") String digestZone
     ) {
         this(
@@ -60,6 +62,7 @@ public class DeadlineService {
                 notificationService,
                 activityRecorder,
                 parseThresholdHours(thresholdHours),
+                parseThresholdHours(escalationHours),
                 ZoneId.of(digestZone),
                 Clock.systemUTC());
     }
@@ -71,12 +74,16 @@ public class DeadlineService {
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
             List<Duration> dueSoonThresholds,
+            List<Duration> escalationThresholds,
             ZoneId digestZone,
             Clock clock
     ) {
         if (dueSoonThresholds.isEmpty()) {
             throw new IllegalArgumentException("At least one due-soon threshold is required");
         }
+        this.escalationThresholds = escalationThresholds.stream()
+                .sorted(Comparator.naturalOrder())
+                .toList();
         this.taskRepository = taskRepository;
         this.assignmentRepository = assignmentRepository;
         this.teamMemberRepository = teamMemberRepository;
@@ -141,6 +148,64 @@ public class DeadlineService {
                     "deadline_at=" + task.getDeadlineAt());
         }
         return changed;
+    }
+
+    /**
+     * The "Dürt" escalation ladder: a task that STAYS overdue gets renewed nudges at each crossed
+     * threshold (default 4h, 12h, 24h, 48h, 96h after the deadline) — assignees get a CRITICAL
+     * re-nudge and the admin gets an "ownerless work" alert. Event keys make each stage fire once.
+     */
+    @Scheduled(
+            fixedDelayString = "${docsbot.deadline-escalation-scan-ms:300000}",
+            initialDelayString = "${docsbot.deadline-escalation-initial-delay-ms:20000}")
+    @Transactional
+    public int processOverdueEscalations() {
+        Instant now = clock.instant();
+        List<ErpTask> overdueTasks = taskRepository.findAllByStatusOrderByCreatedAtDescIdDesc(TaskStatus.OVERDUE);
+        Map<Long, Set<Long>> assignees = assignedUserIdsByTask(overdueTasks);
+        int changed = 0;
+        for (ErpTask task : overdueTasks) {
+            if (task.getDeadlineAt() == null) {
+                continue;
+            }
+            Duration overdueFor = Duration.between(task.getDeadlineAt(), now);
+            Duration stage = largestCrossedEscalation(overdueFor);
+            if (stage == null) {
+                continue;
+            }
+            long stageHours = stage.toHours();
+            int created = notificationService.notifyUsers(
+                    assignees.getOrDefault(task.getId(), Set.of()),
+                    "task_overdue_nudge",
+                    "Görev hâlâ teslim edilmedi",
+                    task.getTitle() + " (" + stageHours + " saattir gecikmiş)",
+                    task.getId(),
+                    "CRITICAL",
+                    "task_overdue_nudge:" + task.getId() + ":" + stageHours + "h",
+                    now);
+            created += notificationService.notifyAdmin(
+                    "manager_overdue_escalation",
+                    "⚠️ Sahipsiz iş: " + task.getTitle(),
+                    task.getTitle() + " " + stageHours + " saattir gecikmiş ve hâlâ teslim edilmedi.",
+                    task.getId(),
+                    "HIGH",
+                    "manager_overdue_escalation:" + task.getId() + ":" + stageHours + "h",
+                    now);
+            if (created > 0) {
+                changed++;
+            }
+        }
+        return changed;
+    }
+
+    private Duration largestCrossedEscalation(Duration overdueFor) {
+        Duration crossed = null;
+        for (Duration threshold : escalationThresholds) {
+            if (overdueFor.compareTo(threshold) >= 0) {
+                crossed = threshold;
+            }
+        }
+        return crossed;
     }
 
     @Scheduled(

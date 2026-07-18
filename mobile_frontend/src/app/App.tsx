@@ -2802,6 +2802,36 @@ function ERPTab({
     );
   }
 
+  // Patron-friendly takeaway: the whole scoreboard as a real .xlsx, built client-side from the
+  // already-loaded rows with the vendored SheetJS.
+  const exportPerformanceExcel = async () => {
+    try {
+      const XLSX = await import("./vendor/xlsx.mjs");
+      const header = ["Çalışan", "Puan", "Zamanında", "Geç", "Gecikmiş Açık", "Devam Eden"];
+      const rows = performanceRows.map(row => [
+        row.name, row.score ?? "-", row.on_time, row.late, row.overdue_open, row.open_active,
+      ]);
+      const sheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, "Performans");
+      const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([bytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `performans-${performancePeriod === "week" ? "haftalik" : "aylik"}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      showNotice("✓ Excel dosyası indirildi.");
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Excel oluşturulamadı.");
+    }
+  };
+
   // PERFORMANCE (admin only) — accountability scores; hidden from and denied to normal users.
   if (screen === "performance" && isAdmin) {
     const scoreColor = (score: number | null) =>
@@ -2811,7 +2841,15 @@ function ERPTab({
         : "text-red-400";
     return (
       <div className="flex flex-col min-h-full">
-        <TopBar title="Performans" onBack={back} />
+        <TopBar title="Performans" onBack={back} actions={
+          <button
+            onClick={() => void exportPerformanceExcel()}
+            disabled={performanceRows.length === 0}
+            className="px-3 h-9 rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-300 active:scale-95 transition-transform disabled:opacity-40"
+          >
+            ⬇ Excel
+          </button>
+        } />
         <div className="px-4 pt-3 pb-2">
           <div className="grid grid-cols-2 gap-2 bg-card border border-border rounded-2xl p-1">
             {(["week", "month"] as const).map(period => (

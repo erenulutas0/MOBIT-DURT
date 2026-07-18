@@ -44,6 +44,7 @@ class DeadlineServiceTest {
             notificationService,
             activityRecorder,
             DeadlineService.parseThresholdHours("72,48,24,12,6,1"),
+            DeadlineService.parseThresholdHours("4,12,24,48,96"),
             ZoneId.of("Europe/Istanbul"),
             Clock.fixed(NOW, ZoneOffset.UTC));
 
