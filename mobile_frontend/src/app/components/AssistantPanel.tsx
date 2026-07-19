@@ -27,9 +27,15 @@ import { Volume2, Square } from "lucide-react";
  * Turns the structured briefing into a FULL spoken report — every section, every task title, in
  * order. speakLong() chunks it sentence-by-sentence, so length is not a problem.
  */
+const NUMBER_WORDS = ["Bir", "İki", "Üç", "Dört", "Beş", "Altı", "Yedi", "Sekiz", "Dokuz", "On"];
+
 export function briefingToSpeech(userName: string, briefing: AssistantBriefing): string {
   const firstName = (userName || "").trim().split(/\s+/)[0] || "Merhaba";
-  const titles = (items: AssistantTaskItem[]) => items.map(item => item.title).join(", ");
+  // Each item becomes its own numbered sentence ("Bir: X. İki: Y.") — the full stops give the TTS
+  // natural pauses, so lists no longer blur into one breathless run-on.
+  const titles = (items: AssistantTaskItem[]) => items
+    .map((item, index) => `${NUMBER_WORDS[index] || index + 1}: ${item.title}.`)
+    .join(" ");
   const parts: string[] = [`Merhaba ${firstName}.`];
   const total = briefing.overdue.length + briefing.due_today.length + briefing.due_this_week.length
     + briefing.ready_to_start.length + briefing.blocked.length;

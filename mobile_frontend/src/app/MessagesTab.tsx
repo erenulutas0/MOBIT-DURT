@@ -3441,14 +3441,19 @@ function MessagesTab({
                 </div>
                 <div className="space-y-2">
                   {tenderGroup.items.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 rounded-xl bg-muted px-3 py-2.5">
-                      <FileText className="w-4 h-4 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">
-                          {item.document.original_filename || item.document.stored_filename || `Doküman #${item.document_id}`}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate">{item.document.document_type} · {formatDate(item.created_at)}</p>
+                    <div key={item.id} className="rounded-xl bg-muted px-3 py-2.5">
+                      {/* Name gets the full row (2 lines) — five icon buttons were squeezing it
+                          into "A… un…"; actions live on their own row below. */}
+                      <div className="flex items-start gap-2.5">
+                        <FileText className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2 break-all">
+                            {item.document.original_filename || item.document.stored_filename || `Doküman #${item.document_id}`}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{item.document.document_type} · {formatDate(item.created_at)}</p>
+                        </div>
                       </div>
+                      <div className="flex items-center justify-end gap-2 mt-2">
                       <button onClick={() => void previewRoomFile(item)} className="w-8 h-8 rounded-full bg-background/60 flex items-center justify-center">
                         <Eye className="w-4 h-4 text-foreground" />
                       </button>
@@ -3489,6 +3494,7 @@ function MessagesTab({
                       >
                         <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                       </button>
+                      </div>
                     </div>
                   ))}
                 </div>

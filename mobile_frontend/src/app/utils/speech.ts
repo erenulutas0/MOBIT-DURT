@@ -77,14 +77,13 @@ export function stopSpeaking(): void {
   }
 }
 
-/**
- * Fetches TTS audio for the text and plays it. Resolves when playback finishes (or is stopped),
- * so callers can drive a speaking indicator. Throws when the synthesizer is unavailable.
- */
-export async function speakText(text: string): Promise<void> {
+async function fetchSpeechBlob(text: string): Promise<Blob | null> {
   const cleaned = cleanForSpeech(text);
-  if (!cleaned) return;
-  const blob = await getAssistantSpeech(cleaned);
+  if (!cleaned) return null;
+  return getAssistantSpeech(cleaned);
+}
+
+async function playBlob(blob: Blob): Promise<void> {
   stopSpeaking();
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
@@ -102,6 +101,15 @@ export async function speakText(text: string): Promise<void> {
   });
 }
 
+/**
+ * Fetches TTS audio for the text and plays it. Resolves when playback finishes (or is stopped),
+ * so callers can drive a speaking indicator. Throws when the synthesizer is unavailable.
+ */
+export async function speakText(text: string): Promise<void> {
+  const blob = await fetchSpeechBlob(text);
+  if (blob) await playBlob(blob);
+}
+
 export function isSpeaking(): boolean {
   return currentAudio !== null && !currentAudio.paused && !currentAudio.ended;
 }
@@ -111,13 +119,12 @@ export function isSpeaking(): boolean {
 // running sequence via the token.
 let sequenceToken = 0;
 
-export async function speakLong(text: string): Promise<void> {
-  const token = ++sequenceToken;
+function buildChunks(text: string, maxLength: number): string[] {
   const sentences = text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
   const chunks: string[] = [];
   let current = "";
   for (const sentence of sentences) {
-    if (current && (current.length + sentence.length + 1) > 420) {
+    if (current && (current.length + sentence.length + 1) > maxLength) {
       chunks.push(current);
       current = sentence;
     } else {
@@ -125,24 +132,39 @@ export async function speakLong(text: string): Promise<void> {
     }
   }
   if (current) chunks.push(current);
+  return chunks;
+}
+
+export async function speakLong(text: string): Promise<void> {
+  const token = ++sequenceToken;
+  // Short chunks synthesize fast even on a CPU-capped Piper; the pipeline below prefetches the
+  // next chunk WHILE the current one plays, so there are no 10-15s gaps mid-report.
+  const chunks = buildChunks(text, 260);
+  if (chunks.length === 0) return;
+  let blob: Blob | null;
+  try {
+    blob = await fetchSpeechBlob(chunks[0]);
+  } catch (firstError) {
+    // One retry for the opening chunk; if it fails twice, surface the error to the caller.
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    if (token !== sequenceToken) return;
+    blob = await fetchSpeechBlob(chunks[0]);
+  }
   for (let index = 0; index < chunks.length; index += 1) {
+    if (token !== sequenceToken || !blob) return;
+    const nextPromise = index + 1 < chunks.length
+      ? fetchSpeechBlob(chunks[index + 1]).catch(() => null)
+      : null;
+    await playBlob(blob);
     if (token !== sequenceToken) return;
-    try {
-      await speakText(chunks[index]);
-    } catch (error) {
-      // Transient failure (rate limit / network blip): wait and retry the chunk once so a long
-      // report survives hiccups. If the very first chunk fails twice, surface the error; a
-      // mid-report failure after retry just ends the narration gracefully.
-      await new Promise(resolve => setTimeout(resolve, 2500));
+    if (!nextPromise) return;
+    blob = await nextPromise;
+    if (!blob) {
+      // Prefetch failed (rate limit / blip): one paced retry, then end gracefully mid-report.
+      await new Promise(resolve => setTimeout(resolve, 2000));
       if (token !== sequenceToken) return;
-      try {
-        await speakText(chunks[index]);
-      } catch (retryError) {
-        if (index === 0) throw retryError;
-        return;
-      }
+      blob = await fetchSpeechBlob(chunks[index + 1]).catch(() => null);
     }
-    if (token !== sequenceToken) return;
   }
 }
 

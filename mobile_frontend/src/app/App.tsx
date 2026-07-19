@@ -1912,12 +1912,13 @@ function ERPTab({
                   />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground truncate">{employee.name}</p>
+                  <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2 break-words">{employee.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {employee.title || (employee.role === "admin" ? "Admin" : "Ünvan yok")} · {employee.email || "E-posta yok"}
                   </p>
                 </div>
-                <Badge label={employeeStatusLabel(employee.status)} />
+                {/* Presence is already the dot on the avatar + row dimming — the wide "Çevrimdışı"
+                    badge was eating the name's space ("Muham…"). */}
                 {isAdmin && (
                   <button
                     onClick={() => void editUserTitle(employee)}
