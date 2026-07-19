@@ -32,7 +32,11 @@ public class NotificationService {
             "task_due_soon",
             "manager_due_soon_digest",
             "task_overdue",
-            "manager_overdue_digest");
+            "manager_overdue_digest",
+            // Escalation nudges must re-arm too: after a deadline extension the already-crossed
+            // stages would otherwise stay burned and the ladder would be silent for the task's
+            // remaining life.
+            "task_overdue_nudge");
 
     private final ErpNotificationRepository notificationRepository;
     private final ErpNotificationPreferenceRepository preferenceRepository;

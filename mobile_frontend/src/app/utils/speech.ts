@@ -89,15 +89,26 @@ async function playBlob(blob: Blob): Promise<void> {
   const audio = new Audio(url);
   currentAudio = audio;
   currentUrl = url;
-  await audio.play();
+  try {
+    await audio.play();
+  } catch (playError) {
+    // A stop while play() was still starting rejects with AbortError — that's a normal
+    // interruption, finish quietly. A genuine failure (autoplay policy, undecodable blob)
+    // must clean up its object URL and propagate.
+    if (currentAudio !== audio) return;
+    stopSpeaking();
+    throw playError;
+  }
   await new Promise<void>(resolve => {
     const finish = () => {
       if (currentAudio === audio) stopSpeaking();
       resolve();
     };
     audio.onended = finish;
-    // stopSpeaking() pauses the element — treat that as finished too so awaits never hang.
+    // stopSpeaking() pauses the element — treat that as finished too so awaits never hang;
+    // a fatal mid-stream decode error fires neither ended nor pause, so listen for it as well.
     audio.onpause = finish;
+    audio.onerror = finish;
   });
 }
 
@@ -106,6 +117,9 @@ async function playBlob(blob: Blob): Promise<void> {
  * so callers can drive a speaking indicator. Throws when the synthesizer is unavailable.
  */
 export async function speakText(text: string): Promise<void> {
+  // A standalone utterance (e.g. a voice nudge) supersedes any running speakLong sequence —
+  // otherwise the sequence's next chunk would cut the nudge off mid-sentence.
+  sequenceToken++;
   const blob = await fetchSpeechBlob(text);
   if (blob) await playBlob(blob);
 }
@@ -135,36 +149,48 @@ function buildChunks(text: string, maxLength: number): string[] {
   return chunks;
 }
 
+// Distinguishes "chunk cleaned to nothing" (skip it, keep narrating) from a fetch failure
+// (retry once, then end gracefully) — conflating them used to abort the rest of a report over
+// one emoji-only sentence.
+type ChunkFetch = { ok: true; blob: Blob | null } | { ok: false };
+
+function prefetchChunk(chunk: string): Promise<ChunkFetch> {
+  return fetchSpeechBlob(chunk)
+    .then(blob => ({ ok: true as const, blob }))
+    .catch(() => ({ ok: false as const }));
+}
+
 export async function speakLong(text: string): Promise<void> {
   const token = ++sequenceToken;
   // Short chunks synthesize fast even on a CPU-capped Piper; the pipeline below prefetches the
   // next chunk WHILE the current one plays, so there are no 10-15s gaps mid-report.
   const chunks = buildChunks(text, 260);
   if (chunks.length === 0) return;
-  let blob: Blob | null;
+  let current: ChunkFetch;
   try {
-    blob = await fetchSpeechBlob(chunks[0]);
+    current = { ok: true, blob: await fetchSpeechBlob(chunks[0]) };
   } catch (firstError) {
     // One retry for the opening chunk; if it fails twice, surface the error to the caller.
     await new Promise(resolve => setTimeout(resolve, 2000));
     if (token !== sequenceToken) return;
-    blob = await fetchSpeechBlob(chunks[0]);
+    current = { ok: true, blob: await fetchSpeechBlob(chunks[0]) };
   }
   for (let index = 0; index < chunks.length; index += 1) {
-    if (token !== sequenceToken || !blob) return;
-    const nextPromise = index + 1 < chunks.length
-      ? fetchSpeechBlob(chunks[index + 1]).catch(() => null)
-      : null;
-    await playBlob(blob);
     if (token !== sequenceToken) return;
-    if (!nextPromise) return;
-    blob = await nextPromise;
-    if (!blob) {
+    if (!current.ok) {
       // Prefetch failed (rate limit / blip): one paced retry, then end gracefully mid-report.
       await new Promise(resolve => setTimeout(resolve, 2000));
       if (token !== sequenceToken) return;
-      blob = await fetchSpeechBlob(chunks[index + 1]).catch(() => null);
+      current = await prefetchChunk(chunks[index]);
+      if (!current.ok) return;
     }
+    const nextPromise = index + 1 < chunks.length ? prefetchChunk(chunks[index + 1]) : null;
+    if (current.blob) {
+      await playBlob(current.blob);
+      if (token !== sequenceToken) return;
+    }
+    if (!nextPromise) return;
+    current = await nextPromise;
   }
 }
 

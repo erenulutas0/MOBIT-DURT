@@ -63,7 +63,8 @@ public class ErpNotificationPreference {
             case "employee_help_message" -> employeeHelpMessageEnabled;
             case "task_completion_requested", "task_completion_approved", "task_completion_rejected" ->
                     completionUpdatesEnabled;
-            case "task_due_soon", "task_overdue", "manager_due_soon_digest", "manager_overdue_digest",
+            case "task_due_soon", "task_overdue", "task_overdue_nudge", "manager_due_soon_digest",
+                    "manager_overdue_digest", "manager_overdue_escalation",
                     "task_blocked_escalation", "task_completion_approval_escalation" ->
                     deadlineAlertsEnabled;
             default -> true;

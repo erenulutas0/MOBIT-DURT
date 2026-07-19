@@ -964,6 +964,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
       {showAssistant && (
         <AssistantPanel
           userName={user.name}
+          isAdmin={isAdmin}
           onClose={() => setShowAssistant(false)}
           onOpenTasks={() => {
             setShowAssistant(false);
@@ -1556,6 +1557,8 @@ function ERPTab({
     setOverview(current => current
       ? { ...current, notifications: current.notifications.map(item => item.id === updated.id ? updated : item) }
       : current);
+    // Reading in-app must also silence the Android tray — read items may not resurface there.
+    clearDeliveredNativeNotifications();
   };
 
   const openNotification = async (notification: ERPOverview["notifications"][number]) => {
@@ -1584,6 +1587,7 @@ function ERPTab({
     setOverview(current => current
       ? { ...current, notifications: current.notifications.map(item => ({ ...item, read_at: item.read_at || readAt })) }
       : current);
+    clearDeliveredNativeNotifications();
   };
 
   const approveAccountRequest = async (requestId: number) => {

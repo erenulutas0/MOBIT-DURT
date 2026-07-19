@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.WeekFields;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -163,7 +164,15 @@ public class DeadlineService {
         Instant now = clock.instant();
         List<ErpTask> overdueTasks = taskRepository.findAllByStatusOrderByCreatedAtDescIdDesc(TaskStatus.OVERDUE);
         Map<Long, Set<Long>> assignees = assignedUserIdsByTask(overdueTasks);
-        int changed = 0;
+        // Assignees still get a per-task CRITICAL nudge (targeted, that's the point), but the
+        // ADMIN gets ONE combined digest — nine stale test tasks used to mean nine separate
+        // "Sahipsiz iş" notifications per stage, which read as a notification flood. The digest
+        // lists EVERY task past an escalation stage (assignees or not — a truly ownerless overdue
+        // task is exactly what this alert exists for) and its event key hashes the full
+        // (task, stage) set, so it re-fires only when that set actually changes.
+        List<String> digestLines = new ArrayList<>();
+        StringBuilder digestKeySource = new StringBuilder();
+        int nudgedTasks = 0;
         for (ErpTask task : overdueTasks) {
             if (task.getDeadlineAt() == null) {
                 continue;
@@ -174,7 +183,7 @@ public class DeadlineService {
                 continue;
             }
             long stageHours = stage.toHours();
-            int created = notificationService.notifyUsers(
+            int nudged = notificationService.notifyUsers(
                     assignees.getOrDefault(task.getId(), Set.of()),
                     "task_overdue_nudge",
                     "Görev hâlâ teslim edilmedi",
@@ -183,19 +192,38 @@ public class DeadlineService {
                     "CRITICAL",
                     "task_overdue_nudge:" + task.getId() + ":" + stageHours + "h",
                     now);
-            created += notificationService.notifyAdmin(
-                    "manager_overdue_escalation",
-                    "⚠️ Sahipsiz iş: " + task.getTitle(),
-                    task.getTitle() + " " + stageHours + " saattir gecikmiş ve hâlâ teslim edilmedi.",
-                    task.getId(),
-                    "HIGH",
-                    "manager_overdue_escalation:" + task.getId() + ":" + stageHours + "h",
-                    now);
-            if (created > 0) {
-                changed++;
+            if (nudged > 0) {
+                nudgedTasks++;
             }
+            digestLines.add("• " + task.getTitle() + " (" + stageHours + " saattir gecikmiş)");
+            digestKeySource.append(task.getId()).append(':').append(stageHours).append(';');
         }
-        return changed;
+        if (!digestLines.isEmpty()) {
+            notificationService.notifyAdmin(
+                    "manager_overdue_escalation",
+                    "⚠️ Sahipsiz işler (" + digestLines.size() + ")",
+                    String.join("\n", digestLines),
+                    null,
+                    "HIGH",
+                    "manager_overdue_escalation:" + digestKeyHash(digestKeySource.toString()),
+                    now);
+        }
+        return nudgedTasks;
+    }
+
+    /** Collision-resistant short key for the digest set (32-bit hashCode collides too easily). */
+    private static String digestKeyHash(String source) {
+        try {
+            byte[] hashed = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(source.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 8; i++) {
+                hex.append(String.format("%02x", hashed[i]));
+            }
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            return Integer.toHexString(source.hashCode());
+        }
     }
 
     private Duration largestCrossedEscalation(Duration overdueFor) {
