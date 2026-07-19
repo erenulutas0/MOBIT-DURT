@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.docsbot.ops.erp.application.DeadlineService;
 import com.jayway.jsonpath.JsonPath;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -134,6 +135,44 @@ class DeadlineEscalationIntegrationTest {
                 """,
                 Integer.class, taskId, userId);
         Assertions.assertEquals(2, deadlineRows, "history is preserved — the old one is read, not deleted");
+    }
+
+    // A settled task will never get a newer alert, so the per-task supersede can never clear its
+    // outstanding ones — they would sit unread in the bell forever ("yapışık kalmış").
+    @Test
+    void cancellingATaskRetiresItsOutstandingDeadlineAlerts() throws Exception {
+        String adminToken = loginAdmin();
+        String register = mockMvc.perform(post("/erp/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Iptal Calisan","username":"iptalci","password":"StrongPass123"}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long userId = ((Number) JsonPath.read(register, "$.user_id")).longValue();
+
+        String task = mockMvc.perform(post("/erp/tasks")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Iptal edilecek is","assignee_user_ids":[%d],"priority":"high",
+                                 "deadline_at":"%s"}
+                                """.formatted(userId, Instant.now().plus(30, ChronoUnit.MINUTES))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long taskId = ((Number) JsonPath.read(task, "$.id")).longValue();
+
+        deadlineService.processDueSoonTasks();
+        Assertions.assertEquals(1, unreadDeadlineAlerts(userId));
+
+        mockMvc.perform(patch("/erp/tasks/" + taskId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"cancelled\"}"))
+                .andExpect(status().isOk());
+
+        Assertions.assertEquals(0, unreadDeadlineAlerts(userId),
+                "a cancelled task must not keep its deadline alert lit");
     }
 
     private int unreadDeadlineAlerts(long userId) {

@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -52,6 +54,50 @@ public class NotificationService {
             "task_overdue_nudge",
             "manager_due_soon_digest",
             "manager_overdue_digest");
+
+    /**
+     * Per-task alerts where only the newest of that SAME type matters. Two groups live here:
+     * escalation rungs (a later rung obsoletes the earlier one), and the task-chatter types whose
+     * call sites pass a null event key — those get no dedup at all (the unique index is partial,
+     * {@code WHERE event_key IS NOT NULL}), so every task edit or comment used to mint a permanent
+     * unread row. These never cross-supersede the deadline family: a deadline warning must not
+     * silence a "task is blocked" escalation, and vice versa.
+     */
+    private static final Set<String> TASK_SAME_TYPE_SUPERSEDE_TYPES = Set.of(
+            "task_blocked_escalation",
+            "task_completion_approval_escalation",
+            "task_updated",
+            "manager_message",
+            "employee_help_message",
+            "task_completion_requested",
+            "task_completion_approved",
+            "task_completion_rejected");
+
+    /**
+     * Recurring digests and reports that carry no task id, so the per-task supersede can never reach
+     * them — each would otherwise add a row every week/day forever. Only the newest of each kind is
+     * actionable, so a new one retires the recipient's previous unread copies of that same type.
+     */
+    private static final Set<String> DIGEST_SUPERSEDE_TYPES = Set.of(
+            "manager_overdue_escalation",
+            "manager_weekly_digest",
+            "performance_report",
+            "assistant_briefing");
+
+    /**
+     * Machine-generated alerts whose relevance EXPIRES, so the retention backstop may retire them
+     * once they are old. Deliberately excludes anything a human sent or that represents work handed
+     * to someone (direct_message, task_assigned, manager_message, feedback, account requests…): a
+     * three-week-old "termini yaklaşıyor" is noise, but a three-week-old message from a colleague is
+     * still unread mail and must survive two weeks of annual leave.
+     */
+    public static final Set<String> EXPIRING_ALERT_TYPES = Stream
+            .of(DEADLINE_SUPERSEDE_TYPES.stream(),
+                    DIGEST_SUPERSEDE_TYPES.stream(),
+                    Stream.of("task_blocked_escalation", "task_completion_approval_escalation",
+                            "tender_deadline_soon", "tender_deadline_passed"))
+            .flatMap(stream -> stream)
+            .collect(Collectors.toUnmodifiableSet());
 
     private final ErpNotificationRepository notificationRepository;
     private final ErpNotificationPreferenceRepository preferenceRepository;
@@ -225,6 +271,16 @@ public class NotificationService {
         return notificationRepository.detachEventKeys(taskId, DEADLINE_ALERT_TYPES);
     }
 
+    /**
+     * Retires everything a settled task is still nagging about, for every recipient. Since no newer
+     * alert will ever arrive for a done/cancelled task, the per-task supersede would never clear
+     * these rows on its own and they would sit unread forever.
+     */
+    @Transactional
+    public int clearTaskNotifications(long taskId) {
+        return notificationRepository.markAllTaskNotificationsRead(taskId, clock.instant());
+    }
+
     @Transactional
     public void deleteAllForUser(long userId) {
         notificationRepository.deleteAllByUserId(userId);
@@ -254,6 +310,11 @@ public class NotificationService {
             if (taskId != null && DEADLINE_SUPERSEDE_TYPES.contains(type)) {
                 notificationRepository.markTaskDeadlineAlertsSuperseded(
                         recipientId, taskId, DEADLINE_SUPERSEDE_TYPES, now);
+            } else if (taskId != null && TASK_SAME_TYPE_SUPERSEDE_TYPES.contains(type)) {
+                notificationRepository.markTaskDeadlineAlertsSuperseded(
+                        recipientId, taskId, Set.of(type), now);
+            } else if (DIGEST_SUPERSEDE_TYPES.contains(type)) {
+                notificationRepository.markDigestSuperseded(recipientId, type, now);
             }
             ErpNotification notification = notificationRepository.saveAndFlush(ErpNotification.create(
                     recipientId,

@@ -475,6 +475,18 @@ class ErpTaskWorkflowService {
         return task;
     }
 
+    /**
+     * Once a task is done or cancelled everything it is still nagging about is dead weight: no newer
+     * alert will ever arrive for it, so the per-task supersede in NotificationService can never
+     * clear those rows and they would sit unread in the bell forever. Retire them as it settles.
+     */
+    private void retireDeadlineAlertsIfSettled(ErpTask task) {
+        TaskStatus status = task.getStatus();
+        if (status == TaskStatus.DONE || status == TaskStatus.CANCELLED) {
+            notificationService.clearTaskNotifications(task.getId());
+        }
+    }
+
     private ErpTask applyStatusTransition(ErpPrincipal principal, ErpTask task, String status) {
         long taskId = task.getId();
         TaskStatus nextStatus = ErpValidation.parse(TaskStatus.class, status, "Unknown task status");
@@ -500,6 +512,7 @@ class ErpTaskWorkflowService {
         } catch (IllegalStateException exception) {
             throw new ErpExceptions.BadRequest(exception.getMessage());
         }
+        retireDeadlineAlertsIfSettled(task);
         activityRecorder.record(
                 principal,
                 "TASK_STATUS_CHANGED",
@@ -527,6 +540,7 @@ class ErpTaskWorkflowService {
             } catch (IllegalStateException exception) {
                 throw new ErpExceptions.BadRequest(exception.getMessage());
             }
+            retireDeadlineAlertsIfSettled(task);
             activityRecorder.record(
                     principal,
                     "TASK_STATUS_CHANGED",
@@ -671,6 +685,7 @@ class ErpTaskWorkflowService {
         } catch (IllegalStateException exception) {
             throw new ErpExceptions.BadRequest(exception.getMessage());
         }
+        retireDeadlineAlertsIfSettled(task);
         commentRepository.save(ErpTaskComment.create(
                 taskId,
                 null,
