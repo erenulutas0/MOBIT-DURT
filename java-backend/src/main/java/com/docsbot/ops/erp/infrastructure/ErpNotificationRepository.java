@@ -27,6 +27,27 @@ public interface ErpNotificationRepository extends JpaRepository<ErpNotification
             """)
     int markAllRead(@Param("userId") Long userId, @Param("readAt") java.time.Instant readAt);
 
+    /**
+     * Collapses a task's deadline-alert stack for one recipient: marks every still-unread alert of
+     * the given types for this (recipient, task) as read, so a freshly created alert supersedes the
+     * now-obsolete earlier stages (72h → 48h → … → overdue → nudge) instead of piling up. History
+     * is preserved (rows stay, just flipped to read) so nothing vanishes; only the badge shrinks.
+     */
+    @Modifying
+    @Query("""
+            update ErpNotification notification
+               set notification.readAt = :readAt
+             where notification.userId = :userId
+               and notification.taskId = :taskId
+               and notification.readAt is null
+               and notification.type in :types
+            """)
+    int markTaskDeadlineAlertsSuperseded(
+            @Param("userId") long userId,
+            @Param("taskId") long taskId,
+            @Param("types") Collection<String> types,
+            @Param("readAt") java.time.Instant readAt);
+
     void deleteAllByUserId(Long userId);
 
     /**

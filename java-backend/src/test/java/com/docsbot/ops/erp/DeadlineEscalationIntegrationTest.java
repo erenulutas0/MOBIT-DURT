@@ -90,6 +90,63 @@ class DeadlineEscalationIntegrationTest {
         Assertions.assertEquals(1, nudgesAfter);
     }
 
+    @Test
+    void newerDeadlineAlertSupersedesTheTasksEarlierUnreadOnes() throws Exception {
+        String adminToken = loginAdmin();
+        String register = mockMvc.perform(post("/erp/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Termin Calisan","username":"termin","password":"StrongPass123"}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long userId = ((Number) JsonPath.read(register, "$.user_id")).longValue();
+
+        String task = mockMvc.perform(post("/erp/tasks")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Site yapma","assignee_user_ids":[%d],"priority":"high",
+                                 "deadline_at":"%s"}
+                                """.formatted(userId, Instant.now().plus(30, ChronoUnit.MINUTES))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long taskId = ((Number) JsonPath.read(task, "$.id")).longValue();
+
+        // Due-soon fires first (deadline within the 1h threshold): one unread alert for the user.
+        deadlineService.processDueSoonTasks();
+        Assertions.assertEquals(1, unreadDeadlineAlerts(userId));
+
+        // Deadline slides into the past → the task goes overdue. The new overdue alert must
+        // supersede the now-obsolete "termini yaklaşıyor" so the bell shows ONE live alert, not two.
+        jdbcTemplate.update(
+                "update erp_tasks set deadline_at=? where id=?",
+                java.sql.Timestamp.from(Instant.now().minus(2, ChronoUnit.HOURS)),
+                taskId);
+        deadlineService.processOverdueTasks();
+
+        Assertions.assertEquals(1, unreadDeadlineAlerts(userId), "only the newest alert stays unread");
+        Integer deadlineRows = jdbcTemplate.queryForObject(
+                """
+                select count(*) from erp_notifications
+                 where task_id=? and user_id=?
+                   and type in ('task_due_soon','task_overdue','task_overdue_nudge')
+                """,
+                Integer.class, taskId, userId);
+        Assertions.assertEquals(2, deadlineRows, "history is preserved — the old one is read, not deleted");
+    }
+
+    private int unreadDeadlineAlerts(long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                select count(*) from erp_notifications
+                 where user_id=? and read_at is null
+                   and type in ('task_due_soon','task_overdue','task_overdue_nudge')
+                """,
+                Integer.class, userId);
+        return count == null ? 0 : count;
+    }
+
     private String loginAdmin() throws Exception {
         String response = mockMvc.perform(post("/erp/auth/admin-login")
                         .contentType(MediaType.APPLICATION_JSON)

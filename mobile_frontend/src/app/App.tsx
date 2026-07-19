@@ -83,7 +83,7 @@ import {
 } from "./utils/formatters";
 import { validateAccountRequestForm, validateLoginForm } from "./utils/authForms";
 import { FONT_SCALE_OPTIONS, loadFontScale, saveFontScale } from "./utils/fontScale";
-import { isSpeaking, isVoiceNudgeEnabled, setVoiceNudgeEnabled, speakLong, speakText, stopAllSpeech } from "./utils/speech";
+import { isSpeaking, isVoiceNudgeEnabled, setVoiceNudgeEnabled, speakLong, speakNudge, speakText, stopAllSpeech } from "./utils/speech";
 import { updateERPUserPresence } from "./api";
 import { buildTaskAgenda } from "./utils/taskCalendar";
 import {
@@ -307,12 +307,13 @@ async function registerNativePushNotifications(onAction: (target: NotificationNa
     // Foreground push: the OS does not show a banner, so let open views
     // refresh their data instead.
     window.dispatchEvent(new CustomEvent(PUSH_RECEIVED_EVENT));
-    // "Dürt" mode: read the notification aloud via the Turkish TTS. Best-effort — if the
-    // synthesizer is down we stay silent rather than nagging with errors.
+    // "Dürt" mode: read the notification aloud via the Turkish TTS. speakNudge never interrupts an
+    // in-progress narration (e.g. the assistant reading the day) and de-dupes re-delivered pushes,
+    // so a re-armed alert can't loop or wedge into the report's gaps. Best-effort — silent on error.
     if (isVoiceNudgeEnabled()) {
       const spoken = [notification.title, notification.body].filter(Boolean).join(". ");
       if (spoken) {
-        void speakText(spoken).catch(() => {});
+        void speakNudge(spoken).catch(() => {});
       }
     }
   });

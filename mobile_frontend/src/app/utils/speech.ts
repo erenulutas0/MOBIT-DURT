@@ -132,6 +132,14 @@ export function isSpeaking(): boolean {
 // are read in full (each Piper request stays small and fast). A new speakLong/stop invalidates the
 // running sequence via the token.
 let sequenceToken = 0;
+// speakLong is "busy" for its WHOLE run, including the silent gaps between chunks — otherwise a
+// background nudge would slip into a gap and read a notification mid-report ("aralara giriyor").
+let activeSpeakLong = 0;
+
+/** True while any narration is playing OR a speakLong sequence is mid-flight (gaps included). */
+export function isSpeechBusy(): boolean {
+  return activeSpeakLong > 0 || isSpeaking();
+}
 
 function buildChunks(text: string, maxLength: number): string[] {
   const sentences = text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
@@ -162,36 +170,64 @@ function prefetchChunk(chunk: string): Promise<ChunkFetch> {
 
 export async function speakLong(text: string): Promise<void> {
   const token = ++sequenceToken;
-  // Short chunks synthesize fast even on a CPU-capped Piper; the pipeline below prefetches the
-  // next chunk WHILE the current one plays, so there are no 10-15s gaps mid-report.
-  const chunks = buildChunks(text, 260);
-  if (chunks.length === 0) return;
-  let current: ChunkFetch;
+  activeSpeakLong += 1;
   try {
-    current = { ok: true, blob: await fetchSpeechBlob(chunks[0]) };
-  } catch (firstError) {
-    // One retry for the opening chunk; if it fails twice, surface the error to the caller.
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    if (token !== sequenceToken) return;
-    current = { ok: true, blob: await fetchSpeechBlob(chunks[0]) };
-  }
-  for (let index = 0; index < chunks.length; index += 1) {
-    if (token !== sequenceToken) return;
-    if (!current.ok) {
-      // Prefetch failed (rate limit / blip): one paced retry, then end gracefully mid-report.
+    // Short chunks synthesize fast even on a CPU-capped Piper; the pipeline below prefetches the
+    // next chunk WHILE the current one plays, so there are no 10-15s gaps mid-report.
+    const chunks = buildChunks(text, 260);
+    if (chunks.length === 0) return;
+    let current: ChunkFetch;
+    try {
+      current = { ok: true, blob: await fetchSpeechBlob(chunks[0]) };
+    } catch (firstError) {
+      // One retry for the opening chunk; if it fails twice, surface the error to the caller.
       await new Promise(resolve => setTimeout(resolve, 2000));
       if (token !== sequenceToken) return;
-      current = await prefetchChunk(chunks[index]);
-      if (!current.ok) return;
+      current = { ok: true, blob: await fetchSpeechBlob(chunks[0]) };
     }
-    const nextPromise = index + 1 < chunks.length ? prefetchChunk(chunks[index + 1]) : null;
-    if (current.blob) {
-      await playBlob(current.blob);
+    for (let index = 0; index < chunks.length; index += 1) {
       if (token !== sequenceToken) return;
+      if (!current.ok) {
+        // Prefetch failed (rate limit / blip): one paced retry, then end gracefully mid-report.
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (token !== sequenceToken) return;
+        current = await prefetchChunk(chunks[index]);
+        if (!current.ok) return;
+      }
+      const nextPromise = index + 1 < chunks.length ? prefetchChunk(chunks[index + 1]) : null;
+      if (current.blob) {
+        await playBlob(current.blob);
+        if (token !== sequenceToken) return;
+      }
+      if (!nextPromise) return;
+      current = await nextPromise;
     }
-    if (!nextPromise) return;
-    current = await nextPromise;
+  } finally {
+    activeSpeakLong -= 1;
   }
+}
+
+// Background "Dürt" nudge: reads an incoming notification aloud, but ONLY when nothing else is
+// speaking, and never the same text twice in a row. This is what a foreground push uses, so it
+// can't talk over the assistant, can't wedge into a between-chunk gap, and can't loop when the
+// server re-pushes the same alert (e.g. after a deadline edit re-arms it).
+let lastNudgeText = "";
+let lastNudgeAt = 0;
+
+export async function speakNudge(text: string): Promise<void> {
+  if (isSpeechBusy()) return;
+  const now = Date.now();
+  // Same alert re-delivered → stay silent for a minute; also a hard 4s floor between any nudges.
+  if (text === lastNudgeText && now - lastNudgeAt < 60_000) return;
+  if (now - lastNudgeAt < 4_000) return;
+  lastNudgeText = text;
+  lastNudgeAt = now;
+  const blob = await fetchSpeechBlob(text);
+  if (!blob) return;
+  // The assistant may have started talking during the fetch — re-check before playing so we still
+  // don't barge in. A nudge never bumps the sequence token, so the assistant always wins.
+  if (isSpeechBusy()) return;
+  await playBlob(blob);
 }
 
 /** Stops current audio AND cancels any in-flight speakLong sequence. */

@@ -38,6 +38,21 @@ public class NotificationService {
             // remaining life.
             "task_overdue_nudge");
 
+    /**
+     * Per-task deadline alerts that supersede each other for a single recipient: only the newest
+     * matters (a 24h warning obsoletes the 72h one; "overdue" obsoletes "due soon"; the latest
+     * nudge obsoletes the earlier one). Creating one marks the recipient's earlier same-task alerts
+     * read, so one task shows one live deadline alert instead of a 12-deep pile in the bell.
+     * manager_overdue_escalation is intentionally excluded — it carries no task id (it's already a
+     * single cross-task digest).
+     */
+    private static final Set<String> DEADLINE_SUPERSEDE_TYPES = Set.of(
+            "task_due_soon",
+            "task_overdue",
+            "task_overdue_nudge",
+            "manager_due_soon_digest",
+            "manager_overdue_digest");
+
     private final ErpNotificationRepository notificationRepository;
     private final ErpNotificationPreferenceRepository preferenceRepository;
     private final ErpNotificationDeliveryRepository deliveryRepository;
@@ -233,6 +248,13 @@ public class NotificationService {
             return 0;
         }
         try {
+            // Collapse the task's earlier deadline alerts into this new one so the bell (and badge)
+            // carry one live alert per task, not the whole 72h/48h/…/overdue/nudge stack. Only runs
+            // when a genuinely new alert is about to be created (post-dedup), so re-scans are no-ops.
+            if (taskId != null && DEADLINE_SUPERSEDE_TYPES.contains(type)) {
+                notificationRepository.markTaskDeadlineAlertsSuperseded(
+                        recipientId, taskId, DEADLINE_SUPERSEDE_TYPES, now);
+            }
             ErpNotification notification = notificationRepository.saveAndFlush(ErpNotification.create(
                     recipientId,
                     type,
