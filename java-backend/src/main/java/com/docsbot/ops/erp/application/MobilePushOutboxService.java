@@ -27,6 +27,8 @@ public class MobilePushOutboxService {
     private final ErpNotificationRepository notificationRepository;
     private final ErpNotificationDeliveryRepository deliveryRepository;
     private final MobilePushGateway gateway;
+    /** Past this age an undelivered alert is stale news; the app's own list is the record. */
+    private final Duration maxAge;
     private final Clock clock;
 
     @Autowired
@@ -35,9 +37,12 @@ public class MobilePushOutboxService {
             ErpMobilePushTokenRepository tokenRepository,
             ErpNotificationRepository notificationRepository,
             ErpNotificationDeliveryRepository deliveryRepository,
-            MobilePushGateway gateway
+            MobilePushGateway gateway,
+            @org.springframework.beans.factory.annotation.Value(
+                    "${docsbot.mobile-push.max-age-minutes:120}") long maxAgeMinutes
     ) {
-        this(outboxRepository, tokenRepository, notificationRepository, deliveryRepository, gateway, Clock.systemUTC());
+        this(outboxRepository, tokenRepository, notificationRepository, deliveryRepository, gateway,
+                Duration.ofMinutes(maxAgeMinutes), Clock.systemUTC());
     }
 
     MobilePushOutboxService(
@@ -48,11 +53,25 @@ public class MobilePushOutboxService {
             MobilePushGateway gateway,
             Clock clock
     ) {
+        this(outboxRepository, tokenRepository, notificationRepository, deliveryRepository, gateway,
+                Duration.ofMinutes(120), clock);
+    }
+
+    MobilePushOutboxService(
+            ErpMobilePushOutboxRepository outboxRepository,
+            ErpMobilePushTokenRepository tokenRepository,
+            ErpNotificationRepository notificationRepository,
+            ErpNotificationDeliveryRepository deliveryRepository,
+            MobilePushGateway gateway,
+            Duration maxAge,
+            Clock clock
+    ) {
         this.outboxRepository = outboxRepository;
         this.tokenRepository = tokenRepository;
         this.notificationRepository = notificationRepository;
         this.deliveryRepository = deliveryRepository;
         this.gateway = gateway;
+        this.maxAge = maxAge;
         this.clock = clock;
     }
 
@@ -98,6 +117,20 @@ public class MobilePushOutboxService {
         }
         if (!token.isActive()) {
             item.markDead("Mobile push token is inactive", now);
+            return 1;
+        }
+        // The queue used to send whatever it was handed, however old and whatever had happened
+        // since. So a backlog that built up while delivery was failing would later buzz the phone
+        // about alerts the user had ALREADY read in the app — "hepsini okudum ama bildirim gelmeye
+        // devam ediyor". A push exists to bring someone to the app; once they have been, or once
+        // the alert is too old to act on, delivering it is pure noise.
+        if (notification.getReadAt() != null) {
+            item.markDead("Notification was already read in-app", now);
+            return 1;
+        }
+        if (notification.getCreatedAt() != null
+                && notification.getCreatedAt().isBefore(now.minus(maxAge))) {
+            item.markDead("Notification is too old to be worth delivering", now);
             return 1;
         }
 
