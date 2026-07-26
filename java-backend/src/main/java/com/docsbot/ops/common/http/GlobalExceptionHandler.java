@@ -11,8 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -141,6 +143,20 @@ public class GlobalExceptionHandler {
                 Map.of());
     }
 
+    /**
+     * Malformed or unparseable request body. Unlike most Spring MVC exceptions this one does not
+     * implement ErrorResponse, so it needs its own handler or it falls through to the 500 branch —
+     * reporting a client's bad JSON as a server failure and logging a stack trace for it.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ApiError> handleUnreadableBody(
+            HttpMessageNotReadableException exception,
+            HttpServletRequest request
+    ) {
+        log.warn("Rejected unreadable body method={} path={}", request.getMethod(), request.getRequestURI());
+        return response(HttpStatus.BAD_REQUEST, "Malformed request body", request, Map.of());
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiError> handleNoResource(
             NoResourceFoundException exception,
@@ -155,6 +171,23 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> handleUnexpected(Exception exception, HttpServletRequest request) {
+        // Most Spring MVC exceptions (wrong method, unsupported media type, missing parameter…)
+        // implement ErrorResponse and already carry the right status. Falling through to the 500
+        // branch reported them as server failures AND logged a stack trace for each — so every
+        // stray probe against an internet-facing host produced an ERROR, which is what turned the
+        // uptime monitor's own 3-try GET into both a permanent red alert and a log "error storm".
+        // A client sending a bad request is not a server fault: honour its status, log at WARN.
+        // (The ones that do NOT implement ErrorResponse, such as an unreadable body, are handled
+        // explicitly above — a new one showing up here as a 500 is the signal to add it.)
+        if (exception instanceof ErrorResponse errorResponse) {
+            HttpStatus status = HttpStatus.resolve(errorResponse.getStatusCode().value());
+            if (status == null) {
+                status = HttpStatus.BAD_REQUEST;
+            }
+            log.warn("Rejected request method={} path={} status={} reason={}",
+                    request.getMethod(), request.getRequestURI(), status.value(), exception.getMessage());
+            return response(status, status.getReasonPhrase(), request, Map.of());
+        }
         log.error("Unhandled request failure method={} path={}", request.getMethod(), request.getRequestURI(), exception);
         return response(
                 HttpStatus.INTERNAL_SERVER_ERROR,
