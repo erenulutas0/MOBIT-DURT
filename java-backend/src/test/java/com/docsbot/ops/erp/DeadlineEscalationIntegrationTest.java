@@ -175,6 +175,48 @@ class DeadlineEscalationIntegrationTest {
                 "a cancelled task must not keep its deadline alert lit");
     }
 
+    // The admin used to be exempt from preference checks entirely, so the notification settings
+    // screen was a no-op for them: toggles saved, showed as off, and every category kept arriving.
+    @Test
+    void adminDeadlineAlertsRespectTheirNotificationPreference() throws Exception {
+        String adminToken = loginAdmin();
+        String register = mockMvc.perform(post("/erp/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Tercih Calisan","username":"tercihci","password":"StrongPass123"}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long userId = ((Number) JsonPath.read(register, "$.user_id")).longValue();
+
+        mockMvc.perform(patch("/erp/notification-preferences")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"deadline_alerts_enabled\":false}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/erp/tasks")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Sessiz olmali","assignee_user_ids":[%d],"priority":"high",
+                                 "deadline_at":"%s"}
+                                """.formatted(userId, Instant.now().plus(30, ChronoUnit.MINUTES))))
+                .andExpect(status().isOk());
+
+        deadlineService.processDueSoonTasks();
+
+        Integer adminAlerts = jdbcTemplate.queryForObject(
+                """
+                select count(*) from erp_notifications
+                 where user_id = 0 and type = 'manager_due_soon_digest'
+                """,
+                Integer.class);
+        Assertions.assertEquals(0, adminAlerts, "admin turned deadline alerts off");
+        // The assignee never changed their preference, so they must still be warned.
+        Assertions.assertEquals(1, unreadDeadlineAlerts(userId));
+    }
+
     private int unreadDeadlineAlerts(long userId) {
         Integer count = jdbcTemplate.queryForObject(
                 """

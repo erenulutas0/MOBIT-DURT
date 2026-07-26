@@ -338,10 +338,13 @@ public class NotificationService {
         }
     }
 
+    /**
+     * The admin used to be exempted here, which made the notification settings screen a no-op for
+     * them: toggles saved, the UI showed them off, and every category kept arriving anyway. The
+     * admin's preferences live under {@link ErpNotification#ADMIN_RECIPIENT_ID} like any other
+     * recipient's, so they are honoured the same way. No stored preference still means "allow".
+     */
     private boolean allows(long userId, String type) {
-        if (userId == ErpNotification.ADMIN_RECIPIENT_ID) {
-            return true;
-        }
         return preferenceRepository.findById(userId)
                 .map(preference -> preference.allows(type))
                 .orElse(true);

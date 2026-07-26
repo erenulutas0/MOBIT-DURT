@@ -1,6 +1,8 @@
 package com.docsbot.ops.common.health;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 
@@ -41,12 +43,33 @@ public class HealthController {
         }
         try (Connection connection = dataSource.getConnection()) {
             if (connection.isValid(VALIDATION_TIMEOUT_SECONDS)) {
-                return ResponseEntity.ok(Map.of("status", "ok"));
+                String schema = appliedSchemaVersion(connection);
+                return ResponseEntity.ok(schema == null
+                        ? Map.of("status", "ok")
+                        : Map.of("status", "ok", "schema", schema));
             }
         } catch (SQLException ignored) {
             // fall through to the down response
         }
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("status", "down", "detail", "database"));
+    }
+
+    /**
+     * Highest successfully applied migration, so "did my deploy actually land?" is answerable from a
+     * browser instead of guessed at. Best-effort: any problem reading the Flyway history simply
+     * omits the field — health must never report down because of a diagnostics extra.
+     */
+    private String appliedSchemaVersion(Connection connection) {
+        String sql = "select max(version::numeric)::text from flyway_schema_history where success";
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            return resultSet.next() ? resultSet.getString(1) : null;
+        } catch (SQLException | RuntimeException ignored) {
+            // Broad on purpose: liveness must not depend on a diagnostics extra. Anything odd here
+            // (missing history table on a fresh DB, a driver that hands back nothing) just means the
+            // field is omitted — never a 500 on the endpoint systemd and the uptime probe rely on.
+            return null;
+        }
     }
 }

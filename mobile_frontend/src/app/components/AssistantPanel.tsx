@@ -84,6 +84,66 @@ export function briefingToSpeech(userName: string, briefing: AssistantBriefing):
   return parts.join(" ");
 }
 
+/**
+ * The boss opener. An admin's briefing spans the WHOLE company, so reading every task title the way
+ * a personal briefing does buries the point in a 40-item list. This says the state of the business
+ * in a few plain sentences — how much is late, what lands today, whether it is getting better or
+ * worse, and the one name that needs attention — and leaves the detail to the on-screen buttons.
+ */
+export function bossSummaryToSpeech(
+  userName: string,
+  briefing: AssistantBriefing,
+  roster: ERPUser[],
+  overview: ERPOverview | null,
+  performance: ERPPerformanceRow[],
+): string {
+  const firstName = (userName || "").trim().split(/\s+/)[0] || "Merhaba";
+  const late = briefing.overdue.length;
+  const today = briefing.due_today.length;
+  const week = briefing.due_this_week.length;
+  const open = late + today + week + briefing.ready_to_start.length + briefing.blocked.length;
+  const parts: string[] = [`Merhaba ${firstName}. Şirketin bugünkü durumu şöyle.`];
+
+  if (open === 0) {
+    parts.push("Bekleyen iş görünmüyor, tablo temiz.");
+  } else {
+    parts.push(`Toplam ${open} açık iş var.`);
+    parts.push(late === 0
+      ? "Gecikmiş iş yok, bu iyi."
+      : `Bunlardan ${late} tanesi gecikmiş durumda. Öncelik burada.`);
+    if (today > 0) parts.push(`Bugün ${today} iş teslim edilmeli.`);
+    if (week > 0) parts.push(`Bu hafta ${week} iş daha var.`);
+  }
+
+  // The one name that needs attention — a boss asks "kimde sorun var", not "kimler var".
+  if (overview) {
+    const ranked = roster
+      .filter(user => user.role !== "admin")
+      .map(user => buildEmployeeReport(user, overview, performance))
+      .filter(report => report.overdue.length > 0)
+      .sort((left, right) => right.overdue.length - left.overdue.length);
+    if (ranked.length === 1) {
+      parts.push(`Geciken işlerin tamamı ${ranked[0].name} üzerinde.`);
+    } else if (ranked.length > 1) {
+      parts.push(`En çok geciken iş ${ranked[0].name} üzerinde, ${ranked[0].overdue.length} adet.`
+        + ` Toplam ${ranked.length} çalışanda geciken iş var.`);
+    }
+    const doneThisWeek = roster
+      .filter(user => user.role !== "admin")
+      .reduce((total, user) => total + buildEmployeeReport(user, overview, performance).doneThisWeek, 0);
+    if (doneThisWeek > 0) {
+      parts.push(`İyi haber: son bir haftada ${doneThisWeek} iş tamamlandı.`);
+    }
+  }
+
+  if (briefing.unread_messages > 0) {
+    parts.push(`Ayrıca ${briefing.unread_messages} okunmamış mesajınız var.`);
+  }
+  parts.push("Özet bu kadar. Dilerseniz tüm çalışanların durumunu ya da belirli bir çalışanın"
+    + " raporunu okuyabilirim. Ekrandan seçim yapabilirsiniz.");
+  return parts.join(" ");
+}
+
 /** A single briefing section, spoken on demand ("sadece gecikenler" replays). */
 function sectionToSpeech(briefing: AssistantBriefing, section: SectionKey): string {
   switch (section) {
@@ -281,6 +341,7 @@ export function AssistantPanel({
   // Admin-only data for employee reports; loaded lazily and silently.
   const [roster, setRoster] = useState<ERPUser[]>([]);
   const [rosterLoaded, setRosterLoaded] = useState(false);
+  const [adminDataSettled, setAdminDataSettled] = useState(false);
   const [overview, setOverview] = useState<ERPOverview | null>(null);
   const [performance, setPerformance] = useState<ERPPerformanceRow[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -356,31 +417,42 @@ export function AssistantPanel({
 
   // Admin extras — failures here must never break the panel (buttons just stay hidden/empty).
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      setAdminDataSettled(true);
+      return;
+    }
     let active = true;
-    void getERPUsers()
-      .then(users => { if (active) setRoster(users); })
-      .catch(() => undefined)
-      .finally(() => { if (active) setRosterLoaded(true); });
-    void getERPOverview().then(data => { if (active) setOverview(data); }).catch(() => undefined);
-    void getERPPerformance("week").then(rows => { if (active) setPerformance(rows); }).catch(() => undefined);
+    // allSettled, not all: a failed fetch must still release the opener, which waits on this so the
+    // boss summary isn't read before it knows who is behind.
+    void Promise.allSettled([
+      getERPUsers().then(users => { if (active) setRoster(users); }),
+      getERPOverview().then(data => { if (active) setOverview(data); }),
+      getERPPerformance("week").then(rows => { if (active) setPerformance(rows); }),
+    ]).then(() => {
+      if (!active) return;
+      setRosterLoaded(true);
+      setAdminDataSettled(true);
+    });
     return () => { active = false; };
   }, [isAdmin]);
 
   // The dialog opener: read the day automatically once, then offer next steps out loud.
   useEffect(() => {
-    if (!briefing || autoSpokenRef.current) return;
+    if (!briefing || !adminDataSettled || autoSpokenRef.current) return;
     autoSpokenRef.current = true;
     // If the user already started some speech (e.g. asked a question and played the reply while
     // the briefing was still loading), don't barge in over it.
     if (speechRunRef.current > 0) return;
-    const opener = briefingToSpeech(userName, briefing) + " " + (isAdmin
-      ? "Dilerseniz tüm çalışanların özetini, ya da belirli bir çalışanın raporunu okuyabilirim. Ekrandan seçim yapabilirsiniz."
-      : "Tekrar dinlemek istediğiniz bir bölüm var mı? Ekrandan seçebilirsiniz.");
-    void speak(opener, "Günün raporu okunuyor");
+    // The boss hears the state of the business in a few sentences; an employee hears their own day
+    // task by task. Reading a 40-item company list aloud to the admin was the opposite of useful.
+    const opener = isAdmin
+      ? bossSummaryToSpeech(userName, briefing, roster, overview, performance)
+      : briefingToSpeech(userName, briefing)
+        + " Tekrar dinlemek istediğiniz bir bölüm var mı? Ekrandan seçebilirsiniz.";
+    void speak(opener, isAdmin ? "Yönetici özeti okunuyor" : "Günün raporu okunuyor");
     // speak is intentionally not a dependency: this must fire exactly once per panel open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [briefing]);
+  }, [briefing, adminDataSettled]);
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -446,7 +518,9 @@ export function AssistantPanel({
           </div>
           {briefing && (
             <button
-              onClick={() => toggleGeneralSpeech(briefingToSpeech(userName, briefing))}
+              onClick={() => toggleGeneralSpeech(isAdmin
+                ? bossSummaryToSpeech(userName, briefing, roster, overview, performance)
+                : briefingToSpeech(userName, briefing))}
               className={`px-3 h-9 rounded-full flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-colors ${
                 speaking ? "bg-red-500/20 text-red-300" : "bg-violet-500/25 text-violet-200"
               }`}

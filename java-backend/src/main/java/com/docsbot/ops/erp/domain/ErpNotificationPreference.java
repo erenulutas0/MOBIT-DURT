@@ -63,9 +63,13 @@ public class ErpNotificationPreference {
             case "employee_help_message" -> employeeHelpMessageEnabled;
             case "task_completion_requested", "task_completion_approved", "task_completion_rejected" ->
                     completionUpdatesEnabled;
+            // Every deadline-driven alert hangs off the one "termin uyarıları" switch — including the
+            // admin-only digests and the tender-deadline reminders, which used to fall through to
+            // `default -> true` and so could not be turned off at all.
             case "task_due_soon", "task_overdue", "task_overdue_nudge", "manager_due_soon_digest",
-                    "manager_overdue_digest", "manager_overdue_escalation",
-                    "task_blocked_escalation", "task_completion_approval_escalation" ->
+                    "manager_overdue_digest", "manager_overdue_escalation", "manager_weekly_digest",
+                    "task_blocked_escalation", "task_completion_approval_escalation",
+                    "tender_deadline_soon", "tender_deadline_passed" ->
                     deadlineAlertsEnabled;
             default -> true;
         };
