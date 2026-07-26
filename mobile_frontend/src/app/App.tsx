@@ -51,6 +51,8 @@ import {
   getERPUsers,
   deleteERPUser,
   updateERPUserTitle,
+  SCHEDULE_KIND_LABELS,
+  SCHEDULE_KINDS_WITH_START,
   resetERPUserPassword,
   changeOwnERPPassword,
   requestERPTaskCompletion,
@@ -74,7 +76,7 @@ import {
   updateERPTaskDetails,
   sendDocumentGroupMessage,
 } from "./api";
-import type { DocumentGroupMessage, DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPPerformanceRow, ERPTask, ERPUser, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
+import type { DocumentGroupMessage, DocumentGroupSummary, ERPAccountRequest, ERPAnnouncement, ERPNotificationPreference, ERPOverview, ERPPerformanceRow, ERPScheduleKind, ERPTask, ERPUser, FolderTree, MobileAppUpdateInfo, Tender, TenderDocument, TreeNode, VaultNote } from "./api";
 import {
   employeeStatusLabel,
   formatDate,
@@ -99,6 +101,7 @@ import {
 import {
   companySlug,
   deadlineRemainingLabel,
+  scheduleSummary,
   initials,
   taskAssigneeName,
   taskAssignees,
@@ -1028,6 +1031,8 @@ function ERPTab({
   const [taskInstructions, setTaskInstructions] = useState("");
   const [taskPriority, setTaskPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
   const [taskDeadlineLocal, setTaskDeadlineLocal] = useState("");
+  const [taskScheduleKind, setTaskScheduleKind] = useState<ERPScheduleKind>("at");
+  const [taskStartsLocal, setTaskStartsLocal] = useState("");
   const [taskAssigneeIds, setTaskAssigneeIds] = useState<number[]>([]);
   const [taskLeaderId, setTaskLeaderId] = useState<number | null>(null);
   const [taskAssigneeTitles, setTaskAssigneeTitles] = useState<Record<number, string>>({});
@@ -1198,6 +1203,8 @@ function ERPTab({
   const selectedTaskAssignees = taskAssignableUsers.filter(employee => taskAssigneeIds.includes(employee.id));
   const selectedTaskLeader = selectedTaskAssignees.find(employee => employee.id === taskLeaderId) || selectedTaskAssignees[0] || null;
   const taskDeadlineIso = taskDeadlineLocal ? new Date(taskDeadlineLocal).toISOString() : null;
+  const taskStartsIso = taskStartsLocal ? new Date(taskStartsLocal).toISOString() : null;
+  const taskScheduleStartNeeded = SCHEDULE_KINDS_WITH_START.includes(taskScheduleKind);
 
   /**
    * Standard report flows (patron madde 6): the interim report asks a fixed 4-question template so
@@ -1366,6 +1373,8 @@ function ERPTab({
     setTaskInstructions("");
     setTaskPriority("normal");
     setTaskDeadlineLocal("");
+    setTaskScheduleKind("at");
+    setTaskStartsLocal("");
     setTaskAssigneeIds([]);
     setTaskLeaderId(null);
     setTaskAssigneeTitles({});
@@ -1458,6 +1467,8 @@ function ERPTab({
         assigneeTitles,
         priority: taskPriority,
         deadlineAt: taskDeadlineIso,
+        scheduleKind: taskScheduleKind,
+        startsAt: taskScheduleStartNeeded ? taskStartsIso : null,
         parentTaskId: createTaskParentId,
       });
       // The task exists from here on. Workspace creation gets its own try/catch so a network
@@ -2189,16 +2200,42 @@ function ERPTab({
               <option value="high">Yüksek</option>
               <option value="urgent">Acil</option>
             </select>
+            <select
+              value={taskScheduleKind}
+              onChange={event => setTaskScheduleKind(event.target.value as ERPScheduleKind)}
+              className="w-full min-w-0 bg-muted rounded-xl px-3 py-3 text-sm text-foreground outline-none"
+            >
+              {(Object.keys(SCHEDULE_KIND_LABELS) as ERPScheduleKind[]).map(kind => (
+                <option key={kind} value={kind}>{SCHEDULE_KIND_LABELS[kind]}</option>
+              ))}
+            </select>
+          </div>
+          {/* "…den sonra" and "…arasında" need the second anchor; the rest are a single date. */}
+          {taskScheduleStartNeeded && (
+            <label className="block">
+              <span className="text-[11px] text-muted-foreground">Başlangıç tarihi</span>
+              <input
+                type="datetime-local"
+                value={taskStartsLocal}
+                onChange={event => setTaskStartsLocal(event.target.value)}
+                className="mt-1 w-full min-w-0 bg-muted rounded-xl px-2 py-3 text-sm text-foreground outline-none"
+              />
+            </label>
+          )}
+          <label className="block">
+            <span className="text-[11px] text-muted-foreground">
+              {taskScheduleKind === "after" ? "Termin tarihi (opsiyonel)" : "Termin tarihi"}
+            </span>
             <input
               type="datetime-local"
               value={taskDeadlineLocal}
               onChange={event => setTaskDeadlineLocal(event.target.value)}
-              className="w-full min-w-0 bg-muted rounded-xl px-2 py-3 text-sm text-foreground outline-none"
+              className="mt-1 w-full min-w-0 bg-muted rounded-xl px-2 py-3 text-sm text-foreground outline-none"
             />
-          </div>
-          {taskDeadlineLocal && (
+          </label>
+          {(taskDeadlineLocal || taskStartsLocal) && (
             <p className="text-[11px] text-muted-foreground">
-              Teslim süresi: {formatDate(taskDeadlineIso)} · {deadlineRemainingLabel(taskDeadlineIso)}
+              {scheduleSummary(taskScheduleKind, taskStartsIso, taskDeadlineIso, formatDate)}
             </p>
           )}
         </Card>
@@ -2577,7 +2614,14 @@ function ERPTab({
                 {[
                   { label: "Atanan", value: taskAssigneeName(task, overview), icon: User },
                   { label: "Öncelik", value: taskPriorityLabel(task.priority), icon: Flag },
-                  { label: "Deadline", value: formatDate(task.deadline_at), icon: CalendarDays },
+                  // A bare date hides the intent — "12 Ağustos" reads differently for "…den sonra"
+                  // than for "…e kadar" — so the row says it the way it was entered.
+                  {
+                    label: "Zamanlama",
+                    value: scheduleSummary(
+                      task.schedule_kind, task.starts_at ?? null, task.deadline_at, formatDate),
+                    icon: CalendarDays,
+                  },
                   { label: "Kalan Süre", value: deadlineRemainingLabel(task.deadline_at), icon: Clock },
                   { label: "Belge", value: `${taskDocumentCount(task, overview)} bağlı belge`, icon: Paperclip },
                   { label: "Oluşturulma", value: formatDate(task.created_at), icon: Clock },

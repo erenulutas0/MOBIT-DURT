@@ -15,6 +15,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.ErrorResponse;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -155,6 +157,21 @@ public class GlobalExceptionHandler {
     ) {
         log.warn("Rejected unreadable body method={} path={}", request.getMethod(), request.getRequestURI());
         return response(HttpStatus.BAD_REQUEST, "Malformed request body", request, Map.of());
+    }
+
+    /**
+     * Normal end-of-life for a live stream, not a fault. The notification/message SSE emitters have
+     * a 30-minute timeout, and a phone that backgrounds or loses signal drops the connection long
+     * before that — both surface here. Logged at DEBUG: these were a steady share of the "error
+     * storm", and treating an expected disconnect as a server error hides the real ones.
+     */
+    @ExceptionHandler({AsyncRequestTimeoutException.class, AsyncRequestNotUsableException.class})
+    ResponseEntity<ApiError> handleStreamEnded(Exception exception, HttpServletRequest request) {
+        log.debug("Stream ended method={} path={} reason={}",
+                request.getMethod(), request.getRequestURI(), exception.getMessage());
+        // The response is usually already committed by now, so the body is moot; the point is to
+        // keep this out of the error log.
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

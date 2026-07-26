@@ -39,6 +39,14 @@ public class ErpTask {
     @Column(name = "deadline_at")
     private Instant deadlineAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "schedule_kind", nullable = false, length = 16)
+    private TaskScheduleKind scheduleKind = TaskScheduleKind.AT;
+
+    /** Second anchor: "not before" for AFTER, window opening for BETWEEN; null for the rest. */
+    @Column(name = "starts_at")
+    private Instant startsAt;
+
     @Column(name = "completed_at")
     private Instant completedAt;
 
@@ -83,6 +91,29 @@ public class ErpTask {
         return task;
     }
 
+    /**
+     * How this task's dates should be read. deadlineAt always means "must be done by", so the
+     * due-soon and overdue ladders behave identically whichever kind is chosen; startsAt only adds
+     * the "not before" end. Rejects combinations that would be meaningless rather than silently
+     * storing them — a window with no opening, or an opening that falls after its own deadline.
+     */
+    public void schedule(TaskScheduleKind kind, Instant startsAt, Instant deadlineAt) {
+        TaskScheduleKind resolved = kind == null ? TaskScheduleKind.AT : kind;
+        if (resolved.isStartRequired() && startsAt == null) {
+            throw new IllegalArgumentException("Bu zamanlama türü için başlangıç tarihi gerekli");
+        }
+        if (resolved.isDeadlineRequired() && deadlineAt == null) {
+            throw new IllegalArgumentException("Bu zamanlama türü için termin tarihi gerekli");
+        }
+        Instant resolvedStart = resolved.ignoresStart() ? null : startsAt;
+        if (resolvedStart != null && deadlineAt != null && resolvedStart.isAfter(deadlineAt)) {
+            throw new IllegalArgumentException("Başlangıç tarihi terminden sonra olamaz");
+        }
+        this.scheduleKind = resolved;
+        this.startsAt = resolvedStart;
+        this.deadlineAt = deadlineAt;
+    }
+
     public static ErpTask fromWorkflowTemplate(
             String title,
             String description,
@@ -119,13 +150,25 @@ public class ErpTask {
     }
 
     public void edit(String title, String description, TaskPriority priority, Instant deadlineAt, Instant now) {
+        edit(title, description, priority, scheduleKind, startsAt, deadlineAt, now);
+    }
+
+    public void edit(
+            String title,
+            String description,
+            TaskPriority priority,
+            TaskScheduleKind scheduleKind,
+            Instant startsAt,
+            Instant deadlineAt,
+            Instant now
+    ) {
         if (status == TaskStatus.DONE || status == TaskStatus.CANCELLED) {
             throw new IllegalStateException("Closed tasks cannot be edited");
         }
         this.title = title;
         this.description = description;
         this.priority = priority;
-        this.deadlineAt = deadlineAt;
+        schedule(scheduleKind, startsAt, deadlineAt);
         if (status == TaskStatus.OVERDUE && (deadlineAt == null || deadlineAt.isAfter(now))) {
             status = TaskStatus.TODO;
         }
@@ -202,6 +245,14 @@ public class ErpTask {
 
     public TaskPriority getPriority() {
         return priority;
+    }
+
+    public TaskScheduleKind getScheduleKind() {
+        return scheduleKind;
+    }
+
+    public Instant getStartsAt() {
+        return startsAt;
     }
 
     public Instant getDeadlineAt() {

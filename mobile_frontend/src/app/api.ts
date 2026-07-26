@@ -36,6 +36,24 @@ export type ERPTeam = {
   created_at: string;
 };
 
+/**
+ * How a task's dates should be read. Tender work is rarely "due at this exact instant" — it is
+ * expressed relative to another date. deadline_at always means "must be done by", so the deadline
+ * reminders behave the same whichever of these is picked.
+ */
+export type ERPScheduleKind = "at" | "before" | "until" | "after" | "between";
+
+export const SCHEDULE_KIND_LABELS: Record<ERPScheduleKind, string> = {
+  at: "Belirli tarihte",
+  before: "…den önce",
+  until: "…e kadar",
+  after: "…den sonra",
+  between: "…arasında",
+};
+
+/** Kinds that need a start anchor as well as (or instead of) a due date. */
+export const SCHEDULE_KINDS_WITH_START: ERPScheduleKind[] = ["after", "between"];
+
 export type ERPTask = {
   id: number;
   title: string;
@@ -44,6 +62,9 @@ export type ERPTask = {
   status: "todo" | "in_progress" | "blocked" | "pending_approval" | "done" | "overdue" | "cancelled" | string;
   priority: "low" | "normal" | "high" | "urgent" | string;
   deadline_at: string | null;
+  // How the two dates read: "at" (plain due date), "before"/"until", "after", "between".
+  schedule_kind?: ERPScheduleKind;
+  starts_at?: string | null;
   completed_at: string | null;
   parent_task_id?: number | null;
   document_group_id?: number | null;
@@ -578,6 +599,8 @@ export async function createERPTask(payload: {
   assigneeTitles?: Record<number, string>;
   priority?: "low" | "normal" | "high" | "urgent" | string;
   deadlineAt?: string | null;
+  scheduleKind?: ERPScheduleKind;
+  startsAt?: string | null;
   parentTaskId?: number | null;
 }): Promise<ERPTask> {
   const response = await apiFetch("/erp/tasks", {
@@ -592,6 +615,8 @@ export async function createERPTask(payload: {
       assignee_titles: payload.assigneeTitles || {},
       priority: payload.priority || "normal",
       deadline_at: payload.deadlineAt || null,
+      schedule_kind: payload.scheduleKind || "at",
+      starts_at: payload.startsAt || null,
       parent_task_id: payload.parentTaskId || null,
     }),
   });
@@ -631,6 +656,8 @@ export interface ERPTaskEditPayload {
   description?: string;
   priority?: string;
   deadline_at?: string;
+  schedule_kind?: ERPScheduleKind;
+  starts_at?: string | null;
   clear_deadline?: boolean;
   status?: string;
 }

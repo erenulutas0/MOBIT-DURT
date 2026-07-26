@@ -549,6 +549,9 @@ describe("mobil API istemcisi", () => {
       assignee_titles: {},
       priority: "high",
       deadline_at: "2026-07-10T09:00:00Z",
+      // Defaults to a plain due date, so tasks created before flexible scheduling read the same.
+      schedule_kind: "at",
+      starts_at: null,
       parent_task_id: null,
     });
   });

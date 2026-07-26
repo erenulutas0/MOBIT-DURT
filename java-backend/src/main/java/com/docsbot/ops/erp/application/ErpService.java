@@ -129,6 +129,8 @@ public class ErpService {
             java.util.Map<Long, String> assigneeTitles,
             String priority,
             Instant deadlineAt,
+            String scheduleKind,
+            Instant startsAt,
             Long parentTaskId
     ) {
         return taskService.createTask(
@@ -141,6 +143,8 @@ public class ErpService {
                 assigneeTitles,
                 priority,
                 deadlineAt,
+                scheduleKind,
+                startsAt,
                 parentTaskId);
     }
 
@@ -172,6 +176,8 @@ public class ErpService {
             String priority,
             Instant deadlineAt,
             boolean clearDeadline,
+            String scheduleKind,
+            Instant startsAt,
             String status
     ) {
         return taskService.updateTaskDetails(
@@ -182,6 +188,8 @@ public class ErpService {
                 priority,
                 deadlineAt,
                 clearDeadline,
+                scheduleKind,
+                startsAt,
                 status);
     }
 

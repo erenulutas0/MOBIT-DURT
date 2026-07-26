@@ -323,6 +323,8 @@ public class ErpController {
                 request.assigneeTitles(),
                 request.priority(),
                 request.deadlineAt(),
+                request.scheduleKind(),
+                request.startsAt(),
                 request.parentTaskId()));
     }
 
@@ -382,6 +384,8 @@ public class ErpController {
                     request.priority(),
                     request.deadlineAt(),
                     Boolean.TRUE.equals(request.clearDeadline()),
+                    request.scheduleKind(),
+                    request.startsAt(),
                     request.status()));
         }
         if (request.status() == null || request.status().isBlank()) {
@@ -699,6 +703,9 @@ public class ErpController {
             @JsonProperty("assignee_titles") java.util.Map<Long, String> assigneeTitles,
             String priority,
             @JsonProperty("deadline_at") Instant deadlineAt,
+            // "…den sonra / …den önce / …e kadar / …arasında" — how the two dates read.
+            @JsonProperty("schedule_kind") String scheduleKind,
+            @JsonProperty("starts_at") Instant startsAt,
             @JsonProperty("parent_task_id") Long parentTaskId
     ) {
         CreateTaskRequest {
@@ -725,13 +732,17 @@ public class ErpController {
             @Size(max = 10_000) String description,
             String priority,
             @JsonProperty("deadline_at") Instant deadlineAt,
-            @JsonProperty("clear_deadline") Boolean clearDeadline
+            @JsonProperty("clear_deadline") Boolean clearDeadline,
+            @JsonProperty("schedule_kind") String scheduleKind,
+            @JsonProperty("starts_at") Instant startsAt
     ) {
         boolean hasEditFields() {
             return title != null
                     || description != null
                     || priority != null
                     || deadlineAt != null
+                    || scheduleKind != null
+                    || startsAt != null
                     || Boolean.TRUE.equals(clearDeadline);
         }
     }

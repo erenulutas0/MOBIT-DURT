@@ -200,6 +200,37 @@ export function deadlineRemainingLabel(value: string | null | undefined) {
   return diff < 0 ? `${detail} gecikti` : `${detail} kaldı`;
 }
 
+/**
+ * Reads a task's dates back the way they were entered. A bare date tells you nothing about intent —
+ * "12 Ağustos" could mean start then, finish by then, or the near end of a window — so the phrasing
+ * carries the kind. Used on the create form and on the task itself so both say the same thing.
+ */
+export function scheduleSummary(
+  kind: string | null | undefined,
+  startsAt: string | null,
+  deadlineAt: string | null,
+  // Takes the caller's date formatter so the phrasing matches the rest of that screen.
+  formatDate: (value: string | null) => string,
+): string {
+  const start = startsAt ? formatDate(startsAt) : "";
+  const due = deadlineAt ? formatDate(deadlineAt) : "";
+  switch (kind) {
+    case "after":
+      if (!start) return "Başlangıç tarihi belirlenmedi";
+      return due ? `${start} sonrası · en geç ${due}` : `${start} tarihinden sonra`;
+    case "between":
+      if (!start || !due) return "Tarih aralığı eksik";
+      return `${start} — ${due} arasında`;
+    case "before":
+      return due ? `${due} tarihinden önce` : "Termin belirlenmedi";
+    case "until":
+      return due ? `${due} tarihine kadar` : "Termin belirlenmedi";
+    default:
+      if (!due) return "Zaman belirlenmedi";
+      return `Teslim: ${due} · ${deadlineRemainingLabel(deadlineAt)}`;
+  }
+}
+
 export function initials(value: string | null | undefined) {
   return (value || "K")
     .split(/\s+/)

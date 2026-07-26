@@ -53,6 +53,8 @@ public class TenderTaskService {
                 java.util.Map.of(),
                 priority,
                 deadlineAt,
+                null,
+                null,
                 null);
         ErpTaskDocument taskDocument = erpService.linkTenderDocument(
                 principal,

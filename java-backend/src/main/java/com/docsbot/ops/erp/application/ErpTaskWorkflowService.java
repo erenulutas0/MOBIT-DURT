@@ -24,6 +24,7 @@ import com.docsbot.ops.erp.domain.ErpTaskDependency;
 import com.docsbot.ops.erp.domain.ErpWorkflowTemplate;
 import com.docsbot.ops.erp.domain.ErpWorkflowTemplateAssignment;
 import com.docsbot.ops.erp.domain.TaskPriority;
+import com.docsbot.ops.erp.domain.TaskScheduleKind;
 import com.docsbot.ops.erp.domain.TaskStatus;
 import com.docsbot.ops.erp.infrastructure.ErpTaskAssignmentRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTaskCommentRepository;
@@ -106,6 +107,8 @@ class ErpTaskWorkflowService {
             java.util.Map<Long, String> assigneeTitles,
             String priority,
             Instant deadlineAt,
+            String scheduleKind,
+            Instant startsAt,
             Long parentTaskId
     ) {
         ErpValidation.requireAdmin(principal);
@@ -136,6 +139,16 @@ class ErpTaskWorkflowService {
                 parsedPriority,
                 deadlineAt,
                 now);
+        try {
+            newTask.schedule(
+                    scheduleKind == null
+                            ? TaskScheduleKind.AT
+                            : ErpValidation.parse(TaskScheduleKind.class, scheduleKind, "Unknown schedule kind"),
+                    startsAt,
+                    deadlineAt);
+        } catch (IllegalArgumentException exception) {
+            throw new ErpExceptions.BadRequest(exception.getMessage());
+        }
         if (parentTaskId != null) {
             newTask.assignParent(parentTaskId);
         }
@@ -405,6 +418,8 @@ class ErpTaskWorkflowService {
             String priority,
             Instant deadlineAt,
             boolean clearDeadline,
+            String scheduleKind,
+            Instant startsAt,
             String status
     ) {
         ErpValidation.requireAdmin(principal);
@@ -423,6 +438,12 @@ class ErpTaskWorkflowService {
                 ? task.getPriority()
                 : ErpValidation.parse(TaskPriority.class, priority, "Unknown task priority");
         Instant newDeadline = clearDeadline ? null : (deadlineAt != null ? deadlineAt : task.getDeadlineAt());
+        TaskScheduleKind newScheduleKind = scheduleKind == null
+                ? task.getScheduleKind()
+                : ErpValidation.parse(TaskScheduleKind.class, scheduleKind, "Unknown schedule kind");
+        Instant newStartsAt = clearDeadline && newScheduleKind == TaskScheduleKind.AT
+                ? null
+                : (startsAt != null ? startsAt : task.getStartsAt());
 
         List<String> changedFields = new ArrayList<>();
         if (!newTitle.equals(task.getTitle())) {
@@ -438,12 +459,17 @@ class ErpTaskWorkflowService {
         if (deadlineChanged) {
             changedFields.add("deadline");
         }
+        if (newScheduleKind != task.getScheduleKind()
+                || !java.util.Objects.equals(newStartsAt, task.getStartsAt())) {
+            changedFields.add("schedule");
+        }
 
         if (!changedFields.isEmpty()) {
             Instant now = clock.instant();
             try {
-                task.edit(newTitle, newDescription, newPriority, newDeadline, now);
-            } catch (IllegalStateException exception) {
+                task.edit(newTitle, newDescription, newPriority,
+                        newScheduleKind, newStartsAt, newDeadline, now);
+            } catch (IllegalStateException | IllegalArgumentException exception) {
                 throw new ErpExceptions.BadRequest(exception.getMessage());
             }
             if (deadlineChanged) {
