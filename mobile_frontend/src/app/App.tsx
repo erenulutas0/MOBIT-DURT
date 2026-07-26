@@ -1046,6 +1046,13 @@ function ERPTab({
 
   const navTo = (s: ERPScreen) => setScreen(s);
   const back = () => navTo("overview");
+
+  // Opening the bell means the user is looking at the list, so the tray copies are redundant.
+  // Leaving them there is exactly what made the launcher badge look stuck: the items had been
+  // read in-app, but Android was still counting the undismissed rows behind them.
+  useEffect(() => {
+    if (screen === "notifications") clearDeliveredNativeNotifications();
+  }, [screen]);
   const refresh = async () => {
     setLoading(true);
     setError("");

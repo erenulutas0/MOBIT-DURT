@@ -49,7 +49,10 @@ class FcmMobilePushGatewayTest {
         wireMock.verify(postRequestedFor(urlPathMatching(".*"))
                 // Same task + type → the newer alert REPLACES the older one instead of stacking.
                 .withRequestBody(containing("\"tag\":\"task_due_soon:7\""))
-                .withRequestBody(containing("\"notification_count\"")));
+                // The badge is Android's to count from the tray: an explicit notification_count is
+                // stamped once and never revised, so it survives the user dismissing the rows.
+                .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.notContaining(
+                        "notification_count")));
     }
 
     @Test

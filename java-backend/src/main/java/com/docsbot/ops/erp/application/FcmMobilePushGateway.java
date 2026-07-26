@@ -7,7 +7,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
 
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Service;
 import com.docsbot.ops.common.config.DocsBotProperties;
 import com.docsbot.ops.erp.domain.ErpMobilePushToken;
 import com.docsbot.ops.erp.domain.ErpNotification;
-import com.docsbot.ops.erp.infrastructure.ErpNotificationRepository;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -27,19 +25,16 @@ public class FcmMobilePushGateway implements MobilePushGateway {
     private final FcmAccessTokenProvider accessTokenProvider;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
-    /** Optional: absent in the unit tests, which build the gateway directly. */
-    private final ObjectProvider<ErpNotificationRepository> notificationRepository;
 
     @Autowired
     public FcmMobilePushGateway(
             DocsBotProperties properties,
             FcmAccessTokenProvider accessTokenProvider,
-            ObjectMapper objectMapper,
-            ObjectProvider<ErpNotificationRepository> notificationRepository
+            ObjectMapper objectMapper
     ) {
         this(properties, accessTokenProvider, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
-                .build(), notificationRepository);
+                .build());
     }
 
     FcmMobilePushGateway(
@@ -48,21 +43,10 @@ public class FcmMobilePushGateway implements MobilePushGateway {
             ObjectMapper objectMapper,
             HttpClient httpClient
     ) {
-        this(properties, accessTokenProvider, objectMapper, httpClient, null);
-    }
-
-    FcmMobilePushGateway(
-            DocsBotProperties properties,
-            FcmAccessTokenProvider accessTokenProvider,
-            ObjectMapper objectMapper,
-            HttpClient httpClient,
-            ObjectProvider<ErpNotificationRepository> notificationRepository
-    ) {
         this.properties = properties;
         this.accessTokenProvider = accessTokenProvider;
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
-        this.notificationRepository = notificationRepository;
     }
 
     @Override
@@ -75,25 +59,16 @@ public class FcmMobilePushGateway implements MobilePushGateway {
      * stacking beside it. Scoped per task so a task's escalating deadline alerts stay a single row,
      * and per type otherwise so each recurring digest keeps exactly one. The full history is always
      * in the in-app list; the tray only needs to say "there is something to look at".
+     *
+     * <p>The launcher badge is deliberately left to Android, which counts undismissed tray rows.
+     * Sending an explicit notification_count was worse: the number is stamped on each notification
+     * and never revised, so dismissing eleven of twelve left the last one still claiming "12" — a
+     * badge that would not go down no matter what the user did.
      */
     private static String trayTag(ErpNotification notification) {
         return notification.getTaskId() == null
                 ? notification.getType()
                 : notification.getType() + ":" + notification.getTaskId();
-    }
-
-    /** Best-effort unread count for the badge; 0 rather than a wrong number if it can't be read. */
-    private int unreadCountFor(Long recipientId) {
-        ErpNotificationRepository repository =
-                notificationRepository == null ? null : notificationRepository.getIfAvailable();
-        if (repository == null || recipientId == null) {
-            return 0;
-        }
-        try {
-            return (int) Math.min(Integer.MAX_VALUE, repository.countByUserIdAndReadAtIsNull(recipientId));
-        } catch (RuntimeException ignored) {
-            return 0;
-        }
     }
 
     @Override
@@ -118,12 +93,7 @@ public class FcmMobilePushGateway implements MobilePushGateway {
                                             // they pile up until something clears them — which is how a
                                             // phone ended up sitting on 49 delivered notifications. A tag
                                             // makes a newer alert REPLACE the one it supersedes.
-                                            "tag", trayTag(notification),
-                                            // Owns the launcher badge. Left unset, Android derives the
-                                            // badge from the number of undismissed tray rows, so it kept
-                                            // showing a stale count long after the items were read
-                                            // in-app. Sending the real unread count keeps them in sync.
-                                            "notification_count", unreadCountFor(notification.getUserId()))),
+                                            "tag", trayTag(notification))),
                             "data", Map.of(
                                     "notification_id", String.valueOf(notification.getId()),
                                     "task_id", notification.getTaskId() == null ? "" : String.valueOf(notification.getTaskId()),
