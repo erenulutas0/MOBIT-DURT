@@ -50,14 +50,49 @@ class DeadlineServiceTest {
 
     @Test
     void dueSoonFiresOnlyTheNearestCrossedThresholdWithMatchingUrgency() {
-        assertDueSoonAlert(Duration.ofHours(30), "48h", "NORMAL");
-        assertDueSoonAlert(Duration.ofHours(10), "12h", "HIGH");
-        assertDueSoonAlert(Duration.ofMinutes(30), "1h", "CRITICAL");
+        assertDueSoonAlert(Duration.ofHours(30), "48h", "NORMAL", "2 gün");
+        assertDueSoonAlert(Duration.ofHours(10), "12h", "HIGH", "12 saat");
+        assertDueSoonAlert(Duration.ofMinutes(30), "1h", "CRITICAL", "1 saat");
     }
 
     @Test
     void dueSoonFiresExactlyOnThresholdBoundary() {
-        assertDueSoonAlert(Duration.ofHours(24), "24h", "HIGH");
+        assertDueSoonAlert(Duration.ofHours(24), "24h", "HIGH", "1 gün");
+    }
+
+    /**
+     * The admin sees every task in the company, so a per-task alert meant one buzz per task per
+     * threshold — a dozen tasks crossing 72h together filled the phone in a single scan.
+     */
+    @Test
+    void theAdminGetsOneCombinedDigestRatherThanOneAlertPerTask() {
+        ErpTask first = task(1L, "Ankara tasima", NOW.plus(Duration.ofHours(10)));
+        ErpTask second = task(2L, "Getac Jim e yazi gonderme", NOW.plus(Duration.ofHours(10)));
+        ErpTask third = task(3L, "Test gorevi", NOW.plus(Duration.ofHours(10)));
+        when(taskRepository.findAllByDeadlineAtBetweenAndStatusIn(eq(NOW), eq(NOW.plus(Duration.ofHours(72))), any()))
+                .thenReturn(List.of(first, second, third));
+
+        service.processDueSoonTasks();
+
+        ArgumentCaptor<String> titleCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(notificationService, org.mockito.Mockito.times(1)).notifyAdmin(
+                eq("manager_due_soon_digest"),
+                titleCaptor.capture(),
+                bodyCaptor.capture(),
+                isNull(),
+                eq("NORMAL"),
+                anyString(),
+                eq(NOW));
+        assertThat(titleCaptor.getValue()).isEqualTo("Yaklaşan terminler (3)");
+        assertThat(bodyCaptor.getValue())
+                .contains("Ankara tasima")
+                .contains("Getac Jim e yazi gonderme")
+                .contains("Test gorevi");
+        // Each assignee still gets their own task named — that targeting is the point.
+        verify(notificationService, org.mockito.Mockito.times(3)).notifyUsers(
+                anyCollection(), eq("task_due_soon"), anyString(), anyString(),
+                any(), anyString(), anyString(), any());
     }
 
     @Test
@@ -96,7 +131,11 @@ class DeadlineServiceTest {
         assertThat(service.processWeeklyAdminDigest()).isZero();
     }
 
-    private void assertDueSoonAlert(Duration remaining, String expectedThresholdLabel, String expectedUrgency) {
+    private void assertDueSoonAlert(
+            Duration remaining,
+            String expectedThresholdLabel,
+            String expectedUrgency,
+            String expectedRemainingLabel) {
         org.mockito.Mockito.reset(taskRepository, notificationService);
         ErpTask task = task(7L, "Example task", NOW.plus(remaining));
         when(taskRepository.findAllByDeadlineAtBetweenAndStatusIn(eq(NOW), eq(NOW.plus(Duration.ofHours(72))), any()))
@@ -117,13 +156,15 @@ class DeadlineServiceTest {
                 eq(expectedUrgency),
                 eq("task_due_soon:7:" + expectedThresholdLabel),
                 eq(NOW));
+        // The admin's copy is a combined digest with no task id, so a scan that touches many tasks
+        // is a single alert rather than one per task.
         verify(notificationService).notifyAdmin(
                 eq("manager_due_soon_digest"),
-                eq("Görev termini yaklaşıyor"),
-                eq("Example task"),
-                eq(7L),
+                eq("Yaklaşan terminler (1)"),
+                eq("• Example task (" + expectedRemainingLabel + " kaldı)"),
+                isNull(),
                 eq("NORMAL"),
-                eq("manager_due_soon:7:" + expectedThresholdLabel),
+                anyString(),
                 eq(NOW));
     }
 

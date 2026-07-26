@@ -34,6 +34,7 @@ public class DeadlineService {
             Set.of(TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED);
     private static final Duration WEEKLY_DIGEST_WINDOW = Duration.ofDays(7);
     private static final int WEEKLY_DIGEST_MAX_TITLES = 5;
+    private static final int ADMIN_DIGEST_MAX_LINES = 8;
 
     private final ErpTaskRepository taskRepository;
     private final ErpTaskAssignmentRepository assignmentRepository;
@@ -115,6 +116,8 @@ public class DeadlineService {
                 now,
                 OVERDUE_CANDIDATE_STATUSES);
         Map<Long, Set<Long>> assignees = assignedUserIdsByTask(candidates);
+        List<String> digestLines = new ArrayList<>();
+        StringBuilder digestKeySource = new StringBuilder();
         int changed = 0;
         for (ErpTask task : candidates) {
             if (!task.markOverdue(now)) {
@@ -130,14 +133,9 @@ public class DeadlineService {
                     "CRITICAL",
                     "task_overdue:" + task.getId(),
                     now);
-            notificationService.notifyAdmin(
-                    "manager_overdue_digest",
-                    "Görev termini aşıldı",
-                    task.getTitle(),
-                    task.getId(),
-                    "HIGH",
-                    "manager_overdue:" + task.getId(),
-                    now);
+            // Admin side is collected into one digest below — see processDueSoonTasks.
+            digestLines.add("• " + task.getTitle());
+            digestKeySource.append(task.getId()).append(';');
             activityRecorder.recordActor(
                     "system",
                     null,
@@ -148,6 +146,13 @@ public class DeadlineService {
                     task.getId(),
                     "deadline_at=" + task.getDeadlineAt());
         }
+        notifyAdminDigest(
+                "manager_overdue_digest",
+                "Termini aşılan görevler",
+                digestLines,
+                "HIGH",
+                "manager_overdue:" + digestKeyHash(digestKeySource.toString()),
+                now);
         return changed;
     }
 
@@ -248,6 +253,8 @@ public class DeadlineService {
                 now.plus(widestThreshold),
                 OVERDUE_CANDIDATE_STATUSES);
         Map<Long, Set<Long>> assignees = assignedUserIdsByTask(candidates);
+        List<String> digestLines = new ArrayList<>();
+        StringBuilder digestKeySource = new StringBuilder();
         int changed = 0;
         for (ErpTask task : candidates) {
             Duration remaining = Duration.between(now, task.getDeadlineAt());
@@ -266,19 +273,59 @@ public class DeadlineService {
                     urgency,
                     "task_due_soon:" + task.getId() + ":" + thresholdHours + "h",
                     now);
-            created += notificationService.notifyAdmin(
-                    "manager_due_soon_digest",
-                    "Görev termini yaklaşıyor",
-                    task.getTitle(),
-                    task.getId(),
-                    "NORMAL",
-                    "manager_due_soon:" + task.getId() + ":" + thresholdHours + "h",
-                    now);
             if (created > 0) {
                 changed++;
             }
+            // The admin sees EVERY task in the company, so a per-task alert here meant one buzz per
+            // task per threshold — a dozen tasks crossing 72h together filled the phone in one scan.
+            // Collected into a single digest below instead.
+            digestLines.add("• " + task.getTitle() + " (" + humanizeHours(thresholdHours) + " kaldı)");
+            digestKeySource.append(task.getId()).append(':').append(thresholdHours).append(';');
         }
+        notifyAdminDigest(
+                "manager_due_soon_digest",
+                "Yaklaşan terminler",
+                digestLines,
+                "NORMAL",
+                "manager_due_soon:" + digestKeyHash(digestKeySource.toString()),
+                now);
         return changed;
+    }
+
+    /** "72 saat" reads worse than "3 gün" for the wider thresholds. */
+    private static String humanizeHours(long hours) {
+        return hours >= 24 && hours % 24 == 0 ? (hours / 24) + " gün" : hours + " saat";
+    }
+
+    /**
+     * One combined admin alert per scan instead of one per task. The event key hashes the exact set
+     * it covers, so an unchanged scan is a no-op and any genuinely new crossing produces a fresh
+     * digest. Long lists are capped — the point is "look at the app", not to reproduce it.
+     */
+    private void notifyAdminDigest(
+            String type,
+            String titlePrefix,
+            List<String> lines,
+            String priority,
+            String eventKey,
+            Instant now
+    ) {
+        if (lines.isEmpty()) {
+            return;
+        }
+        List<String> shown = lines.size() > ADMIN_DIGEST_MAX_LINES
+                ? lines.subList(0, ADMIN_DIGEST_MAX_LINES)
+                : lines;
+        String body = String.join("\n", shown)
+                + (lines.size() > shown.size() ? "\n• ve " + (lines.size() - shown.size()) + " görev daha" : "");
+        notificationService.notifyAdmin(
+                type,
+                titlePrefix + " (" + lines.size() + ")",
+                body,
+                null,
+                priority,
+                eventKey,
+                now);
     }
 
     @Scheduled(cron = "${docsbot.admin-weekly-digest-cron:0 0 7 * * MON}",
