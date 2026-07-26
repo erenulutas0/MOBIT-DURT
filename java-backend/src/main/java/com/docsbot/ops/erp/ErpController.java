@@ -163,6 +163,43 @@ public class ErpController {
         erpService.requestAccountDeletion(ErpPrincipal.from(authentication));
     }
 
+    /**
+     * Admin-issued password reset for a locked-out employee. Returns nothing — resetting someone
+     * else's password must never hand the admin a session as that user.
+     */
+    @PatchMapping("/users/{userId}/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void resetUserPassword(
+            JwtAuthenticationToken authentication,
+            @PathVariable long userId,
+            @Valid @RequestBody ResetPasswordRequest request
+    ) {
+        erpService.resetUserPassword(ErpPrincipal.from(authentication), userId, request.password());
+    }
+
+    /** Self-service change; requires the current password so a stolen session can't take over. */
+    @PatchMapping("/me/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void changeOwnPassword(
+            JwtAuthenticationToken authentication,
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        erpService.changeOwnPassword(
+                ErpPrincipal.from(authentication),
+                request.currentPassword(),
+                request.newPassword());
+    }
+
+    // Same minimum as registration — a reset must not become a way to weaken an account.
+    record ResetPasswordRequest(@NotBlank @Size(min = 10, max = 128) String password) {
+    }
+
+    record ChangePasswordRequest(
+            @NotBlank @Size(max = 128) @JsonProperty("current_password") String currentPassword,
+            @NotBlank @Size(min = 10, max = 128) @JsonProperty("new_password") String newPassword
+    ) {
+    }
+
     @PostMapping("/users/{userId}/presence")
     ErpDtos.UserResponse updatePresence(
             JwtAuthenticationToken authentication,

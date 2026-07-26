@@ -10,6 +10,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.docsbot.ops.auth.application.EmployeeAuthenticationService;
 import com.docsbot.ops.auth.application.RefreshTokenService;
 import com.docsbot.ops.auth.domain.ErpUser;
 import com.docsbot.ops.auth.domain.UserRole;
@@ -25,6 +26,7 @@ class ErpUserService {
     private final ErpActivityRecorder activityRecorder;
     private final ErpTaskAccessService accessService;
     private final RefreshTokenService refreshTokenService;
+    private final EmployeeAuthenticationService authenticationService;
     private final Clock clock;
 
     ErpUserService(
@@ -32,13 +34,15 @@ class ErpUserService {
             NotificationService notificationService,
             ErpActivityRecorder activityRecorder,
             ErpTaskAccessService accessService,
-            RefreshTokenService refreshTokenService
+            RefreshTokenService refreshTokenService,
+            EmployeeAuthenticationService authenticationService
     ) {
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.activityRecorder = activityRecorder;
         this.accessService = accessService;
         this.refreshTokenService = refreshTokenService;
+        this.authenticationService = authenticationService;
         this.clock = Clock.systemUTC();
     }
 
@@ -106,6 +110,42 @@ class ErpUserService {
                 null,
                 "title=" + (user.getTitle() == null ? "" : user.getTitle()));
         return user;
+    }
+
+    /**
+     * Admin-issued password reset — the way back in for an employee who forgot theirs. Before this
+     * existed a forgotten password meant a permanently locked-out account: there was no self-service
+     * reset, no admin reset, and no way for a signed-in user to change their own password.
+     */
+    @Transactional
+    void resetPassword(ErpPrincipal principal, long userId, String newPassword) {
+        ErpValidation.requireAdmin(principal);
+        ErpUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("User not found"));
+        authenticationService.resetPassword(userId, newPassword);
+        activityRecorder.record(
+                principal,
+                "USER_PASSWORD_RESET",
+                "USER",
+                String.valueOf(userId),
+                null,
+                // Never the password itself, nor anything derived from it.
+                "target=" + (user.getUsername() == null ? user.getId() : user.getUsername()));
+    }
+
+    /** The owner replaces their own password; requires the current one. */
+    @Transactional
+    void changeOwnPassword(ErpPrincipal principal, String currentPassword, String newPassword) {
+        if (principal.admin()) {
+            // The admin account authenticates against configured credentials, not an erp_users row,
+            // so there is no stored hash here to rotate.
+            throw new ErpExceptions.BadRequest(
+                    "Yönetici şifresi uygulamadan değiştirilemez, sunucu ayarlarından güncellenir.");
+        }
+        long userId = principal.requireUserId();
+        authenticationService.changeOwnPassword(userId, currentPassword, newPassword);
+        activityRecorder.record(
+                principal, "USER_PASSWORD_CHANGED", "USER", String.valueOf(userId), null, "self");
     }
 
     @Transactional

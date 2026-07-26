@@ -51,6 +51,8 @@ import {
   getERPUsers,
   deleteERPUser,
   updateERPUserTitle,
+  resetERPUserPassword,
+  changeOwnERPPassword,
   requestERPTaskCompletion,
   approveERPTaskCompletion,
   rejectERPTaskCompletion,
@@ -1618,6 +1620,28 @@ function ERPTab({
     }
   };
 
+  // Recovery path for an employee who forgot their password — before this there was none, and a
+  // forgotten password meant a permanently locked-out account. The admin reads the temporary
+  // password out to its owner, who is then prompted to replace it with one only they know.
+  const resetUserPassword = async (target: ERPUser) => {
+    if (!isAdmin) return;
+    const next = window.prompt(
+      `${target.name} için geçici şifre belirleyin (en az 10 karakter).\n\n`
+      + "Bu şifreyi kendisine iletin; ilk girişinden sonra Ayarlar'dan kendi şifresini belirlemelidir.",
+      "");
+    if (next === null) return;
+    if (next.trim().length < 10) {
+      window.alert("Şifre en az 10 karakter olmalı.");
+      return;
+    }
+    try {
+      await resetERPUserPassword(target.id, next.trim());
+      showNotice(`✓ ${target.name} için şifre sıfırlandı.`);
+    } catch (exception) {
+      window.alert(exception instanceof Error ? exception.message : "Şifre sıfırlanamadı.");
+    }
+  };
+
   const rejectAccountRequest = async (requestId: number) => {
     setLoading(true);
     setError("");
@@ -1992,12 +2016,20 @@ function ERPTab({
               </button>
             </div>
             {isAdmin && (
-              <button
-                onClick={() => { const target = profileUser; setProfileUser(null); void editUserTitle(target); }}
-                className="mt-2 w-full py-2.5 rounded-xl bg-blue-500/15 text-xs font-bold text-blue-300 active:scale-[0.98] transition-transform"
-              >
-                ✏️ Ünvanı Düzenle
-              </button>
+              <>
+                <button
+                  onClick={() => { const target = profileUser; setProfileUser(null); void editUserTitle(target); }}
+                  className="mt-2 w-full py-2.5 rounded-xl bg-blue-500/15 text-xs font-bold text-blue-300 active:scale-[0.98] transition-transform"
+                >
+                  ✏️ Ünvanı Düzenle
+                </button>
+                <button
+                  onClick={() => { const target = profileUser; setProfileUser(null); void resetUserPassword(target); }}
+                  className="mt-2 w-full py-2.5 rounded-xl bg-amber-500/15 text-xs font-bold text-amber-300 active:scale-[0.98] transition-transform"
+                >
+                  🔑 Şifresini Sıfırla
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -4341,6 +4373,9 @@ function ProfileTab({
   const [accountDeletionBusy, setAccountDeletionBusy] = useState(false);
   const [accountDeletionMessage, setAccountDeletionMessage] = useState("");
   const [accountDeletionError, setAccountDeletionError] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [profilePhoto, setProfilePhoto] = useState(() => readProfilePhoto(user.id || user.email));
   const [fontScale, setFontScale] = useState(() => loadFontScale());
   const [voiceNudge, setVoiceNudge] = useState(() => isVoiceNudgeEnabled());
@@ -4362,6 +4397,36 @@ function ProfileTab({
   const changeFontScale = (value: number) => {
     setFontScale(value);
     saveFontScale(value);
+  };
+
+  // Prompts rather than a form: the values are credentials, so nothing is held in component state
+  // or re-rendered into the DOM after the call.
+  const changeMyPassword = async () => {
+    setPasswordMessage("");
+    setPasswordError("");
+    const current = window.prompt("Mevcut şifreniz:", "");
+    if (current === null) return;
+    const next = window.prompt("Yeni şifreniz (en az 10 karakter):", "");
+    if (next === null) return;
+    if (next.trim().length < 10) {
+      setPasswordError("Yeni şifre en az 10 karakter olmalı.");
+      return;
+    }
+    const confirmed = window.prompt("Yeni şifrenizi tekrar yazın:", "");
+    if (confirmed === null) return;
+    if (confirmed.trim() !== next.trim()) {
+      setPasswordError("Şifreler eşleşmiyor.");
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      await changeOwnERPPassword(current, next.trim());
+      setPasswordMessage("✓ Şifreniz güncellendi.");
+    } catch (exception) {
+      setPasswordError(exception instanceof Error ? exception.message : "Şifre değiştirilemedi.");
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   const toggleVoiceNudge = () => {
@@ -4567,6 +4632,41 @@ function ProfileTab({
                 </button>
               ))}
             </div>
+          </Card>
+        </div>
+
+        <div>
+          <SectionHeader title="Güvenlik" />
+          <Card className="p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                <Shield className="w-4 h-4 text-amber-300" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">Şifremi değiştir</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Yöneticiniz size geçici bir şifre verdiyse, buradan yalnızca sizin bildiğiniz bir
+                  şifre belirleyin.
+                </p>
+              </div>
+            </div>
+            {passwordMessage && (
+              <p className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-xl px-3 py-2">
+                {passwordMessage}
+              </p>
+            )}
+            {passwordError && (
+              <p className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                {passwordError}
+              </p>
+            )}
+            <button
+              onClick={() => void changeMyPassword()}
+              disabled={passwordSaving}
+              className="w-full py-2.5 rounded-xl bg-amber-500/15 text-xs font-bold text-amber-300 disabled:opacity-50 active:scale-[0.98] transition-transform"
+            >
+              {passwordSaving ? "Değiştiriliyor…" : "🔑 Şifremi Değiştir"}
+            </button>
           </Card>
         </div>
 

@@ -104,6 +104,52 @@ public class EmployeeAuthenticationService {
     }
 
     /**
+     * Admin-issued password reset — the only way back into an account whose password was forgotten.
+     * The new password is a TEMPORARY credential (the admin knows it), so the account is flagged
+     * until the owner replaces it, and they are told in-app that this happened. Deliberately does
+     * NOT return a session: resetting someone else's password must never hand the admin their login.
+     */
+    @Transactional
+    public void resetPassword(long userId, String newPassword) {
+        ErpUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthExceptions.NotFound("Kullanıcı bulunamadı."));
+        user.resetPasswordTo(passwordEncoder.encode(newPassword));
+        auditRecorder.record(
+                subjectOf(user), "EMPLOYEE_PASSWORD_RESET", "ERP_USER", user.getId().toString(), "ADMIN");
+        if (notificationService != null) {
+            notificationService.notifyUsers(
+                    java.util.List.of(user.getId()),
+                    "password_reset",
+                    "Şifreniz sıfırlandı",
+                    "Yöneticiniz size geçici bir şifre verdi. Lütfen Ayarlar'dan kendi şifrenizi belirleyin.",
+                    null,
+                    "HIGH",
+                    // Time-based key: a second reset is a genuinely new event that must alert again.
+                    "password_reset:" + user.getId() + ":" + java.time.Instant.now().toEpochMilli(),
+                    java.time.Instant.now());
+        }
+    }
+
+    /**
+     * The owner replaces their password with one only they know, which clears the temporary flag.
+     * Requires the current password, so a stolen session alone cannot take over the account.
+     */
+    @Transactional
+    public void changeOwnPassword(long userId, String currentPassword, String newPassword) {
+        ErpUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthExceptions.NotFound("Kullanıcı bulunamadı."));
+        if (user.getPasswordHash() == null
+                || !passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            auditRecorder.record(
+                    subjectOf(user), "EMPLOYEE_PASSWORD_CHANGE", "ERP_USER", user.getId().toString(), "FAILURE");
+            throw new AuthExceptions.Unauthorized("Mevcut şifreniz hatalı.");
+        }
+        user.changePasswordTo(passwordEncoder.encode(newPassword));
+        auditRecorder.record(
+                subjectOf(user), "EMPLOYEE_PASSWORD_CHANGE", "ERP_USER", user.getId().toString(), "SUCCESS");
+    }
+
+    /**
      * Self-service registration: creates an active (auto-approved) employee from a chosen username
      * plus optional email/phone, then issues a session so the caller is logged in immediately.
      */

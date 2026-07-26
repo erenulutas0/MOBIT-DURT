@@ -60,6 +60,9 @@ public class ErpUser {
     @Column(name = "document_network_visible", nullable = false)
     private boolean documentNetworkVisible;
 
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
+
     @Column(name = "failed_login_count", nullable = false)
     private int failedLoginCount;
 
@@ -161,6 +164,29 @@ public class ErpUser {
     public void clearLoginFailures() {
         failedLoginCount = 0;
         lockedUntil = null;
+    }
+
+    /**
+     * An admin hands the owner a temporary password. It is known to someone other than the owner, so
+     * the account is flagged until they replace it. Repeated failed attempts are what usually drive
+     * someone to ask for a reset, so the lockout is lifted too — otherwise the new password would
+     * still be refused for the rest of the lock window.
+     */
+    public void resetPasswordTo(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.mustChangePassword = true;
+        clearLoginFailures();
+    }
+
+    /** The owner sets a password only they know, which clears the temporary-credential flag. */
+    public void changePasswordTo(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.mustChangePassword = false;
+        clearLoginFailures();
+    }
+
+    public boolean isMustChangePassword() {
+        return mustChangePassword;
     }
 
     public void setDocumentNetworkVisible(boolean visible) {

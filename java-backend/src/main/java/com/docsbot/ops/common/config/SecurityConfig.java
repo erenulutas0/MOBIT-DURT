@@ -219,12 +219,17 @@ public class SecurityConfig {
                                 HttpMethod.DELETE,
                                 "/erp/web-push/subscriptions")
                         .authenticated()
+                        // Resetting someone else's credential is admin-only at the edge as well as in
+                        // the service — this one is worth two locks.
+                        .requestMatchers(HttpMethod.PATCH, "/erp/users/*/password")
+                        .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/erp/notifications/*/read",
                                 "/erp/notifications/read-all",
                                 "/erp/messages/*/read",
                                 "/erp/notification-preferences",
+                                "/erp/me/password",
                                 "/erp/users/*/document-network-visibility",
                                 "/erp/users/*/title")
                         .authenticated()

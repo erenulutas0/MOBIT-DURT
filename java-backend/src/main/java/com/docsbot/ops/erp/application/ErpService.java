@@ -75,6 +75,14 @@ public class ErpService {
         userService.requestAccountDeletion(principal);
     }
 
+    public void resetUserPassword(ErpPrincipal principal, long userId, String newPassword) {
+        userService.resetPassword(principal, userId, newPassword);
+    }
+
+    public void changeOwnPassword(ErpPrincipal principal, String currentPassword, String newPassword) {
+        userService.changeOwnPassword(principal, currentPassword, newPassword);
+    }
+
     public ErpUser updatePresence(ErpPrincipal principal, long userId, String status) {
         return userService.updatePresence(principal, userId, status);
     }

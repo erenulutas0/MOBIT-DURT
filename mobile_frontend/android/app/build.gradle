@@ -15,8 +15,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // CI passes -PversionCodeOverride / -PversionNameOverride to stamp a release; a plain
         // local build falls back to these committed defaults.
-        versionCode (project.hasProperty('versionCodeOverride') ? project.versionCodeOverride.toString().toInteger() : 26)
-        versionName (project.hasProperty('versionNameOverride') ? project.versionNameOverride.toString() : "1.0.26")
+        versionCode (project.hasProperty('versionCodeOverride') ? project.versionCodeOverride.toString().toInteger() : 27)
+        versionName (project.hasProperty('versionNameOverride') ? project.versionNameOverride.toString() : "1.0.27")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [usesCleartextTraffic: "false"]
         aaptOptions {

@@ -473,6 +473,31 @@ export async function updateERPUserTitle(userId: number, title: string): Promise
   return response.json();
 }
 
+/**
+ * Admin hands a locked-out employee a temporary password. Nothing is returned and the password is
+ * never stored client-side — the admin reads it out to its owner, who then replaces it.
+ */
+export async function resetERPUserPassword(userId: number, password: string): Promise<void> {
+  const response = await apiFetch(`/erp/users/${userId}/password`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Şifre sıfırlanamadı."));
+}
+
+export async function changeOwnERPPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const response = await apiFetch("/erp/me/password", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Şifre değiştirilemedi."));
+}
+
 export async function rejectERPAccountRequest(requestId: number): Promise<ERPAccountRequest> {
   const response = await apiFetch(`/erp/account-requests/${requestId}/reject`, { method: "POST" });
   if (!response.ok) throw new Error(await errorText(response, "Hesap talebi reddedilemedi."));
