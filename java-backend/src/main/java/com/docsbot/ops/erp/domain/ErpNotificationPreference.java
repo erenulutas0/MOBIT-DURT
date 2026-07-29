@@ -69,7 +69,10 @@ public class ErpNotificationPreference {
             case "task_due_soon", "task_overdue", "task_overdue_nudge", "manager_due_soon_digest",
                     "manager_overdue_digest", "manager_overdue_escalation", "manager_weekly_digest",
                     "task_blocked_escalation", "task_completion_approval_escalation",
-                    "tender_deadline_soon", "tender_deadline_passed" ->
+                    "tender_deadline_soon", "tender_deadline_passed",
+                    // Combined forms of the same alerts, sent when one scan would otherwise buzz
+                    // the same person several times over.
+                    "task_due_soon_digest", "task_overdue_digest", "task_overdue_nudge_digest" ->
                     deadlineAlertsEnabled;
             default -> true;
         };

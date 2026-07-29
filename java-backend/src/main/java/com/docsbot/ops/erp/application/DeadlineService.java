@@ -8,6 +8,7 @@ import java.time.ZoneId;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -118,21 +119,19 @@ public class DeadlineService {
         Map<Long, Set<Long>> assignees = assignedUserIdsByTask(candidates);
         List<String> digestLines = new ArrayList<>();
         StringBuilder digestKeySource = new StringBuilder();
+        Map<Long, List<PendingAlert>> perAssignee = new LinkedHashMap<>();
         int changed = 0;
         for (ErpTask task : candidates) {
             if (!task.markOverdue(now)) {
                 continue;
             }
             changed++;
-            notificationService.notifyUsers(
-                    assignees.getOrDefault(task.getId(), Set.of()),
-                    "task_overdue",
-                    "Görev termini aşıldı",
-                    task.getTitle(),
+            buffer(perAssignee, assignees.getOrDefault(task.getId(), Set.of()), new PendingAlert(
                     task.getId(),
+                    task.getTitle(),
+                    "termin aşıldı",
                     "CRITICAL",
-                    "task_overdue:" + task.getId(),
-                    now);
+                    "task_overdue:" + task.getId()));
             // Admin side is collected into one digest below — see processDueSoonTasks.
             digestLines.add("• " + task.getTitle());
             digestKeySource.append(task.getId()).append(';');
@@ -146,6 +145,14 @@ public class DeadlineService {
                     task.getId(),
                     "deadline_at=" + task.getDeadlineAt());
         }
+        flushAssigneeAlerts(
+                perAssignee,
+                "task_overdue",
+                "Görev termini aşıldı",
+                "task_overdue_digest",
+                "Termini aşan görevleriniz",
+                "task_overdue_digest:",
+                now);
         notifyAdminDigest(
                 "manager_overdue_digest",
                 "Termini aşılan görevler",
@@ -177,7 +184,7 @@ public class DeadlineService {
         // (task, stage) set, so it re-fires only when that set actually changes.
         List<String> digestLines = new ArrayList<>();
         StringBuilder digestKeySource = new StringBuilder();
-        int nudgedTasks = 0;
+        Map<Long, List<PendingAlert>> perAssignee = new LinkedHashMap<>();
         for (ErpTask task : overdueTasks) {
             if (task.getDeadlineAt() == null) {
                 continue;
@@ -188,21 +195,23 @@ public class DeadlineService {
                 continue;
             }
             long stageHours = stage.toHours();
-            int nudged = notificationService.notifyUsers(
-                    assignees.getOrDefault(task.getId(), Set.of()),
-                    "task_overdue_nudge",
-                    "Görev hâlâ teslim edilmedi",
-                    task.getTitle() + " (" + stageHours + " saattir gecikmiş)",
+            buffer(perAssignee, assignees.getOrDefault(task.getId(), Set.of()), new PendingAlert(
                     task.getId(),
+                    task.getTitle(),
+                    stageHours + " saattir gecikmiş",
                     "CRITICAL",
-                    "task_overdue_nudge:" + task.getId() + ":" + stageHours + "h",
-                    now);
-            if (nudged > 0) {
-                nudgedTasks++;
-            }
+                    "task_overdue_nudge:" + task.getId() + ":" + stageHours + "h"));
             digestLines.add("• " + task.getTitle() + " (" + stageHours + " saattir gecikmiş)");
             digestKeySource.append(task.getId()).append(':').append(stageHours).append(';');
         }
+        int nudgedTasks = flushAssigneeAlerts(
+                perAssignee,
+                "task_overdue_nudge",
+                "Görev hâlâ teslim edilmedi",
+                "task_overdue_nudge_digest",
+                "Hâlâ teslim edilmeyen görevleriniz",
+                "task_overdue_nudge_digest:",
+                now);
         if (!digestLines.isEmpty()) {
             notificationService.notifyAdmin(
                     "manager_overdue_escalation",
@@ -255,7 +264,7 @@ public class DeadlineService {
         Map<Long, Set<Long>> assignees = assignedUserIdsByTask(candidates);
         List<String> digestLines = new ArrayList<>();
         StringBuilder digestKeySource = new StringBuilder();
-        int changed = 0;
+        Map<Long, List<PendingAlert>> perAssignee = new LinkedHashMap<>();
         for (ErpTask task : candidates) {
             Duration remaining = Duration.between(now, task.getDeadlineAt());
             Duration threshold = nearestCrossedThreshold(remaining);
@@ -264,24 +273,26 @@ public class DeadlineService {
             }
             long thresholdHours = threshold.toHours();
             String urgency = urgencyFor(threshold);
-            int created = notificationService.notifyUsers(
-                    assignees.getOrDefault(task.getId(), Set.of()),
-                    "task_due_soon",
-                    "Görev termini yaklaşıyor",
-                    task.getTitle(),
+            buffer(perAssignee, assignees.getOrDefault(task.getId(), Set.of()), new PendingAlert(
                     task.getId(),
+                    task.getTitle(),
+                    humanizeHours(thresholdHours) + " kaldı",
                     urgency,
-                    "task_due_soon:" + task.getId() + ":" + thresholdHours + "h",
-                    now);
-            if (created > 0) {
-                changed++;
-            }
+                    "task_due_soon:" + task.getId() + ":" + thresholdHours + "h"));
             // The admin sees EVERY task in the company, so a per-task alert here meant one buzz per
             // task per threshold — a dozen tasks crossing 72h together filled the phone in one scan.
             // Collected into a single digest below instead.
             digestLines.add("• " + task.getTitle() + " (" + humanizeHours(thresholdHours) + " kaldı)");
             digestKeySource.append(task.getId()).append(':').append(thresholdHours).append(';');
         }
+        int changed = flushAssigneeAlerts(
+                perAssignee,
+                "task_due_soon",
+                "Görev termini yaklaşıyor",
+                "task_due_soon_digest",
+                "Yaklaşan terminleriniz",
+                "task_due_soon_digest:",
+                now);
         notifyAdminDigest(
                 "manager_due_soon_digest",
                 "Yaklaşan terminler",
@@ -290,6 +301,70 @@ public class DeadlineService {
                 "manager_due_soon:" + digestKeyHash(digestKeySource.toString()),
                 now);
         return changed;
+    }
+
+    /** One task's alert, held until the scan knows how many that person is getting. */
+    private record PendingAlert(long taskId, String title, String detail, String urgency, String eventKey) {
+    }
+
+    private static void buffer(
+            Map<Long, List<PendingAlert>> perAssignee,
+            Set<Long> userIds,
+            PendingAlert alert
+    ) {
+        for (Long userId : userIds) {
+            perAssignee.computeIfAbsent(userId, ignored -> new ArrayList<>()).add(alert);
+        }
+    }
+
+    /**
+     * Sends each person either their one named alert or a single combined one. Naming the task is
+     * what makes an assignee alert useful, so a lone alert keeps that — but somebody with eight
+     * tasks crossing a threshold in the same scan used to get eight separate CRITICAL, heads-up,
+     * vibrating notifications, which is what "sanki sürekli mesaj geliyormuş gibi" describes.
+     */
+    private int flushAssigneeAlerts(
+            Map<Long, List<PendingAlert>> perAssignee,
+            String singleType,
+            String singleTitle,
+            String digestType,
+            String digestTitle,
+            String digestKeyPrefix,
+            Instant now
+    ) {
+        int created = 0;
+        for (Map.Entry<Long, List<PendingAlert>> entry : perAssignee.entrySet()) {
+            Set<Long> recipient = Set.of(entry.getKey());
+            List<PendingAlert> alerts = entry.getValue();
+            if (alerts.size() == 1) {
+                PendingAlert only = alerts.get(0);
+                created += notificationService.notifyUsers(
+                        recipient, singleType, singleTitle, only.title(), only.taskId(),
+                        only.urgency(), only.eventKey(), now);
+                continue;
+            }
+            List<String> lines = alerts.stream()
+                    .map(alert -> "• " + alert.title() + " (" + alert.detail() + ")")
+                    .toList();
+            List<String> shown = lines.size() > ADMIN_DIGEST_MAX_LINES
+                    ? lines.subList(0, ADMIN_DIGEST_MAX_LINES)
+                    : lines;
+            StringBuilder keySource = new StringBuilder();
+            alerts.forEach(alert -> keySource.append(alert.eventKey()).append(';'));
+            created += notificationService.notifyUsers(
+                    recipient,
+                    digestType,
+                    digestTitle + " (" + alerts.size() + ")",
+                    String.join("\n", shown)
+                            + (lines.size() > shown.size()
+                                    ? "\n• ve " + (lines.size() - shown.size()) + " görev daha" : ""),
+                    null,
+                    // The most urgent member decides how loudly the combined alert lands.
+                    alerts.stream().anyMatch(alert -> "CRITICAL".equals(alert.urgency())) ? "CRITICAL" : "HIGH",
+                    digestKeyPrefix + digestKeyHash(keySource.toString()),
+                    now);
+        }
+        return created;
     }
 
     /** "72 saat" reads worse than "3 gün" for the wider thresholds. */

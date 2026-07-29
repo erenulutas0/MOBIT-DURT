@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Set;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.docsbot.ops.erp.domain.ErpTask;
 import com.docsbot.ops.erp.domain.TaskPriority;
+import com.docsbot.ops.erp.domain.ErpTaskAssignment;
 import com.docsbot.ops.erp.infrastructure.ErpTaskAssignmentRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTaskRepository;
 import com.docsbot.ops.erp.infrastructure.ErpTeamMemberRepository;
@@ -71,6 +73,10 @@ class DeadlineServiceTest {
         ErpTask third = task(3L, "Test gorevi", NOW.plus(Duration.ofHours(10)));
         when(taskRepository.findAllByDeadlineAtBetweenAndStatusIn(eq(NOW), eq(NOW.plus(Duration.ofHours(72))), any()))
                 .thenReturn(List.of(first, second, third));
+        when(assignmentRepository.findAllByTaskIdInOrderByIdAsc(any())).thenReturn(List.of(
+                ErpTaskAssignment.forUser(1L, 3L, "participant", null, NOW),
+                ErpTaskAssignment.forUser(2L, 3L, "participant", null, NOW),
+                ErpTaskAssignment.forUser(3L, 3L, "participant", null, NOW)));
 
         service.processDueSoonTasks();
 
@@ -89,10 +95,13 @@ class DeadlineServiceTest {
                 .contains("Ankara tasima")
                 .contains("Getac Jim e yazi gonderme")
                 .contains("Test gorevi");
-        // Each assignee still gets their own task named — that targeting is the point.
-        verify(notificationService, org.mockito.Mockito.times(3)).notifyUsers(
+        // The assignee of all three gets ONE combined alert, not three separate CRITICAL buzzes.
+        verify(notificationService, org.mockito.Mockito.never()).notifyUsers(
                 anyCollection(), eq("task_due_soon"), anyString(), anyString(),
                 any(), anyString(), anyString(), any());
+        verify(notificationService).notifyUsers(
+                eq(Set.of(3L)), eq("task_due_soon_digest"), eq("Yaklaşan terminleriniz (3)"),
+                anyString(), isNull(), anyString(), anyString(), eq(NOW));
     }
 
     @Test
@@ -131,15 +140,25 @@ class DeadlineServiceTest {
         assertThat(service.processWeeklyAdminDigest()).isZero();
     }
 
+    /** Stubs the assignment lookup so a task resolves to the given assignees. */
+    private void givenAssignee(long taskId, long... userIds) {
+        List<ErpTaskAssignment> assignments = java.util.Arrays.stream(userIds)
+                .mapToObj(userId -> ErpTaskAssignment.forUser(taskId, userId, "participant", null, NOW))
+                .toList();
+        when(assignmentRepository.findAllByTaskIdInOrderByIdAsc(any())).thenReturn(assignments);
+    }
+
     private void assertDueSoonAlert(
             Duration remaining,
             String expectedThresholdLabel,
             String expectedUrgency,
             String expectedRemainingLabel) {
-        org.mockito.Mockito.reset(taskRepository, notificationService);
+        org.mockito.Mockito.reset(taskRepository, notificationService, assignmentRepository);
         ErpTask task = task(7L, "Example task", NOW.plus(remaining));
         when(taskRepository.findAllByDeadlineAtBetweenAndStatusIn(eq(NOW), eq(NOW.plus(Duration.ofHours(72))), any()))
                 .thenReturn(List.of(task));
+        // The assignee alert now goes to the people actually assigned, so the task needs one.
+        givenAssignee(7L, 3L);
         when(notificationService.notifyUsers(
                 anyCollection(), anyString(), anyString(), anyString(), any(), anyString(), anyString(), any()))
                 .thenReturn(1);
@@ -148,7 +167,7 @@ class DeadlineServiceTest {
 
         assertThat(changed).isEqualTo(1);
         verify(notificationService).notifyUsers(
-                anyCollection(),
+                eq(Set.of(3L)),
                 eq("task_due_soon"),
                 eq("Görev termini yaklaşıyor"),
                 eq("Example task"),

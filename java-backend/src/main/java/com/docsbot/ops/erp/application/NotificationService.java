@@ -82,7 +82,12 @@ public class NotificationService {
             "manager_overdue_escalation",
             "manager_weekly_digest",
             "performance_report",
-            "assistant_briefing");
+            "assistant_briefing",
+            // Per-recipient combined deadline alerts: they carry no task id either, so only the
+            // newest of each kind is worth keeping live.
+            "task_due_soon_digest",
+            "task_overdue_digest",
+            "task_overdue_nudge_digest");
 
     /**
      * Machine-generated alerts whose relevance EXPIRES, so the retention backstop may retire them

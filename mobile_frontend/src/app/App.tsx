@@ -1383,9 +1383,26 @@ function ERPTab({
     setCreateTaskParentId(null);
   };
 
+  /**
+   * Every entry into the create screen starts clean. It used to keep whatever the previous visit
+   * left behind, so leaving a subtask half-finished meant the next "Görev Ver" silently opened as
+   * "Alt Görev Ver" for that old parent — and then refused to save, because the remembered parent
+   * was by then closed or itself a subtask (neither can take children).
+   */
+  const startTaskCreation = () => {
+    resetTaskForm();
+    setError("");
+    navTo("create-task");
+  };
+
   const startSubtaskCreation = (parentTask: ERPTask) => {
     resetTaskForm();
     setCreateTaskParentId(parentTask.id);
+    // A subtask inherits its parent's dates so the common case needs no typing; every field stays
+    // editable, so a sub-step that is due earlier than the whole can still say so.
+    setTaskScheduleKind((parentTask.schedule_kind as ERPScheduleKind) || "at");
+    setTaskDeadlineLocal(isoToLocalInput(parentTask.deadline_at));
+    setTaskStartsLocal(isoToLocalInput(parentTask.starts_at));
     setError("");
     navTo("create-task");
   };
@@ -1836,7 +1853,7 @@ function ERPTab({
                 </div>
                 <span className="text-sm font-semibold text-foreground">Görevler</span>
               </button>
-              <button onClick={() => navTo("create-task")}
+              <button onClick={startTaskCreation}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
                   <Plus className="w-5 h-5 text-emerald-400" />
@@ -2143,7 +2160,10 @@ function ERPTab({
 
   if (screen === "create-task" && isAdmin) return (
     <div className="flex flex-col min-h-full">
-      <TopBar title={createTaskParentId ? "Alt Görev Ver" : "Görev Ver"} onBack={() => navTo("tasks")} />
+      <TopBar
+        title={createTaskParentId ? "Alt Görev Ver" : "Görev Ver"}
+        onBack={() => { resetTaskForm(); navTo("tasks"); }}
+      />
       <div className="flex-1 px-4 py-4 space-y-4">
         <LoadingOrError />
 
@@ -2388,7 +2408,7 @@ function ERPTab({
               <CalendarDays className="w-4 h-4" />
             </button>
             {isAdmin && (
-              <button onClick={() => navTo("create-task")} className="w-9 h-9 flex items-center justify-center rounded-full bg-primary">
+              <button onClick={startTaskCreation} className="w-9 h-9 flex items-center justify-center rounded-full bg-primary">
                 <Plus className="w-4 h-4 text-white" />
               </button>
             )}
