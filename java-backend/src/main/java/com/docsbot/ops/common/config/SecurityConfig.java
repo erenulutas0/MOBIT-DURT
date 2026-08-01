@@ -199,6 +199,7 @@ public class SecurityConfig {
                                 "/erp/company-chat/messages",
                                 "/erp/assistant/chat",
                                 "/erp/assistant/speech",
+                                "/erp/assistant/documents/ask",
                                 "/erp/feedback",
                                 "/erp/me/account-deletion-request")
                         .authenticated()
