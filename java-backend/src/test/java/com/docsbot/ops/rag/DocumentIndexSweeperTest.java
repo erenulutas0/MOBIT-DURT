@@ -50,6 +50,9 @@ class DocumentIndexSweeperTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @org.springframework.beans.factory.annotation.Value("${docsbot.data-dir}")
+    private String dataDir;
+
     @BeforeEach
     void reset() {
         chunkRepository.deleteAll();
@@ -98,6 +101,26 @@ class DocumentIndexSweeperTest {
     }
 
     @Test
+    void aFreshlyUploadedFileBecomesSearchableWithoutAnyManualStep() {
+        // Uploaded but never text-extracted: the state every customer upload lands in.
+        String unique = "sweep-" + System.nanoTime();
+        jdbcTemplate.update("""
+                insert into documents
+                    (message_id, sender_hash, source, timestamp, media_id,
+                     original_filename, tender_id, document_type, status, file_path)
+                values (?, 'test-hash', 'test', now(), ?, 'yeni.txt', 'TEST-2026-1', 'sartname',
+                        'received', ?)
+                """, unique, unique, uploadedFile());
+        long documentId = jdbcTemplate.queryForObject(
+                "select id from documents where message_id = ?", Long.class, unique);
+
+        sweeper.sweep();
+        sweeper.sweep();
+
+        assertThat(chunkRepository.existsByDocumentId(documentId)).isTrue();
+    }
+
+    @Test
     void aDownSidecarWaitsInsteadOfMarkingDocumentsFailed() {
         insertDocument("Teminat mektubu suresi uzatilabilir ve idare tarafindan onaylanir.");
         ((SwitchableEmbeddingModel) embeddingModel).up = false;
@@ -105,6 +128,25 @@ class DocumentIndexSweeperTest {
         assertThat(sweeper.sweep()).isZero();
         // Still queued, so it gets picked up once the service comes back.
         assertThat(sweeper.pendingCount()).isGreaterThanOrEqualTo(1);
+    }
+
+    /**
+     * Writes a real file where an upload would put it. Stored paths are only honoured inside the
+     * configured data root — a containment check that stops a crafted path from reading anything
+     * else on the box — so a temp file elsewhere is correctly refused.
+     */
+    private String uploadedFile() {
+        try {
+            java.nio.file.Path root = java.nio.file.Path.of(dataDir).toAbsolutePath().normalize();
+            java.nio.file.Files.createDirectories(root);
+            java.nio.file.Path path = java.nio.file.Files.createTempFile(root, "docsbot-sweep", ".txt");
+            java.nio.file.Files.writeString(path,
+                    "Teminat mektubu ihale tarihinden itibaren yuz yirmi takvim gunu gecerli olmalidir.");
+            path.toFile().deleteOnExit();
+            return path.toString();
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private long insertDocument(String extractedText) {

@@ -1,0 +1,23 @@
+ÖRNEK GARANTİ VE BAKIM ŞARTLARI (DEMO BELGESİ)
+Bu belge yalnızca sistem tanıtımı için hazırlanmış örnek metindir.
+
+MADDE 1 - GARANTİ SÜRESİ
+Yapılan tüm imalatlar ve temin edilen ekipmanlar, kesin kabul tarihinden itibaren 24 ay
+süreyle garanti kapsamındadır. Garanti süresi boyunca ortaya çıkan üretim ve montaj
+kaynaklı arızalar ücretsiz giderilir.
+
+MADDE 2 - MÜDAHALE SÜRESİ
+Arıza bildiriminden itibaren yüklenici en geç 24 saat içinde sahaya intikal eder ve
+72 saat içinde arızayı giderir. Kritik arızalarda müdahale süresi 4 saattir.
+
+MADDE 3 - PERİYODİK BAKIM
+Garanti süresi boyunca 6 ayda bir periyodik bakım yapılır. Bakım raporları idareye
+yazılı olarak sunulur. Yapılmayan bakımlar için kesin teminattan kesinti yapılır.
+
+MADDE 4 - YEDEK PARÇA
+Yüklenici, kesin kabulden itibaren 10 yıl süreyle yedek parça temin edeceğini taahhüt eder.
+Yedek parça fiyatları güncel piyasa koşullarını aşamaz.
+
+MADDE 5 - GARANTİ DIŞI HALLER
+Kullanıcı hatası, doğal afet ve idarenin yetkisiz müdahalesi sonucu oluşan arızalar
+garanti kapsamı dışındadır. Bu durumun tespiti için taraflarca ortak tutanak düzenlenir.

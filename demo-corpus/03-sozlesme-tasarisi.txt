@@ -1,0 +1,27 @@
+ÖRNEK SÖZLEŞME TASARISI (DEMO BELGESİ)
+Bu belge yalnızca sistem tanıtımı için hazırlanmış örnek metindir.
+
+MADDE 1 - GECİKME CEZASI
+Yüklenicinin işi süresinde bitirmemesi halinde, gecikilen her takvim günü için sözleşme
+bedelinin onbinde 5'i (%0,05) oranında gecikme cezası uygulanır. Gecikme cezası
+hakedişlerden kesilir. Toplam gecikme cezası sözleşme bedelinin %10'unu aşamaz.
+
+MADDE 2 - SÖZLEŞMENİN FESHİ
+Gecikme cezasının üst sınıra ulaşması, yüklenicinin taahhüdünü yerine getirmemesi veya
+yasak fiil ve davranışlarda bulunması hallerinde idare sözleşmeyi tek taraflı feshedebilir.
+Fesih halinde kesin teminat gelir kaydedilir ve yüklenici hakkında yasaklama işlemi başlatılır.
+
+MADDE 3 - MÜCBİR SEBEP
+Doğal afetler, kanuni grev, genel salgın hastalık ve kısmi veya genel seferberlik ilanı
+mücbir sebep sayılır. Yüklenici, mücbir sebebin ortaya çıkmasından itibaren 20 gün içinde
+idareye yazılı bildirimde bulunur ve yetkili merciden belge alır. Kabul edilen mücbir
+sebep süresince gecikme cezası uygulanmaz ve süre uzatımı verilir.
+
+MADDE 4 - DEVİR VE ALT YÜKLENİCİ
+Sözleşme, idarenin yazılı izni olmadan başkasına devredilemez. İşin bir kısmı alt
+yüklenicilere yaptırılabilir; ancak alt yüklenicilerin yaptığı işlerden doğan sorumluluk
+tamamen yükleniciye aittir.
+
+MADDE 5 - ANLAŞMAZLIKLARIN ÇÖZÜMÜ
+Sözleşmenin uygulanmasından doğacak anlaşmazlıklarda öncelikle sulh yolu denenir.
+Uzlaşma sağlanamazsa idarenin bulunduğu yer mahkemeleri ve icra daireleri yetkilidir.

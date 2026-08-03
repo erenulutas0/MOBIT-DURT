@@ -1,0 +1,28 @@
+ÖRNEK TEKNİK ŞARTNAME (DEMO BELGESİ)
+Konu: Orta Gerilim Kablo Temini ve Montajı (kurgusal)
+Bu belge yalnızca sistem tanıtımı için hazırlanmış örnek metindir.
+
+MADDE 1 - MALZEME ÖZELLİKLERİ
+Temin edilecek kablolar 20 kV anma gerilimine uygun, XLPE yalıtımlı ve alüminyum iletkenli
+olacaktır. Kablo kesiti 3x240/25 mm² olarak uygulanacaktır. Tüm malzemeler TSE veya eşdeğer
+uluslararası standartlara uygun olacak ve uygunluk belgeleri teslimatla birlikte sunulacaktır.
+
+MADDE 2 - MUAYENE VE KABUL
+Teslim edilen malzemeler, idare tarafından oluşturulan muayene komisyonu tarafından teslim
+tarihinden itibaren 10 iş günü içinde incelenir. Uygun bulunmayan malzemeler yükleniciye
+iade edilir ve 15 gün içinde uygun malzeme ile değiştirilir. Değiştirme süresi teslim
+süresine eklenmez, gecikme sayılır.
+
+MADDE 3 - NUMUNE
+Yüklenici, sözleşme imzalanmasından sonra 7 gün içinde her kalem için numune sunar.
+Numune onaylanmadan seri üretime veya toplu teslimata başlanamaz.
+
+MADDE 4 - AMBALAJ VE NAKLİYE
+Kablolar ahşap makaralarda, nem almayacak şekilde ambalajlanır. Nakliye sırasında oluşacak
+her türlü hasar yükleniciye aittir. Teslim yeri idarenin göstereceği ambardır ve indirme
+işçiliği yükleniciye aittir.
+
+MADDE 5 - GARANTİ
+Teslim edilen tüm malzemeler için kesin kabul tarihinden itibaren 24 ay garanti verilir.
+Garanti süresi içinde arızalanan malzeme, bildirimden itibaren 10 gün içinde ücretsiz
+değiştirilir.
