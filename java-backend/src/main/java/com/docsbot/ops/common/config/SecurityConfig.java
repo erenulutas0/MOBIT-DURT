@@ -224,6 +224,11 @@ public class SecurityConfig {
                         // the service — this one is worth two locks.
                         .requestMatchers(HttpMethod.PATCH, "/erp/users/*/password")
                         .hasRole("ADMIN")
+                        // Corpus state and re-indexing are operator controls, not end-user features.
+                        .requestMatchers(HttpMethod.GET, "/erp/assistant/documents/status")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/erp/assistant/documents/reindex")
+                        .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/erp/notifications/*/read",

@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,10 +29,59 @@ public class DocumentAssistantController {
 
     private final DocumentSearchService searchService;
     private final EmbeddingModel embeddingModel;
+    private final DocumentIndexSweeper indexSweeper;
 
-    public DocumentAssistantController(DocumentSearchService searchService, EmbeddingModel embeddingModel) {
+    public DocumentAssistantController(
+            DocumentSearchService searchService,
+            EmbeddingModel embeddingModel,
+            DocumentIndexSweeper indexSweeper
+    ) {
         this.searchService = searchService;
         this.embeddingModel = embeddingModel;
+        this.indexSweeper = indexSweeper;
+    }
+
+    /**
+     * How much of the archive is searchable. Without this the feature is opaque — "it found nothing"
+     * could mean the question has no answer or that nothing has been indexed yet, and before a demo
+     * that is exactly the difference you need to know.
+     */
+    @GetMapping("/documents/status")
+    IndexStatusResponse status(JwtAuthenticationToken authentication) {
+        // Admin-only is enforced at the security edge; resolving the principal keeps the
+        // authenticated footing explicit here.
+        ErpPrincipal.from(authentication);
+        boolean ready = embeddingModel.available();
+        return new IndexStatusResponse(
+                ready,
+                ready ? embeddingModel.name() : null,
+                ready ? indexSweeper.indexedDocumentCount() : 0,
+                ready ? indexSweeper.pendingCount() : 0);
+    }
+
+    /** Runs a sweep now instead of waiting for the timer — for seeding a demo corpus. */
+    @PostMapping("/documents/reindex")
+    ReindexResponse reindex(JwtAuthenticationToken authentication) {
+        ErpPrincipal.from(authentication);
+        if (!embeddingModel.available()) {
+            return new ReindexResponse(0, indexSweeper.pendingCount());
+        }
+        int indexed = indexSweeper.sweep();
+        return new ReindexResponse(indexed, indexSweeper.pendingCount());
+    }
+
+    record IndexStatusResponse(
+            boolean ready,
+            String model,
+            @JsonProperty("indexed_documents") long indexedDocuments,
+            @JsonProperty("pending_documents") long pendingDocuments
+    ) {
+    }
+
+    record ReindexResponse(
+            @JsonProperty("indexed_now") int indexedNow,
+            @JsonProperty("pending_documents") long pendingDocuments
+    ) {
     }
 
     @PostMapping("/documents/ask")

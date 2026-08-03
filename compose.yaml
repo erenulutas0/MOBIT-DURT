@@ -19,5 +19,30 @@ services:
       timeout: 3s
       retries: 20
 
+  # Self-hosted embeddings for the document assistant. Sits beside Piper on the internal network;
+  # nothing about it is reachable from the internet, and no document text leaves the host.
+  #
+  # Not started by a plain `docker compose up` — the image bakes in ~470MB of model weights, which
+  # nobody wants to build just to run the backend. Bring it up explicitly:
+  #     docker compose --profile rag up -d docsbot-embeddings
+  docsbot-embeddings:
+    build: ./embedding-service
+    container_name: docsbot-embeddings
+    restart: unless-stopped
+    profiles: ["rag"]
+    environment:
+      EMBEDDING_MODEL: intfloat/multilingual-e5-small
+    ports:
+      # Loopback only: the backend reaches it by container name in production.
+      - "127.0.0.1:${DOCSBOT_EMBEDDINGS_PORT:-5001}:5001"
+    # Indexing is background work and must never starve the backend or Piper of CPU.
+    cpus: 2
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5001/health')\""]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
 volumes:
   docsbot_postgres_data:
