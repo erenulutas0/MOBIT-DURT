@@ -17,7 +17,6 @@ set -euo pipefail
 BASE_URL="${BASE_URL:-https://84-46-251-95.sslip.io}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 ORGANIZATION="${ORGANIZATION:-ORNEK-ENERJI}"
-TENDER_ID="${TENDER_ID:-DEMO-2026-01}"
 YEAR="${YEAR:-2026}"
 
 cd "$(dirname "$0")"
@@ -40,7 +39,11 @@ if [ -z "$TOKEN" ]; then
     exit 1
 fi
 
+# tender_id must name a tender that already exists; left blank, the upload creates one. So the
+# first file opens the tender and the rest join it — otherwise each document would open its own,
+# leaving eight one-document tenders instead of one demo tender with eight documents.
 uploaded=0
+tender=""
 for file in *.txt; do
     [ -e "$file" ] || continue
     printf 'Yukleniyor: %-32s ' "$file"
@@ -50,10 +53,15 @@ for file in *.txt; do
         -F "internal_unit=MOBIT" \
         -F "organization=$ORGANIZATION" \
         -F "year=$YEAR" \
-        -F "tender_id=$TENDER_ID" \
+        ${tender:+-F "tender_id=$tender"} \
         -F "caption=Demo korpusu - ornek belge")
     if echo "$response" | grep -q '"id"'; then
-        echo "OK"
+        if [ -z "$tender" ]; then
+            tender=$(echo "$response" | sed -n 's/.*"tender_id":"\([^"]*\)".*/\1/p')
+            echo "OK  (ihale: $tender)"
+        else
+            echo "OK"
+        fi
         uploaded=$((uploaded + 1))
     else
         echo "HATA"
