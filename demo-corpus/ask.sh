@@ -53,10 +53,12 @@ show_status() {
             }
             indexed = extract($0, "indexed_documents")
             pending = extract($0, "pending_documents")
-            printf "Hazir       : %s\n", ready
-            printf "Model       : %s\n", model
-            printf "Indekslenen : %s belge\n", indexed
-            printf "Bekleyen    : %s belge\n", pending
+            awaiting = extract($0, "awaiting_text")
+            printf "Hazir          : %s\n", ready
+            printf "Model          : %s\n", model
+            printf "Indekslenen    : %s belge\n", indexed
+            printf "Indeks bekleyen: %s belge\n", pending
+            printf "Metni okunmamis: %s belge\n", awaiting
         }
         function extract(text, key,   pattern) {
             pattern = "\"" key "\":[0-9]+"

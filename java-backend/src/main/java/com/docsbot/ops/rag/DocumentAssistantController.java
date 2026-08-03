@@ -56,7 +56,8 @@ public class DocumentAssistantController {
                 ready,
                 ready ? embeddingModel.name() : null,
                 ready ? indexSweeper.indexedDocumentCount() : 0,
-                ready ? indexSweeper.pendingCount() : 0);
+                ready ? indexSweeper.pendingCount() : 0,
+                indexSweeper.awaitingTextCount());
     }
 
     /** Runs a sweep now instead of waiting for the timer — for seeding a demo corpus. */
@@ -74,7 +75,9 @@ public class DocumentAssistantController {
             boolean ready,
             String model,
             @JsonProperty("indexed_documents") long indexedDocuments,
-            @JsonProperty("pending_documents") long pendingDocuments
+            @JsonProperty("pending_documents") long pendingDocuments,
+            /** Uploaded but not yet read — a stall one step before pending, not the same thing. */
+            @JsonProperty("awaiting_text") long awaitingText
     ) {
     }
 

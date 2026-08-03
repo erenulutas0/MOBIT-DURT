@@ -121,6 +121,34 @@ class DocumentIndexSweeperTest {
     }
 
     @Test
+    void anUploadedFileIsVisibleAsAwaitingTextNotAsNothingAtAll() {
+        long awaitingBefore = sweeper.awaitingTextCount();
+        String unique = "sweep-" + System.nanoTime();
+        jdbcTemplate.update("""
+                insert into documents
+                    (message_id, sender_hash, source, timestamp, media_id,
+                     original_filename, tender_id, document_type, status, file_path)
+                values (?, 'test-hash', 'test', now(), ?, 'yeni.txt', 'TEST-2026-1', 'sartname',
+                        'received', ?)
+                """, unique, unique, uploadedFile());
+
+        // Counted as neither indexed nor pending, so without this it reports identically to an
+        // empty system — and "nothing was uploaded" is a very different problem from "uploaded but
+        // not read yet".
+        assertThat(sweeper.awaitingTextCount()).isEqualTo(awaitingBefore + 1);
+
+        sweeper.sweep();
+
+        // Asserted on this row rather than on the global count: the sweep takes a batch, so how far
+        // the total drops depends on what else the suite left lying around.
+        long documentId = jdbcTemplate.queryForObject(
+                "select id from documents where message_id = ?", Long.class, unique);
+        assertThat(jdbcTemplate.queryForObject(
+                "select extracted_text is not null from documents where id = ?",
+                Boolean.class, documentId)).isTrue();
+    }
+
+    @Test
     void aDownSidecarWaitsInsteadOfMarkingDocumentsFailed() {
         insertDocument("Teminat mektubu suresi uzatilabilir ve idare tarafindan onaylanir.");
         ((SwitchableEmbeddingModel) embeddingModel).up = false;

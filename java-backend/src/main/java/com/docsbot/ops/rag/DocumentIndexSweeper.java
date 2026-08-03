@@ -129,6 +129,21 @@ public class DocumentIndexSweeper {
                 pendingSql(""), Long.class, embeddingModel.name());
     }
 
+    /**
+     * Documents whose text has not been pulled out yet. Counted separately from {@link
+     * #pendingCount()} because that one only sees rows that already hold text: a freshly uploaded
+     * file reports as neither indexed nor pending, which reads as "nothing was uploaded" when in
+     * fact eight files are sitting one step earlier in the pipeline. Telling those two apart is the
+     * whole reason the status endpoint exists.
+     */
+    public long awaitingTextCount() {
+        return jdbcTemplate.queryForObject("""
+                select count(*) from documents
+                 where extracted_text is null
+                   and (text_extraction_status is null or text_extraction_status = 'pending')
+                """, Long.class);
+    }
+
     public long indexedDocumentCount() {
         return jdbcTemplate.queryForObject(
                 "select count(distinct document_id) from erp_document_chunks where model = ?",
