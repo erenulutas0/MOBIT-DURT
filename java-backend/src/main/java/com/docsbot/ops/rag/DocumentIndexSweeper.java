@@ -123,6 +123,24 @@ public class DocumentIndexSweeper {
         }
     }
 
+    /**
+     * Throws the whole index away so the next sweeps rebuild it.
+     *
+     * <p>A sweep normally skips anything already indexed for the current model, which is right for
+     * the everyday case and wrong for the other reason an index goes stale: changing how documents
+     * are split into passages leaves every vector valid-looking and every one of them describing the
+     * wrong span of text. The model name cannot detect that, and nothing else was able to ask for a
+     * rebuild — so an admin can now say so directly.
+     *
+     * <p>The corpus is unsearchable until the sweeps catch up. That is the honest cost of the
+     * operation rather than a defect: rebuilding in place would mean holding both indexes at once.
+     */
+    public int forgetEverything() {
+        int removed = jdbcTemplate.update("delete from erp_document_chunks");
+        log.info("rag_index_cleared chunks={}", removed);
+        return removed;
+    }
+
     /** How much of the archive is still waiting — what an admin needs to see before a demo. */
     public long pendingCount() {
         return jdbcTemplate.queryForObject(

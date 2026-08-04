@@ -22,16 +22,22 @@ services:
   # Self-hosted embeddings for the document assistant. Sits beside Piper on the internal network;
   # nothing about it is reachable from the internet, and no document text leaves the host.
   #
-  # Not started by a plain `docker compose up` — the image bakes in ~470MB of model weights, which
+  # Not started by a plain `docker compose up` — the image bakes in ~1GB of model weights, which
   # nobody wants to build just to run the backend. Bring it up explicitly:
-  #     docker compose --profile rag up -d docsbot-embeddings
+  #     docker compose --profile rag up -d --build docsbot-embeddings
+  #
+  # Changing the model invalidates every stored vector, so deploy the backend first and rebuild this
+  # second: the backend re-indexes on a model change, and re-indexing under the old backend would
+  # store passages the new one then considers already done.
   docsbot-embeddings:
     build: ./embedding-service
     container_name: docsbot-embeddings
     restart: unless-stopped
     profiles: ["rag"]
     environment:
-      EMBEDDING_MODEL: intfloat/multilingual-e5-small
+      # Must match the model baked into the image, or the container downloads a second one at
+      # startup and the first request waits on it.
+      EMBEDDING_MODEL: intfloat/multilingual-e5-base
     ports:
       # Loopback only: the backend reaches it by container name in production.
       - "127.0.0.1:${DOCSBOT_EMBEDDINGS_PORT:-5001}:5001"

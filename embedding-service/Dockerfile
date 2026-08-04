@@ -12,11 +12,16 @@ RUN pip install --no-cache-dir \
         fastapi==0.115.0 \
         "uvicorn[standard]==0.30.6"
 
-ENV EMBEDDING_MODEL=intfloat/multilingual-e5-small
-# Bake the weights into the image so a container restart doesn't re-download ~470MB, and so the
+# The base model rather than small: measured over twenty questions against real tender clauses, it
+# put the right document first 19 times where small managed 17, and the two it fixed were ordinary
+# questions a user would actually ask ("param ne zaman hesabıma yatar"). It costs ~1GB of image and
+# more CPU per document, both of which this box has, and nothing at all in money — which is the
+# whole point of self-hosting the embeddings.
+ENV EMBEDDING_MODEL=intfloat/multilingual-e5-base
+# Bake the weights into the image so a container restart doesn't re-download them, and so the
 # service comes up without needing network access at runtime.
 RUN python -c "from sentence_transformers import SentenceTransformer; \
-    SentenceTransformer('intfloat/multilingual-e5-small')"
+    SentenceTransformer('intfloat/multilingual-e5-base')"
 
 COPY app.py /app/app.py
 

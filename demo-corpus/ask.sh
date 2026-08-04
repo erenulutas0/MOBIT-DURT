@@ -105,8 +105,12 @@ ask() {
             }
             return ""
         }
-        function show(hit, position,   document, similarity, content, start, stop) {
+        function show(hit, position,   document, name, similarity, content, start, stop) {
             document = hit; sub(/,.*/, "", document)
+            name = "?"
+            if (match(hit, /"document_name":"[^"]*"/)) {
+                name = substr(hit, RSTART + 17, RLENGTH - 18)
+            }
             similarity = "?"
             if (match(hit, /"similarity":[0-9.eE-]+/)) {
                 similarity = substr(hit, RSTART + 13, RLENGTH - 13)
@@ -118,7 +122,7 @@ ask() {
                 content = substr(hit, start + 11, stop - start - 11)
                 gsub(/\\n/, " ", content); gsub(/\\"/, "\"", content); gsub(/\\\\/, "\\", content)
             }
-            printf "  %d. belge #%s   benzerlik %s\n", position, document, similarity
+            printf "  %d. %s  (belge #%s, benzerlik %s)\n", position, name, document, similarity
             wrap(content)
             print ""
         }

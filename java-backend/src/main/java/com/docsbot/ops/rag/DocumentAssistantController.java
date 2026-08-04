@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.docsbot.ops.erp.application.ErpPrincipal;
@@ -60,12 +61,26 @@ public class DocumentAssistantController {
                 indexSweeper.awaitingTextCount());
     }
 
-    /** Runs a sweep now instead of waiting for the timer — for seeding a demo corpus. */
+    /**
+     * Runs a sweep now instead of waiting for the timer — for seeding a demo corpus.
+     *
+     * <p>{@code force=true} discards the existing passages first. A plain sweep skips whatever is
+     * already indexed for the current model, which is right until the thing that changed is how
+     * documents are split into passages: those vectors stay valid-looking while describing the wrong
+     * spans, and no automatic check can notice. Expect the corpus to be unsearchable until the
+     * sweeps catch up.
+     */
     @PostMapping("/documents/reindex")
-    ReindexResponse reindex(JwtAuthenticationToken authentication) {
+    ReindexResponse reindex(
+            JwtAuthenticationToken authentication,
+            @RequestParam(name = "force", defaultValue = "false") boolean force
+    ) {
         ErpPrincipal.from(authentication);
         if (!embeddingModel.available()) {
             return new ReindexResponse(0, indexSweeper.pendingCount());
+        }
+        if (force) {
+            indexSweeper.forgetEverything();
         }
         int indexed = indexSweeper.sweep();
         return new ReindexResponse(indexed, indexSweeper.pendingCount());
@@ -127,6 +142,8 @@ public class DocumentAssistantController {
 
     record PassageResponse(
             @JsonProperty("document_id") long documentId,
+            /** The file to open to check the wording; an id alone is not something a user can follow. */
+            @JsonProperty("document_name") String documentName,
             @JsonProperty("chunk_index") int chunkIndex,
             String content,
             double similarity
@@ -134,6 +151,7 @@ public class DocumentAssistantController {
         static PassageResponse from(DocumentSearchService.Passage passage) {
             return new PassageResponse(
                     passage.documentId(),
+                    passage.documentName(),
                     passage.chunkIndex(),
                     passage.content(),
                     Math.round(passage.similarity() * 1000) / 1000.0);

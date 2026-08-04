@@ -2,6 +2,8 @@ package com.docsbot.ops.rag;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Splits a document's extracted text into the passages that get embedded and searched.
@@ -28,6 +30,9 @@ public final class TextChunker {
     private static final int DEFAULT_OVERLAP_CHARS = 150;
     /** Below this a passage carries no retrievable meaning — a stray heading, a page number. */
     private static final int MIN_CHUNK_CHARS = 40;
+    /** "MADDE 4 - ...", "Madde 12." — the heading a numbered şartname clause opens with. */
+    private static final Pattern CLAUSE_HEADING =
+            Pattern.compile("(?im)^[ \\t]*madde\\s+\\d+\\b");
 
     private final int maxChars;
     private final int overlapChars;
@@ -51,6 +56,39 @@ public final class TextChunker {
         if (text == null || text.isBlank()) {
             return List.of();
         }
+        List<String> clauses = clauseSections(text);
+        if (!clauses.isEmpty()) {
+            return chunkByClause(clauses);
+        }
+        return chunkByLength(text);
+    }
+
+    /**
+     * One passage per clause, for documents that announce their own structure.
+     *
+     * <p>Turkish tender documents are written as numbered maddeler by regulation, and a madde is
+     * exactly the unit somebody quotes back as the answer. Packing text to a character budget
+     * instead put three or four unrelated maddeler in one passage — payment terms sharing a vector
+     * with invoicing paperwork and advance rules — and the average pointed at none of them.
+     * Measured over twenty questions, this is the difference between retrieving the wall of text
+     * the answer is somewhere inside and retrieving the answer.
+     *
+     * <p>The heading stays attached to its body on purpose: "MADDE 2 - ÖDEME SÜRESİ" is most of what
+     * makes the passage recognisable to a question about when money arrives.
+     */
+    private List<String> chunkByClause(List<String> clauses) {
+        List<String> chunks = new ArrayList<>();
+        for (String clause : clauses) {
+            if (clause.length() > maxChars) {
+                splitOversized(clause).forEach(part -> addChunk(chunks, part));
+            } else {
+                addChunk(chunks, clause);
+            }
+        }
+        return List.copyOf(chunks);
+    }
+
+    private List<String> chunkByLength(String text) {
         List<String> chunks = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         for (String block : meaningfulBlocks(text)) {
@@ -71,6 +109,39 @@ public final class TextChunker {
         }
         flush(chunks, current);
         return List.copyOf(chunks);
+    }
+
+    /**
+     * Cuts the text at its clause headings, or returns nothing if it has none.
+     *
+     * <p>Two headings are required before this takes over. A document that merely mentions "madde
+     * 5" once in a sentence is prose, not a numbered şartname, and splitting it there would sever a
+     * paragraph mid-thought. Anything ahead of the first heading is kept as its own passage — that
+     * is the title block, which is what identifies the document.
+     */
+    private static List<String> clauseSections(String text) {
+        Matcher matcher = CLAUSE_HEADING.matcher(text);
+        List<Integer> starts = new ArrayList<>();
+        while (matcher.find()) {
+            starts.add(matcher.start());
+        }
+        if (starts.size() < 2) {
+            return List.of();
+        }
+        List<String> sections = new ArrayList<>();
+        if (starts.get(0) > 0) {
+            sections.add(normalize(text.substring(0, starts.get(0))));
+        }
+        for (int index = 0; index < starts.size(); index++) {
+            int end = index + 1 < starts.size() ? starts.get(index + 1) : text.length();
+            sections.add(normalize(text.substring(starts.get(index), end)));
+        }
+        sections.removeIf(String::isEmpty);
+        return sections;
+    }
+
+    private static String normalize(String section) {
+        return section.replaceAll("[ \\t]+", " ").replaceAll("\\n{2,}", "\n").strip();
     }
 
     /** Paragraphs, with runs of blank lines and stray whitespace collapsed away. */

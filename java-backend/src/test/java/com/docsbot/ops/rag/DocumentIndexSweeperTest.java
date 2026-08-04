@@ -149,6 +149,24 @@ class DocumentIndexSweeperTest {
     }
 
     @Test
+    void anAdminCanThrowTheIndexAwayWhenChunkingChanges() {
+        long documentId = insertDocument(
+                "Idare, hakedis raporunu onayladiktan sonra otuz gun icinde odemeyi gerceklestirir.");
+        sweeper.sweep();
+        assertThat(chunkRepository.existsByDocumentId(documentId)).isTrue();
+
+        // A plain sweep skips this document from here on — it already has passages for the current
+        // model (aSecondPassDoesNotReIndexWhatIsAlreadyDone). Changing how text is split leaves
+        // those passages valid-looking and describing the wrong spans, which the model name cannot
+        // express, so the rebuild has to be something a human can ask for.
+        sweeper.forgetEverything();
+
+        assertThat(chunkRepository.existsByDocumentId(documentId)).isFalse();
+        assertThat(sweeper.sweep()).isGreaterThanOrEqualTo(1);
+        assertThat(chunkRepository.existsByDocumentId(documentId)).isTrue();
+    }
+
+    @Test
     void aDownSidecarWaitsInsteadOfMarkingDocumentsFailed() {
         insertDocument("Teminat mektubu suresi uzatilabilir ve idare tarafindan onaylanir.");
         ((SwitchableEmbeddingModel) embeddingModel).up = false;

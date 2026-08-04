@@ -3,8 +3,10 @@ package com.docsbot.ops.rag;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,27 +34,49 @@ public class DocumentSearchService {
 
     private final DocumentChunkRepository chunkRepository;
     private final EmbeddingModel embeddingModel;
+    private final JdbcTemplate jdbcTemplate;
     /**
-     * Below this the match is coincidence, and returning it would train users to distrust the
-     * feature. Configurable because every embedding model has its own similarity distribution — a
-     * value tuned for one model is meaningless for the next, so hardcoding it would silently break
-     * retrieval the day the model changes.
+     * Below this the question has no answer here at all, and saying so is the right response.
+     *
+     * <p>Measured, not guessed: against this model, questions with nothing to do with the corpus
+     * ("bugün hava nasıl", "kedim neden mama yemiyor") peak at 0.744–0.776, while real answers land
+     * at 0.81–0.89. The gap is narrow because e5 similarities are compressed near the top of their
+     * range — which is exactly why the first value here, picked by eye at 0.72, sat below the noise
+     * and let everything through.
+     *
+     * <p>Configurable because the number belongs to the model, not to the code: another model has
+     * another distribution, and a value carried over unchanged would silently stop filtering.
      */
     private final double minSimilarity;
+    /**
+     * How far below the best hit a passage may still be shown.
+     *
+     * <p>The absolute floor decides whether there is an answer; this decides how much of the tail
+     * comes with it. Without it a good question returns its answer followed by five plausible-
+     * looking clauses about other subjects, all scoring within a few thousandths, and the user has
+     * to work out which one was meant.
+     */
+    private final double relativeWindow;
 
     public DocumentSearchService(
             DocumentChunkRepository chunkRepository,
             EmbeddingModel embeddingModel,
-            @org.springframework.beans.factory.annotation.Value("${docsbot.rag.min-similarity:0.72}")
-            double minSimilarity
+            JdbcTemplate jdbcTemplate,
+            @org.springframework.beans.factory.annotation.Value("${docsbot.rag.min-similarity:0.79}")
+            double minSimilarity,
+            @org.springframework.beans.factory.annotation.Value("${docsbot.rag.relative-window:0.03}")
+            double relativeWindow
     ) {
         this.chunkRepository = chunkRepository;
         this.embeddingModel = embeddingModel;
+        this.jdbcTemplate = jdbcTemplate;
         this.minSimilarity = minSimilarity;
+        this.relativeWindow = relativeWindow;
     }
 
     /** A passage that answered the question, with enough context to go and check it. */
-    public record Passage(long documentId, int chunkIndex, String content, double similarity) {
+    public record Passage(
+            long documentId, String documentName, int chunkIndex, String content, double similarity) {
     }
 
     @Transactional(readOnly = true)
@@ -77,11 +101,48 @@ public class DocumentSearchService {
             double similarity = Vectors.cosineSimilarity(queryVector, vector);
             if (similarity >= minSimilarity) {
                 scored.add(new Passage(
-                        chunk.getDocumentId(), chunk.getChunkIndex(), chunk.getContent(), similarity));
+                        chunk.getDocumentId(), null, chunk.getChunkIndex(), chunk.getContent(), similarity));
             }
         }
+        if (scored.isEmpty()) {
+            return List.of();
+        }
         scored.sort(Comparator.comparingDouble(Passage::similarity).reversed());
-        return capPerDocument(scored, Math.max(1, Math.min(limit <= 0 ? MAX_RESULTS : limit, MAX_RESULTS)));
+        double cutoff = scored.get(0).similarity() - relativeWindow;
+        scored.removeIf(passage -> passage.similarity() < cutoff);
+        return withDocumentNames(
+                capPerDocument(scored, Math.max(1, Math.min(limit <= 0 ? MAX_RESULTS : limit, MAX_RESULTS))));
+    }
+
+    /**
+     * Attaches the file each passage came from. A citation nobody can follow is not a citation: for
+     * a şartname clause, "05-yeterlik-belgeleri.pdf" is what lets somebody open the file and check
+     * the wording, and "document 13" is what makes them stop trusting the answer.
+     *
+     * <p>Resolved after ranking rather than joined during it, so the lookup covers the handful of
+     * passages actually being returned instead of every chunk in the corpus.
+     */
+    private List<Passage> withDocumentNames(List<Passage> passages) {
+        if (passages.isEmpty()) {
+            return passages;
+        }
+        List<Long> ids = passages.stream().map(Passage::documentId).distinct().toList();
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        Map<Long, String> names = new java.util.HashMap<>();
+        jdbcTemplate.query(
+                "select id, original_filename from documents where id in (" + placeholders + ")",
+                resultSet -> {
+                    names.put(resultSet.getLong("id"), resultSet.getString("original_filename"));
+                },
+                ids.toArray());
+        return passages.stream()
+                .map(passage -> new Passage(
+                        passage.documentId(),
+                        names.get(passage.documentId()),
+                        passage.chunkIndex(),
+                        passage.content(),
+                        passage.similarity()))
+                .toList();
     }
 
     /**

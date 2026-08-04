@@ -25,8 +25,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * someone else's weights instead of this code.
  */
 // The stub embedder is a bag of words, whose similarities sit far below what a neural model
-// produces, so the relevance floor is lowered to match it. Production keeps its own default.
-@SpringBootTest(properties = "docsbot.rag.min-similarity=0.15")
+// produces, so the relevance floor is lowered to match it. Production keeps its own default. The
+// relative window is opened wide for the same reason: bag-of-words scores are spread across the
+// whole range, where a neural model's crowd into a narrow band, so production's 0.03 would cut
+// everything but the top hit here and would be testing the stub rather than the code.
+@SpringBootTest(properties = {
+        "docsbot.rag.min-similarity=0.15",
+        "docsbot.rag.relative-window=1.0",
+})
 @ActiveProfiles("postgres")
 class DocumentRagIntegrationTest {
 
@@ -47,6 +53,9 @@ class DocumentRagIntegrationTest {
 
     @Autowired
     private DocumentChunkRepository chunkRepository;
+
+    @Autowired
+    private EmbeddingModel embeddingModel;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -115,6 +124,37 @@ class DocumentRagIntegrationTest {
                 .contains(isProgramiDocumentId);
         assertThat(hits.stream().filter(hit -> hit.documentId() == teminatDocumentId).count())
                 .isLessThanOrEqualTo(3);
+    }
+
+    @Test
+    void theAnswerNamesTheFileItCameFromNotJustAnId() {
+        indexingService.index(teminatDocumentId, "Teminat mektubu yuz yirmi takvim gunu gecerli olmalidir.");
+
+        List<DocumentSearchService.Passage> hits = searchService.search("teminat mektubu gecerlilik", 5);
+
+        // A citation nobody can follow is not a citation. "teminat-sartnamesi.pdf" is what lets
+        // somebody open the file and check the wording; "document 13" is what makes them stop
+        // trusting the answer.
+        assertThat(hits).isNotEmpty();
+        assertThat(hits.get(0).documentName()).isEqualTo("teminat-sartnamesi.pdf");
+    }
+
+    @Test
+    void theTailOfWeakerMatchesIsTrimmedRatherThanShownAlongsideTheAnswer() {
+        indexingService.index(teminatDocumentId, "Teminat mektubu gecerlilik suresi uzatilabilir.");
+        indexingService.index(isProgramiDocumentId, "Yemekhane menusu haftalik olarak teminat panosuna asilir.");
+
+        // Same corpus, same question, two windows. Wide: both come back, because both share a word
+        // with the question. Narrow: only the one that actually answers it survives.
+        DocumentSearchService narrow = new DocumentSearchService(
+                chunkRepository, embeddingModel, jdbcTemplate, 0.15, 0.05);
+
+        assertThat(searchService.search("teminat mektubu gecerlilik suresi", 8))
+                .extracting(DocumentSearchService.Passage::documentId)
+                .contains(isProgramiDocumentId);
+        assertThat(narrow.search("teminat mektubu gecerlilik suresi", 8))
+                .extracting(DocumentSearchService.Passage::documentId)
+                .containsExactly(teminatDocumentId);
     }
 
     @Test
