@@ -128,7 +128,7 @@ import {
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
   Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp, Volume2,
-  FileSearch, Building2,
+  FileSearch,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
