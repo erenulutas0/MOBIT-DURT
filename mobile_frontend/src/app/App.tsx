@@ -4,6 +4,7 @@ import { PushNotifications } from "@capacitor/push-notifications";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import { AssistantPanel } from "./components/AssistantPanel";
+import { DocumentSearchPanel } from "./components/DocumentSearchPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
 import { MessagesTab } from "./MessagesTab";
@@ -124,6 +125,7 @@ import {
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
   Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp, Volume2,
+  FileSearch,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -785,6 +787,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
 function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { user: AuthUser; setTab: (t: Tab) => void; unreadNotifications: number; onOpenNotifications: () => void }) {
   const isAdmin = user.role === "admin";
   const [showAssistant, setShowAssistant] = useState(false);
+  const [showDocumentSearch, setShowDocumentSearch] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
   // null = probe in flight; the status card must reflect reality, not wishful constants
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
@@ -857,6 +860,27 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
                 <p className="text-sm font-bold text-foreground">Mobit-Asistan</p>
                 <p className="text-xs text-muted-foreground">
                   Günün özeti: görevler, teslim tarihleri, hatırlatmalar
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </button>
+          </div>
+
+          {/* Belgelere Sor — semantic search over the company's own şartname and contract text.
+              Its own entry rather than a corner of the assistant chat: "ask the documents" is a
+              distinct thing to reach for, and burying it costs the feature its discoverability. */}
+          <div className="rounded-2xl p-px bg-gradient-to-br from-teal-500/40 via-teal-500/10 to-transparent surface-elevated">
+          <button onClick={() => setShowDocumentSearch(true)}
+            className="w-full bg-gradient-to-br from-[#0F2320] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center">
+                <FileSearch className="w-5 h-5 text-teal-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-foreground">Belgelere Sor</p>
+                <p className="text-xs text-muted-foreground">
+                  Şartname ve sözleşmelerde arayın: "Gecikirsem ne kadar ceza öderim?"
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -981,6 +1005,10 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
             setTab("messages");
           }}
         />
+      )}
+
+      {showDocumentSearch && (
+        <DocumentSearchPanel onClose={() => setShowDocumentSearch(false)} />
       )}
     </div>
   );

@@ -939,6 +939,38 @@ export async function sendAssistantMessage(message: string): Promise<AssistantCh
   return response.json();
 }
 
+export type DocumentPassage = {
+  document_id: number;
+  document_name: string | null;
+  chunk_index: number;
+  content: string;
+  similarity: number;
+};
+
+export type DocumentAnswer = {
+  ready: boolean;
+  message: string;
+  passages: DocumentPassage[];
+};
+
+/**
+ * Ask the company's own documents a question.
+ *
+ * <p>The answer is the clauses themselves with the file each came from, and deliberately not a
+ * generated summary: for a şartname that is the product rather than a shortcoming, because a quoted
+ * clause can be opened and checked while a paraphrase cannot, and an answer with legal weight has to
+ * be checkable.
+ */
+export async function askDocuments(question: string): Promise<DocumentAnswer> {
+  const response = await apiFetch("/erp/assistant/documents/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, limit: 5 }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Belgelerde arama yapılamadı."));
+  return response.json();
+}
+
 export async function sendERPDirectMessage(payload: {
   body: string;
   recipientUserId?: number | null;
