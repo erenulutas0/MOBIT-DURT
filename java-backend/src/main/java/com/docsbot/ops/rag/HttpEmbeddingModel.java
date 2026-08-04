@@ -47,7 +47,21 @@ public class HttpEmbeddingModel implements EmbeddingModel {
     ) {
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        // HTTP/1.1 explicitly. Java's client defaults to HTTP/2, and over plaintext that means
+        // opening every request with an "Upgrade: h2c" handshake. The sidecar runs on uvicorn, which
+        // does not speak HTTP/2: it logs "Unsupported upgrade request" and serves the request with
+        // an empty body, so every POST came back 422 while GET /health kept answering 200 — the
+        // service looked healthy and indexing failed on all of it. Nothing here needs HTTP/2; the
+        // connection never leaves the internal Docker network.
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
+    }
+
+    /** Pinned above for a reason the type system cannot express; the test holds it in place. */
+    HttpClient.Version protocolVersion() {
+        return httpClient.version();
     }
 
     @Override
@@ -136,7 +150,10 @@ public class HttpEmbeddingModel implements EmbeddingModel {
                             .build(),
                     HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) {
-                throw new IllegalStateException("Embedding service returned HTTP " + response.statusCode());
+                // With the body: a bare "HTTP 422" says the request was rejected but not what was
+                // wrong with it, and the service's own answer usually names the field.
+                throw new IllegalStateException("Embedding service returned HTTP "
+                        + response.statusCode() + ": " + abbreviate(response.body()));
             }
             return objectMapper.readTree(response.body());
         } catch (InterruptedException exception) {
@@ -147,6 +164,15 @@ public class HttpEmbeddingModel implements EmbeddingModel {
         } catch (Exception exception) {
             throw new IllegalStateException("Embedding request failed: " + exception.getMessage(), exception);
         }
+    }
+
+    /** Enough of the service's complaint to act on, without pasting a whole page into a log line. */
+    private static String abbreviate(String body) {
+        if (body == null || body.isBlank()) {
+            return "(empty response)";
+        }
+        String collapsed = body.strip().replaceAll("\\s+", " ");
+        return collapsed.length() <= 300 ? collapsed : collapsed.substring(0, 300) + "...";
     }
 
     private void rememberModel(JsonNode body, int vectorLength) {
