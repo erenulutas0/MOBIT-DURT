@@ -380,10 +380,109 @@ const SESSION_KEY = "docsbot.mobile.auth";
 const API_TIMEOUT_MS = 15_000;
 let sessionCache: BackendAuthUser | null | undefined;
 
-function apiBaseUrl() {
+const TENANT_KEY = "docsbot.tenant.server";
+/** Hydrated once at startup; `undefined` means "not read yet", `null` means "no choice stored". */
+let tenantServerCache: string | null | undefined;
+
+function defaultBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (configured) return configured.replace(/\/$/, "");
   return "http://127.0.0.1:8080";
+}
+
+/**
+ * Which server this install talks to.
+ *
+ * <p>Each customer runs their own backend and their own database — the isolation story that sells
+ * this to a company whose tender documents are its competitive position. The one app on the Play
+ * Store therefore cannot have a server baked into it, or every customer would need a listing of
+ * their own.
+ *
+ * <p>Falls back to the build-time default when nothing is stored, so existing installs and the
+ * default company keep working across the update without anyone typing anything.
+ */
+function apiBaseUrl() {
+  return tenantServerCache || defaultBaseUrl();
+}
+
+/**
+ * Turns what someone types on the sign-in screen into a server address.
+ *
+ * <p>A short company code is what a customer can be told over the phone and retype without error,
+ * so codes map to a subdomain by convention. A full URL is accepted as-is for the customer who
+ * hosts the backend themselves, which is a thing tender companies ask for.
+ */
+export function resolveTenantServer(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const suffix = (import.meta.env.VITE_TENANT_DOMAIN_SUFFIX
+    || defaultBaseUrl().replace(/^https?:\/\//i, "")).replace(/\/.*$/, "");
+  return `https://${trimmed.toLowerCase()}.${suffix}`;
+}
+
+export function currentTenantServer(): string {
+  return apiBaseUrl();
+}
+
+/** True when this install is pinned to a specific server rather than the built-in default. */
+export function hasCustomTenantServer(): boolean {
+  return Boolean(tenantServerCache);
+}
+
+export async function loadStoredTenantServerAsync(): Promise<string | null> {
+  if (tenantServerCache !== undefined) return tenantServerCache;
+  try {
+    const [{ value }, legacy] = await Promise.all([
+      Preferences.get({ key: TENANT_KEY }),
+      Promise.resolve(window.localStorage.getItem(TENANT_KEY)),
+    ]);
+    tenantServerCache = value || legacy || null;
+    return tenantServerCache;
+  } catch {
+    tenantServerCache = null;
+    return null;
+  }
+}
+
+/**
+ * Points this install at a different server. Any stored session belongs to the old one, so it is
+ * dropped: a token issued by one customer's backend is meaningless to another's, and keeping it
+ * would show a signed-in shell that fails on its first request.
+ */
+export async function setTenantServer(input: string): Promise<string> {
+  const resolved = resolveTenantServer(input);
+  if (!resolved) throw new Error("Şirket kodu boş olamaz.");
+  clearStoredSession();
+  tenantServerCache = resolved;
+  window.localStorage.setItem(TENANT_KEY, resolved);
+  try {
+    await Preferences.set({ key: TENANT_KEY, value: resolved });
+  } catch {
+    // Web build without the native plugin: localStorage above is the store.
+  }
+  return resolved;
+}
+
+export async function clearTenantServer(): Promise<void> {
+  clearStoredSession();
+  tenantServerCache = null;
+  window.localStorage.removeItem(TENANT_KEY);
+  try {
+    await Preferences.remove({ key: TENANT_KEY });
+  } catch {
+    // Nothing to remove without the native plugin.
+  }
+}
+
+/** Confirms a server is actually a DocsBot backend before an install is pinned to it. */
+export async function probeTenantServer(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetchWithTimeout(`${baseUrl.replace(/\/+$/, "")}/health`, {}, 8000);
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 // A real approved employee account always takes priority; the shared admin

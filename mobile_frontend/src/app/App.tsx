@@ -5,6 +5,7 @@ import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { DocumentSearchPanel } from "./components/DocumentSearchPanel";
+import { TenantServerSheet } from "./components/TenantServerSheet";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
 import { MessagesTab } from "./MessagesTab";
@@ -65,6 +66,8 @@ import {
   getTenderDocumentsPage,
   getTendersPage,
   getVaultNotes,
+  hasCustomTenantServer,
+  loadStoredTenantServerAsync,
   loadStoredUserAsync,
   loginToBackend,
   markAllERPNotificationsRead,
@@ -125,7 +128,7 @@ import {
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
   Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp, Volume2,
-  FileSearch,
+  FileSearch, Building2,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -488,6 +491,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [showServerSheet, setShowServerSheet] = useState(false);
 
   const switchMode = (nextMode: "login" | "request" | "admin") => {
     setError("");
@@ -775,10 +779,30 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
         )}
       </div>
 
-      <p className="text-[10px] text-muted-foreground text-center mt-8">
+      {/* Kept small and out of the way: today's users have no reason to touch it, and a mistyped
+          server address locks somebody out of an app that worked a moment ago. */}
+      <button
+        onClick={() => setShowServerSheet(true)}
+        className="mt-6 mx-auto flex items-center gap-1.5 text-[11px] text-muted-foreground active:scale-95"
+      >
+        <Building2 className="w-3 h-3" />
+        {hasCustomTenantServer() ? "Şirket sunucusu: değiştir" : "Farklı şirket sunucusu"}
+      </button>
+
+      <p className="text-[10px] text-muted-foreground text-center mt-4">
         v{APP_VERSION} · Mobit © 2026
       </p>
       </div>
+
+      {showServerSheet && (
+        <TenantServerSheet
+          onClose={() => setShowServerSheet(false)}
+          onChanged={() => {
+            setError("");
+            setSuccess("Sunucu değiştirildi. Şimdi giriş yapabilirsiniz.");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -4921,7 +4945,10 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void loadStoredUserAsync()
+    // The stored server has to be read before the session: every request below is addressed to it,
+    // and a session restored against the wrong backend would fail on its first call.
+    void loadStoredTenantServerAsync()
+      .then(() => loadStoredUserAsync())
       .then(stored => {
         if (cancelled) return;
         if (stored) {
