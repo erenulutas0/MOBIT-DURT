@@ -164,7 +164,9 @@ public class DocumentAssistantController {
             @JsonProperty("document_id") Long documentId,
             @JsonProperty("document_name") String documentName,
             String content,
-            Double similarity
+            Double similarity,
+            /** Key of the earlier line answered by this very same clause, when there is one. */
+            @JsonProperty("same_as") String sameAs
     ) {
         static BriefEntryResponse from(TenderBriefService.Entry entry) {
             DocumentSearchService.Passage passage = entry.passage();
@@ -176,7 +178,8 @@ public class DocumentAssistantController {
                     passage == null ? null : passage.documentId(),
                     passage == null ? null : passage.documentName(),
                     passage == null ? null : passage.content(),
-                    passage == null ? null : Math.round(passage.similarity() * 1000) / 1000.0);
+                    passage == null ? null : Math.round(passage.similarity() * 1000) / 1000.0,
+                    entry.sameAs());
         }
     }
 

@@ -11,6 +11,11 @@ import { getTenderBrief, type TenderBrief } from "../api";
  * %3'ünden az olmamak üzere" loses the "az olmamak üzere" — a floor read back as a fixed rate — and
  * a mistake here is priced into a bid. Reading the number off the quoted text is the design.
  */
+/** The heading a shared clause was first shown under, so the cross-reference names something. */
+function labelOf(brief: TenderBrief | null, key: string): string {
+  return brief?.entries.find(entry => entry.key === key)?.label || "önceki";
+}
+
 export function TenderBriefPanel({
   tenderId,
   onClose,
@@ -94,7 +99,15 @@ export function TenderBriefPanel({
                 </span>
               )}
             </div>
-            {entry.found ? (
+            {entry.found && entry.same_as ? (
+              // One madde often settles two of these at once — "MADDE 2 - GEÇİCİ TEMİNAT" states
+              // both the rate and how long the letter stays valid. The question stays visible so
+              // the brief is still twelve answered lines; the clause is not printed twice, which
+              // is what made a real brief look like it was padding.
+              <p className="px-3.5 py-3 text-xs text-muted-foreground">
+                Yukarıdaki “{labelOf(brief, entry.same_as)}” maddesinde yanıtlandı.
+              </p>
+            ) : entry.found ? (
               <p className="px-3.5 py-3 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                 {entry.content}
               </p>

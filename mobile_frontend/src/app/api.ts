@@ -1079,6 +1079,8 @@ export type TenderBriefEntry = {
   document_name: string | null;
   content: string | null;
   similarity: number | null;
+  /** Key of an earlier entry answered by this very same clause, when there is one. */
+  same_as: string | null;
 };
 
 export type TenderBrief = {

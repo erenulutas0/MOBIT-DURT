@@ -17,6 +17,7 @@ function entry(overrides: Partial<TenderBriefEntry> = {}): TenderBriefEntry {
     document_name: "03-sozlesme-tasarisi.txt",
     content: "MADDE 1 - GECİKME CEZASI\nGecikilen her takvim günü için sözleşme bedelinin onbinde 5'i.",
     similarity: 0.875,
+    same_as: null,
     ...overrides,
   };
 }
@@ -63,6 +64,20 @@ describe("TenderBriefPanel", () => {
     // its gaps looks complete when it is not.
     expect(await screen.findByText("Fiyat farkı")).toBeInTheDocument();
     expect(screen.getByText("bulunamadı")).toBeInTheDocument();
+  });
+
+  it("aynı maddeyle yanıtlanan ikinci soruyu metni tekrarlamadan gösterir", async () => {
+    getTenderBrief.mockResolvedValue(brief([
+      entry(),
+      entry({ key: "teminat_suresi", label: "Teminat geçerlilik süresi", same_as: "gecikme_cezasi" }),
+    ]));
+    render(<TenderBriefPanel tenderId="ORNEK-ENERJI-2026-001" onClose={vi.fn()} />);
+
+    // The question stays answered; the clause is not printed twice, which is what made a real
+    // brief look like it was padding out its twelve lines.
+    expect(await screen.findByText("Teminat geçerlilik süresi")).toBeInTheDocument();
+    expect(screen.getByText(/“Gecikme cezası” maddesinde yanıtlandı/)).toBeInTheDocument();
+    expect(screen.getAllByText(/onbinde 5'i/)).toHaveLength(1);
   });
 
   it("sorulan ihaleyi başlıkta gösterir", async () => {

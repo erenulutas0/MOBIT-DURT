@@ -45,8 +45,22 @@ public class TenderBriefService {
     public record Question(String key, String label, String text) {
     }
 
-    /** One line of the brief. {@code passage} is null when the documents do not answer it. */
-    public record Entry(String key, String label, String question, DocumentSearchService.Passage passage) {
+    /**
+     * One line of the brief. {@code passage} is null when the documents do not answer it.
+     *
+     * <p>{@code sameAs} names an earlier line answered by this very same clause. One madde often
+     * settles two of these questions at once — "MADDE 2 - GEÇİCİ TEMİNAT" states both the rate and
+     * how long the letter stays valid — and printing it twice makes a twelve-line brief look like
+     * it is padding. The line stays in the list so the question is still visibly answered; the
+     * caller shows it against the clause it shares instead of repeating the text.
+     */
+    public record Entry(
+            String key,
+            String label,
+            String question,
+            DocumentSearchService.Passage passage,
+            String sameAs
+    ) {
         public boolean found() {
             return passage != null;
         }
@@ -70,16 +84,18 @@ public class TenderBriefService {
      * looks complete when it is not.
      */
     public List<Entry> brief(String tenderId) {
-        return QUESTIONS.stream()
-                .map(question -> {
-                    List<DocumentSearchService.Passage> hits =
-                            searchService.search(question.text(), 1, tenderId);
-                    return new Entry(
-                            question.key(),
-                            question.label(),
-                            question.text(),
-                            hits.isEmpty() ? null : hits.get(0));
-                })
-                .toList();
+        java.util.Map<String, String> firstAskedFor = new java.util.HashMap<>();
+        List<Entry> entries = new java.util.ArrayList<>(QUESTIONS.size());
+        for (Question question : QUESTIONS) {
+            List<DocumentSearchService.Passage> hits = searchService.search(question.text(), 1, tenderId);
+            DocumentSearchService.Passage passage = hits.isEmpty() ? null : hits.get(0);
+            String sameAs = null;
+            if (passage != null) {
+                String clause = passage.documentId() + ":" + passage.chunkIndex();
+                sameAs = firstAskedFor.putIfAbsent(clause, question.key());
+            }
+            entries.add(new Entry(question.key(), question.label(), question.text(), passage, sameAs));
+        }
+        return List.copyOf(entries);
     }
 }
