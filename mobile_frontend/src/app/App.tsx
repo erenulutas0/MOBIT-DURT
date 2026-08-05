@@ -893,7 +893,11 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
 
           {/* Belgelere Sor — semantic search over the company's own şartname and contract text.
               Its own entry rather than a corner of the assistant chat: "ask the documents" is a
-              distinct thing to reach for, and burying it costs the feature its discoverability. */}
+              distinct thing to reach for, and burying it costs the feature its discoverability.
+
+              Admin-only, matching who can open those documents in the first place. Showing it to
+              everyone would have offered the archive to people the server then refuses. */}
+          {isAdmin && (
           <div className="rounded-2xl p-px bg-gradient-to-br from-teal-500/40 via-teal-500/10 to-transparent surface-elevated">
           <button onClick={() => setShowDocumentSearch(true)}
             className="w-full bg-gradient-to-br from-[#0F2320] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
@@ -911,6 +915,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
             </div>
           </button>
           </div>
+          )}
 
           <div className="rounded-2xl p-px bg-gradient-to-br from-blue-500/40 via-blue-500/10 to-transparent surface-elevated">
           <button onClick={() => setTab("erp")}

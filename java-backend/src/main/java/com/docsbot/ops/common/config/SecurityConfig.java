@@ -199,7 +199,6 @@ public class SecurityConfig {
                                 "/erp/company-chat/messages",
                                 "/erp/assistant/chat",
                                 "/erp/assistant/speech",
-                                "/erp/assistant/documents/ask",
                                 "/erp/feedback",
                                 "/erp/me/account-deletion-request")
                         .authenticated()
@@ -228,6 +227,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/erp/assistant/documents/status")
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/erp/assistant/documents/reindex")
+                        .hasRole("ADMIN")
+                        // Same lock as /documents/**, which this reads out of. Listing and opening
+                        // tender documents has always been admin-only; asking a question that
+                        // returns their clauses verbatim is the same access through another door,
+                        // and leaving it merely authenticated handed every employee the contents of
+                        // an archive they cannot open. If employees should have it, that is a
+                        // per-document permission model, not an unlocked search.
+                        .requestMatchers(HttpMethod.POST, "/erp/assistant/documents/ask")
                         .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.PATCH,
