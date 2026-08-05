@@ -51,6 +51,12 @@ for required in "$BASE_ENV" "$JAR"; do
     [ -f "$required" ] || { echo "Bulunamadi: $required" >&2; exit 1; }
 done
 
+# Read from the base install rather than assumed: this cluster has no "postgres" role at all — the
+# superuser is whatever POSTGRES_USER was set to when the container was first created, and guessing
+# it fails on the very first statement.
+SUPERUSER="$(grep -E '^POSTGRES_USER=' "$BASE_ENV" | head -1 | cut -d= -f2-)"
+[ -n "$SUPERUSER" ] || { echo "POSTGRES_USER $BASE_ENV icinde bulunamadi" >&2; exit 1; }
+
 if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
     echo "Bu kod zaten kullanimda: $CONTAINER" >&2
     exit 1
@@ -72,7 +78,7 @@ ADMIN_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
 
 # ── Database ──────────────────────────────────────────────────────────────────
 echo "1/5 Veritabani olusturuluyor"
-docker exec -i "$POSTGRES_CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 <<SQL
+docker exec -i "$POSTGRES_CONTAINER" psql -U "$SUPERUSER" -d postgres -v ON_ERROR_STOP=1 <<SQL
 CREATE ROLE "$DB_USER" LOGIN PASSWORD '$DB_PASSWORD';
 CREATE DATABASE "$DB_NAME" OWNER "$DB_USER";
 SQL
