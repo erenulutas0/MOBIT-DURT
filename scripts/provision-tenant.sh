@@ -147,13 +147,35 @@ echo "════════════════════════�
 echo "  Caddy'ye eklenecek blok (dosyayi elle duzenleyin, sonra:"
 echo "  docker exec vocabmaster-caddy caddy reload --config /etc/caddy/Caddyfile)"
 echo "════════════════════════════════════════════════════════════════"
+# Mirrors the main site's block rather than a bare reverse_proxy. A plain proxy would serve the
+# mobile app fine and quietly break the web panel: that panel calls the backend under /api/*, which
+# has to have its prefix stripped, and everything else has to fall through to the SPA.
 cat <<CADDY
 
 $HOSTNAME {
+	encode zstd gzip
+	header {
+		-Server
+	}
+
 	handle /actuator* {
 		respond 404
 	}
-	reverse_proxy $CONTAINER:8080
+
+	handle_path /api/* {
+		reverse_proxy $CONTAINER:8080
+	}
+
+	@backend path /erp/* /health /documents/* /tenders/* /dashboard/* /telegram/* /webhook/* /shared/* /document-groups*
+	handle @backend {
+		reverse_proxy $CONTAINER:8080
+	}
+
+	handle {
+		root * /srv/docsbot/frontend
+		try_files {path} /index.html
+		file_server
+	}
 }
 CADDY
 echo "════════════════════════════════════════════════════════════════"
