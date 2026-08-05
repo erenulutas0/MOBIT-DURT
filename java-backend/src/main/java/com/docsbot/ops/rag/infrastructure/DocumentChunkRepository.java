@@ -20,6 +20,17 @@ public interface DocumentChunkRepository extends JpaRepository<DocumentChunk, Lo
      */
     List<DocumentChunk> findAllByModel(String model);
 
+    /**
+     * The same, narrowed to one tender's documents. A question asked while looking at a specific
+     * tender should be answered from that tender's own şartname — the answer to "what is the
+     * penalty" is different for every contract, and the most similar passage across the whole
+     * archive is very likely to be some other tender's.
+     */
+    @Query("select chunk from DocumentChunk chunk "
+            + "where chunk.model = :model and chunk.documentId in :documentIds")
+    List<DocumentChunk> findAllByModelAndDocumentIdIn(
+            @Param("model") String model, @Param("documentIds") java.util.Collection<Long> documentIds);
+
     long countByModel(String model);
 
     boolean existsByDocumentId(Long documentId);

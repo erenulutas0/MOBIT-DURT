@@ -236,6 +236,9 @@ public class SecurityConfig {
                         // per-document permission model, not an unlocked search.
                         .requestMatchers(HttpMethod.POST, "/erp/assistant/documents/ask")
                         .hasRole("ADMIN")
+                        // The brief quotes the same clauses, so it carries the same lock.
+                        .requestMatchers(HttpMethod.GET, "/erp/assistant/tenders/*/brief")
+                        .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/erp/notifications/*/read",

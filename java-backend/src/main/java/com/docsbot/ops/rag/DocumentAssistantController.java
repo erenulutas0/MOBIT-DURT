@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,15 +30,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class DocumentAssistantController {
 
     private final DocumentSearchService searchService;
+    private final TenderBriefService briefService;
     private final EmbeddingModel embeddingModel;
     private final DocumentIndexSweeper indexSweeper;
 
     public DocumentAssistantController(
             DocumentSearchService searchService,
+            TenderBriefService briefService,
             EmbeddingModel embeddingModel,
             DocumentIndexSweeper indexSweeper
     ) {
         this.searchService = searchService;
+        this.briefService = briefService;
         this.embeddingModel = embeddingModel;
         this.indexSweeper = indexSweeper;
     }
@@ -121,6 +125,59 @@ public class DocumentAssistantController {
                 true,
                 passages.size() + " ilgili bölüm buldum.",
                 passages.stream().map(PassageResponse::from).toList());
+    }
+
+    /**
+     * "İhale künyesi": the dozen facts a company decides on before bidding, each answered by the
+     * clause that states it. Replaces reading forty pages of four documents to fill in a form.
+     */
+    @GetMapping("/tenders/{tenderId}/brief")
+    BriefResponse brief(JwtAuthenticationToken authentication, @PathVariable String tenderId) {
+        ErpPrincipal.from(authentication);
+        if (!embeddingModel.available()) {
+            return new BriefResponse(false, "Doküman asistanı henüz hazırlanıyor.", tenderId, List.of());
+        }
+        List<TenderBriefService.Entry> entries = briefService.brief(tenderId);
+        long answered = entries.stream().filter(TenderBriefService.Entry::found).count();
+        return new BriefResponse(
+                true,
+                answered == 0
+                        ? "Bu ihalenin belgelerinde künye bilgisi bulamadım."
+                        : answered + " / " + entries.size() + " madde bulundu.",
+                tenderId,
+                entries.stream().map(BriefEntryResponse::from).toList());
+    }
+
+    record BriefResponse(
+            boolean ready,
+            String message,
+            @JsonProperty("tender_id") String tenderId,
+            List<BriefEntryResponse> entries
+    ) {
+    }
+
+    record BriefEntryResponse(
+            String key,
+            String label,
+            String question,
+            boolean found,
+            @JsonProperty("document_id") Long documentId,
+            @JsonProperty("document_name") String documentName,
+            String content,
+            Double similarity
+    ) {
+        static BriefEntryResponse from(TenderBriefService.Entry entry) {
+            DocumentSearchService.Passage passage = entry.passage();
+            return new BriefEntryResponse(
+                    entry.key(),
+                    entry.label(),
+                    entry.question(),
+                    entry.found(),
+                    passage == null ? null : passage.documentId(),
+                    passage == null ? null : passage.documentName(),
+                    passage == null ? null : passage.content(),
+                    passage == null ? null : Math.round(passage.similarity() * 1000) / 1000.0);
+        }
     }
 
     record AskRequest(

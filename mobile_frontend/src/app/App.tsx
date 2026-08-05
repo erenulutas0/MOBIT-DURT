@@ -6,6 +6,7 @@ import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { DocumentSearchPanel } from "./components/DocumentSearchPanel";
 import { TenantServerSheet } from "./components/TenantServerSheet";
+import { TenderBriefPanel } from "./components/TenderBriefPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
 import { MessagesTab } from "./MessagesTab";
@@ -3731,6 +3732,7 @@ function TenderTab({
   onOpenRoom: (groupId: number, view: "chat" | "documents") => void;
 }) {
   const [screen, setScreen] = useState<TenderScreen>("dashboard");
+  const [briefTenderId, setBriefTenderId] = useState<string | null>(null);
   const [showGraph, setShowGraph] = useState(false);
   const [obsidianNote, setObsidianNote] = useState("BEDAS-2026-20260601-001");
   const [documents, setDocuments] = useState<TenderDocument[]>([]);
@@ -4163,6 +4165,21 @@ function TenderTab({
                 <Download className="w-4 h-4" /> İndir
               </button>
             </div>
+
+            {/* Reached from a document because that is where somebody already is when the question
+                occurs to them — "what does this tender actually require?" */}
+            {selectedDocument.tender_id && (
+              <button
+                onClick={() => setBriefTenderId(selectedDocument.tender_id)}
+                className="w-full py-3 rounded-xl bg-amber-500/15 border border-amber-500/25 text-sm font-bold text-amber-200 flex items-center justify-center gap-2 active:scale-[0.99]"
+              >
+                <ClipboardList className="w-4 h-4" /> İhale Künyesi
+              </button>
+            )}
+
+            {briefTenderId && (
+              <TenderBriefPanel tenderId={briefTenderId} onClose={() => setBriefTenderId(null)} />
+            )}
 
             <Card className="divide-y divide-border">
               {[

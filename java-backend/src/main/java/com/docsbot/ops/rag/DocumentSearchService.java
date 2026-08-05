@@ -81,11 +81,31 @@ public class DocumentSearchService {
 
     @Transactional(readOnly = true)
     public List<Passage> search(String question, int limit) {
+        return search(question, limit, null);
+    }
+
+    /**
+     * @param tenderId when given, only that tender's own documents are searched. The answer to
+     *                 "what is the delay penalty" differs per contract, so a question asked about
+     *                 one tender must not be answered from another's şartname — which is exactly
+     *                 what the most similar passage across the whole archive would often be.
+     */
+    @Transactional(readOnly = true)
+    public List<Passage> search(String question, int limit, String tenderId) {
         if (question == null || question.isBlank()) {
             return List.of();
         }
         String model = embeddingModel.name();
-        List<DocumentChunk> chunks = chunkRepository.findAllByModel(model);
+        List<DocumentChunk> chunks;
+        if (tenderId == null || tenderId.isBlank()) {
+            chunks = chunkRepository.findAllByModel(model);
+        } else {
+            List<Long> documentIds = jdbcTemplate.queryForList(
+                    "select id from documents where tender_id = ?", Long.class, tenderId);
+            chunks = documentIds.isEmpty()
+                    ? List.of()
+                    : chunkRepository.findAllByModelAndDocumentIdIn(model, documentIds);
+        }
         if (chunks.isEmpty()) {
             return List.of();
         }

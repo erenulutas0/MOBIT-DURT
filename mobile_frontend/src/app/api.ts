@@ -1070,6 +1070,37 @@ export async function askDocuments(question: string): Promise<DocumentAnswer> {
   return response.json();
 }
 
+export type TenderBriefEntry = {
+  key: string;
+  label: string;
+  question: string;
+  found: boolean;
+  document_id: number | null;
+  document_name: string | null;
+  content: string | null;
+  similarity: number | null;
+};
+
+export type TenderBrief = {
+  ready: boolean;
+  message: string;
+  tender_id: string;
+  entries: TenderBriefEntry[];
+};
+
+/**
+ * "İhale künyesi": the facts a company decides on before bidding, each answered by the clause that
+ * states it — instead of reading forty pages of four documents to fill in a form.
+ *
+ * <p>Scoped to one tender: penalties and thresholds differ per contract, so an answer taken from a
+ * neighbouring şartname reads perfectly and is wrong.
+ */
+export async function getTenderBrief(tenderId: string): Promise<TenderBrief> {
+  const response = await apiFetch(`/erp/assistant/tenders/${encodeURIComponent(tenderId)}/brief`);
+  if (!response.ok) throw new Error(await errorText(response, "İhale künyesi çıkarılamadı."));
+  return response.json();
+}
+
 export async function sendERPDirectMessage(payload: {
   body: string;
   recipientUserId?: number | null;
