@@ -7,6 +7,12 @@ spring:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
 
 docsbot:
+  rate-limit:
+    # Off for tests. Production limits are per client address, and the whole suite is one address
+    # inside one JVM — so a few hundred logins across unrelated tests drain a budget meant for one
+    # user's minute, and whichever test happens to run last fails with 429. That failure says
+    # nothing about the code under test, and chasing it teaches people to re-run the build.
+    enabled: false
   registration:
     # Registration auto-approves, so production keeps it shut unless a code is configured. The
     # tests need it open to exercise the flow at all, and one shared value keeps every registering

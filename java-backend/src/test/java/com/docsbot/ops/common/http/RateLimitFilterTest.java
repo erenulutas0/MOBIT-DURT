@@ -14,6 +14,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
+        // The suite turns limiting off so unrelated tests do not drain each other's budget;
+        // the one test that is about limiting turns it back on for itself.
+        "docsbot.rate-limit.enabled=true",
         "docsbot.rate-limit.auth-limit=2",
         "docsbot.rate-limit.auth-window-seconds=60",
         "docsbot.rate-limit.assistant-limit=2",
