@@ -9,6 +9,7 @@ function form(overrides: Partial<AccountRequestForm> = {}): AccountRequestForm {
     phone: "05550000000",
     password: "gucluSifre123",
     passwordConfirm: "gucluSifre123",
+    code: "MOBIT-2026",
     ...overrides,
   };
 }
@@ -73,7 +74,22 @@ describe("auth form yardımcıları", () => {
         email: "yeni@mobit.com.tr",
         phone: "05551112233",
         password: "gucluSifre123",
+        code: "MOBIT-2026",
       },
     });
+  });
+
+  it("şirket kodu olmadan kayıt kabul etmez", () => {
+    // Registration auto-approves: whoever gets through lands in the staff directory and the
+    // company chat, so an empty code is an open door rather than a missing formality.
+    const result = validateAccountRequestForm(form({ code: "  " }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("Şirket kodu");
+  });
+
+  it("kodu boşluklarından temizleyerek gönderir", () => {
+    const result = validateAccountRequestForm(form({ code: "  MOBIT-2026  " }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.code).toBe("MOBIT-2026");
   });
 });

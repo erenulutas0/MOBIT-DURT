@@ -88,7 +88,7 @@ class TenderDeadlineIntegrationTest {
         String response = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Ihale Calisani","username":"ihaleci","password":"StrongPass123"}
+                                {"name":"Ihale Calisani","username":"ihaleci","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();

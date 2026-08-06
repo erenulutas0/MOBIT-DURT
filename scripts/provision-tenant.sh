@@ -75,6 +75,9 @@ DB_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)"
 JWT_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 PHONE_SALT="$(openssl rand -base64 24 | tr -d '\n')"
 ADMIN_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
+# Handed to colleagues so they can sign themselves up. Per customer, never shared: registration
+# auto-approves, so one code across two customers is a door into the wrong company.
+JOIN_CODE="$(openssl rand -base64 12 | tr -d '/+=' | head -c 10 | tr '[:lower:]' '[:upper:]')"
 
 # ── Database ──────────────────────────────────────────────────────────────────
 echo "1/5 Veritabani olusturuluyor"
@@ -90,7 +93,7 @@ chmod 700 "$TENANT_DIR"
 
 # Start from the working install so operational settings (FCM, SMTP, feature flags) carry over,
 # then override everything that must not be shared.
-grep -vE '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|SPRING_DATASOURCE_URL|SPRING_DATASOURCE_USERNAME|SPRING_DATASOURCE_PASSWORD|DOCSBOT_JWT_SECRET|PHONE_HASH_SALT|ERP_ADMIN_PASSWORD|ERP_ADMIN_DISPLAY_NAME|DATA_DIR|VAULT_DIR)=' \
+grep -vE '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|SPRING_DATASOURCE_URL|SPRING_DATASOURCE_USERNAME|SPRING_DATASOURCE_PASSWORD|DOCSBOT_JWT_SECRET|PHONE_HASH_SALT|ERP_ADMIN_PASSWORD|ERP_ADMIN_DISPLAY_NAME|DATA_DIR|VAULT_DIR|DOCSBOT_REGISTRATION_JOIN_CODE)=' \
     "$BASE_ENV" > "$TENANT_DIR/.env"
 
 cat >> "$TENANT_DIR/.env" <<ENV
@@ -103,6 +106,7 @@ DOCSBOT_JWT_SECRET=$JWT_SECRET
 PHONE_HASH_SALT=$PHONE_SALT
 ERP_ADMIN_PASSWORD=$ADMIN_PASSWORD
 ERP_ADMIN_DISPLAY_NAME=$DISPLAY_NAME
+DOCSBOT_REGISTRATION_JOIN_CODE=$JOIN_CODE
 DATA_DIR=/srv/docsbot/data
 VAULT_DIR=/srv/docsbot/vault
 ENV
@@ -182,6 +186,7 @@ echo "════════════════════════�
 echo "  Musteriye verilecekler"
 echo "════════════════════════════════════════════════════════════════"
 echo "  Sirket kodu     : $CODE"
+echo "  Kayit kodu      : $JOIN_CODE   (calisanlar kendi hesabini bununla acar)"
 echo "  Yonetici parolasi: $ADMIN_PASSWORD"
 echo
 echo "  Uygulamada: giris ekrani > 'Farkli sirket sunucusu' > kodu girin."

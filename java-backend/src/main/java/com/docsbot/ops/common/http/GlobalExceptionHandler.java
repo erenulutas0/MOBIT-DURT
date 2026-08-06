@@ -81,6 +81,14 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.UNAUTHORIZED, exception.getMessage(), request, Map.of());
     }
 
+    @ExceptionHandler(AuthExceptions.Forbidden.class)
+    ResponseEntity<ApiError> handleForbidden(
+            AuthExceptions.Forbidden exception,
+            HttpServletRequest request
+    ) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), request, Map.of());
+    }
+
     @ExceptionHandler(AuthExceptions.TooManyRequests.class)
     ResponseEntity<ApiError> handleTooManyRequests(
             AuthExceptions.TooManyRequests exception,

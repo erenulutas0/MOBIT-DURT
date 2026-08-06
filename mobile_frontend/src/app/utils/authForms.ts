@@ -5,6 +5,8 @@ export type AccountRequestForm = {
   phone: string;
   password: string;
   passwordConfirm: string;
+  /** The company's join code, handed out by the admin. */
+  code: string;
 };
 
 export type AccountRequestValidation =
@@ -16,6 +18,7 @@ export type AccountRequestValidation =
         email: string;
         phone: string;
         password: string;
+        code: string;
       };
     }
   | {
@@ -33,6 +36,11 @@ export function validateAccountRequestForm(form: AccountRequestForm): AccountReq
 
   if (!name || !username || !form.password) {
     return { ok: false, error: "Ad soyad, kullanıcı adı ve şifre zorunludur." };
+  }
+  // Registration auto-approves: whoever gets through lands in the staff directory and the
+  // company chat, so the code is the door rather than a formality.
+  if (!form.code.trim()) {
+    return { ok: false, error: "Şirket kodu zorunludur. Yöneticinizden alabilirsiniz." };
   }
   if (username.length < 3) {
     return { ok: false, error: "Kullanıcı adı en az 3 karakter olmalıdır." };
@@ -55,6 +63,7 @@ export function validateAccountRequestForm(form: AccountRequestForm): AccountReq
       email,
       phone,
       password: form.password,
+      code: form.code.trim(),
     },
   };
 }

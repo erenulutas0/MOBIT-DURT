@@ -134,7 +134,7 @@ class PasswordResetIntegrationTest {
         String response = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Test Kullanici","username":"%s","password":"%s"}
+                                {"name":"Test Kullanici","username":"%s","password":"%s","code":"test-join-code"}
                                 """.formatted(username, ORIGINAL)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();

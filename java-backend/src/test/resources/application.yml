@@ -7,6 +7,11 @@ spring:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
 
 docsbot:
+  registration:
+    # Registration auto-approves, so production keeps it shut unless a code is configured. The
+    # tests need it open to exercise the flow at all, and one shared value keeps every registering
+    # test honest about sending it.
+    join-code: test-join-code
   data-dir: ../data
   vault-dir: ../vault
   max-file-size-bytes: 26214400

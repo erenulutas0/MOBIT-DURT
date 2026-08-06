@@ -25,6 +25,20 @@ public class EmployeeAuthenticationService {
     private final RefreshTokenService refreshTokenService;
     private final AuthAuditRecorder auditRecorder;
     private final NotificationService notificationService;
+    /**
+     * The code a colleague is given so they can sign themselves up.
+     *
+     * <p>Registration used to be open to anyone who found the address, and it auto-approves —
+     * so a stranger got a working employee account, which means the staff directory with
+     * everyone's name, e-mail and phone, plus the company chat. Requiring a code keeps the
+     * part the boss liked (sign up, land straight in the app) and closes the part nobody
+     * intended.
+     *
+     * <p>Unset means registration is closed rather than open: an installation nobody has
+     * configured yet is the one most likely to be found by someone else first, and a customer
+     * who never sets this should end up with a locked door, not an open one.
+     */
+    private final String joinCode;
 
     public EmployeeAuthenticationService(
             ErpUserRepository userRepository,
@@ -32,7 +46,8 @@ public class EmployeeAuthenticationService {
             RefreshTokenService refreshTokenService,
             AuthAuditRecorder auditRecorder
     ) {
-        this(userRepository, passwordEncoder, refreshTokenService, auditRecorder, (NotificationService) null);
+        this(userRepository, passwordEncoder, refreshTokenService, auditRecorder,
+                (NotificationService) null, "");
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -41,10 +56,12 @@ public class EmployeeAuthenticationService {
             PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService,
             AuthAuditRecorder auditRecorder,
-            ObjectProvider<NotificationService> notificationService
+            ObjectProvider<NotificationService> notificationService,
+            @org.springframework.beans.factory.annotation.Value("${docsbot.registration.join-code:}")
+            String joinCode
     ) {
         this(userRepository, passwordEncoder, refreshTokenService, auditRecorder,
-                notificationService.getIfAvailable());
+                notificationService.getIfAvailable(), joinCode);
     }
 
     EmployeeAuthenticationService(
@@ -52,8 +69,10 @@ public class EmployeeAuthenticationService {
             PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService,
             AuthAuditRecorder auditRecorder,
-            NotificationService notificationService
+            NotificationService notificationService,
+            String joinCode
     ) {
+        this.joinCode = joinCode == null ? "" : joinCode.trim();
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
@@ -152,9 +171,14 @@ public class EmployeeAuthenticationService {
     /**
      * Self-service registration: creates an active (auto-approved) employee from a chosen username
      * plus optional email/phone, then issues a session so the caller is logged in immediately.
+     *
+     * <p>Gated on the company's join code, because auto-approval means whoever gets through this is
+     * a colleague as far as the rest of the system is concerned.
      */
     @Transactional
-    public AuthSessionResponse register(String name, String username, String email, String phone, String password) {
+    public AuthSessionResponse register(String name, String username, String email, String phone,
+                                        String password, String code) {
+        requireJoinCode(code);
         String normalizedUsername = username.trim();
         String normalizedEmail = blankToNull(email) == null ? null : email.trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByUsernameIgnoreCase(normalizedUsername)) {
@@ -202,6 +226,26 @@ public class EmployeeAuthenticationService {
 
     private static String subjectOf(ErpUser user) {
         return user.getUsername() != null ? user.getUsername() : user.getEmail();
+    }
+
+    /**
+     * Deliberately says which of the two situations it is. "Kayıt kapalı" sends someone to their
+     * admin; "kod hatalı" tells them to check what they typed — and answering both with the same
+     * sentence turns a five-second fix into a support call.
+     */
+    private void requireJoinCode(String code) {
+        if (joinCode.isEmpty()) {
+            throw new AuthExceptions.Forbidden(
+                    "Kayıt kapalı. Hesap açmak için şirket yöneticinizle görüşün.");
+        }
+        String provided = code == null ? "" : code.trim();
+        // Constant-time: the code is short and guessable enough that timing differences are worth
+        // not leaking, and it costs nothing here.
+        if (!java.security.MessageDigest.isEqual(
+                provided.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                joinCode.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+            throw new AuthExceptions.Forbidden("Şirket kodu hatalı.");
+        }
     }
 
     private static String blankToNull(String value) {

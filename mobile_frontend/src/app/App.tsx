@@ -487,6 +487,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
   const [requestPhone, setRequestPhone] = useState("");
   const [requestPassword, setRequestPassword] = useState("");
   const [requestPasswordConfirm, setRequestPasswordConfirm] = useState("");
+  const [requestCode, setRequestCode] = useState("");
   const [verifyEmail, setVerifyEmail] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [error, setError] = useState("");
@@ -530,6 +531,7 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
       phone: requestPhone,
       password: requestPassword,
       passwordConfirm: requestPasswordConfirm,
+      code: requestCode,
     });
     if (!validation.ok) {
       setError(validation.error);
@@ -749,11 +751,31 @@ function LoginScreen({ onLogin, notice }: { onLogin: (u: AuthUser) => void; noti
                   type={showPw ? "text" : "password"}
                   value={requestPasswordConfirm}
                   onChange={e => setRequestPasswordConfirm(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleRegister()}
                   placeholder="Şifrenizi tekrar yazın"
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                 />
               </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Şirket Kodu</label>
+              <div className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-4 py-3">
+                <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  value={requestCode}
+                  onChange={e => setRequestCode(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleRegister()}
+                  placeholder="Yöneticinizden alın"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                />
+              </div>
+              {/* Registration auto-approves, so whoever gets through this form is a colleague as
+                  far as the rest of the app is concerned — the code is what makes that true. */}
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Şirketinizin kayıt kodu. Bilmiyorsanız yöneticinize sorun.
+              </p>
             </div>
           </>
         )}

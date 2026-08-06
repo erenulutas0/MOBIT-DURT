@@ -48,7 +48,7 @@ class DeadlineEscalationIntegrationTest {
         String register = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Gecikmis Calisan","username":"gecikmis","password":"StrongPass123"}
+                                {"name":"Gecikmis Calisan","username":"gecikmis","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -97,7 +97,7 @@ class DeadlineEscalationIntegrationTest {
         String register = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Termin Calisan","username":"termin","password":"StrongPass123"}
+                                {"name":"Termin Calisan","username":"termin","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -145,7 +145,7 @@ class DeadlineEscalationIntegrationTest {
         String register = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Iptal Calisan","username":"iptalci","password":"StrongPass123"}
+                                {"name":"Iptal Calisan","username":"iptalci","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -183,7 +183,7 @@ class DeadlineEscalationIntegrationTest {
         String register = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Tercih Calisan","username":"tercihci","password":"StrongPass123"}
+                                {"name":"Tercih Calisan","username":"tercihci","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();

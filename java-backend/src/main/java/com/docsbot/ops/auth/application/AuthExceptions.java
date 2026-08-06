@@ -23,6 +23,13 @@ public final class AuthExceptions {
         }
     }
 
+    /** The caller is who they say they are (or nobody) but is not allowed to do this. */
+    public static class Forbidden extends RuntimeException {
+        public Forbidden(String message) {
+            super(message);
+        }
+    }
+
     public static class TooManyRequests extends RuntimeException {
         public TooManyRequests(String message) {
             super(message);

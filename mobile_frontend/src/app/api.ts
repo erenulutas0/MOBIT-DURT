@@ -532,6 +532,8 @@ export async function registerToBackend(payload: {
   email?: string;
   phone?: string;
   password: string;
+  /** The company's join code. Registration auto-approves, so this is the door. */
+  code: string;
 }): Promise<BackendAuthUser> {
   const response = await fetchWithTimeout(`${apiBaseUrl()}/erp/auth/register`, {
     method: "POST",

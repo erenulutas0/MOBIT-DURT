@@ -104,7 +104,7 @@ class PerformanceIntegrationTest {
         String response = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Puanli Kullanici","username":"%s","password":"%s"}
+                                {"name":"Puanli Kullanici","username":"%s","password":"%s","code":"test-join-code"}
                                 """.formatted(username, password)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();

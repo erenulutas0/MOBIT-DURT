@@ -37,7 +37,8 @@ public class EmployeeAuthController {
                 request.username(),
                 request.email(),
                 request.phone(),
-                request.password());
+                request.password(),
+                request.code());
     }
 
     // The field is named `email` for backward compatibility with existing clients, but it now holds
@@ -58,7 +59,9 @@ public class EmployeeAuthController {
             String username,
             @Email @Size(max = 255) String email,
             @Size(max = 64) String phone,
-            @NotBlank @Size(min = 10, max = 128) String password
+            @NotBlank @Size(min = 10, max = 128) String password,
+            /** The company's join code. Registration auto-approves, so this is the door. */
+            @Size(max = 128) String code
     ) {
     }
 }

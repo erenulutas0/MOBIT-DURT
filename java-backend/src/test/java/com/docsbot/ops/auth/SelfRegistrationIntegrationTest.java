@@ -41,7 +41,7 @@ class SelfRegistrationIntegrationTest {
         mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Ahmet Yilmaz","username":"ahmet","password":"StrongPass123"}
+                                {"name":"Ahmet Yilmaz","username":"ahmet","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("user"))
@@ -63,14 +63,14 @@ class SelfRegistrationIntegrationTest {
         mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Ahmet","username":"ahmet","password":"StrongPass123"}
+                                {"name":"Ahmet","username":"ahmet","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Baska Ahmet","username":"AHMET","password":"OtherPass123"}
+                                {"name":"Baska Ahmet","username":"AHMET","password":"OtherPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isConflict());
     }
@@ -80,7 +80,7 @@ class SelfRegistrationIntegrationTest {
         mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Mehmet","username":"mehmet","email":"mehmet@example.com","password":"StrongPass123"}
+                                {"name":"Mehmet","username":"mehmet","email":"mehmet@example.com","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk());
 
@@ -98,7 +98,7 @@ class SelfRegistrationIntegrationTest {
         mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Kisa","username":"kisa","password":"short"}
+                                {"name":"Kisa","username":"kisa","password":"short","code":"test-join-code"}
                                 """))
                 .andExpect(status().isBadRequest());
     }
@@ -108,8 +108,50 @@ class SelfRegistrationIntegrationTest {
         mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Bosluklu","username":"ad soyad","password":"StrongPass123"}
+                                {"name":"Bosluklu","username":"ad soyad","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registrationWithoutTheCompanyCodeIsRefused() throws Exception {
+        // Registration auto-approves, so whoever gets through this lands in the staff directory
+        // with everyone's name, e-mail and phone, and in the company chat. The code is the door.
+        mockMvc.perform(post("/erp/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Davetsiz Misafir","username":"davetsiz","password":"StrongPass123"}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void registrationWithTheWrongCodeIsRefused() throws Exception {
+        mockMvc.perform(post("/erp/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Yanlis Kod","username":"yanliskod","password":"StrongPass123",
+                                 "code":"tahmin-edilen-kod"}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aRefusedRegistrationLeavesNoAccountBehind() throws Exception {
+        mockMvc.perform(post("/erp/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Yarim Kayit","username":"yarimkayit","password":"StrongPass123"}
+                                """))
+                .andExpect(status().isForbidden());
+
+        // Checked from the outside: a half-created account that cannot log in but holds the
+        // username would lock the real colleague out of the name they wanted.
+        mockMvc.perform(post("/erp/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"yarimkayit","password":"StrongPass123"}
+                                """))
+                .andExpect(status().isUnauthorized());
     }
 }

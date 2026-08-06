@@ -76,7 +76,7 @@ class UserTitleIntegrationTest {
         String requestResponse = mockMvc.perform(post("/erp/account-requests")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Onayli Calisan","email":"onayli@example.com","password":"StrongPass123"}
+                                {"name":"Onayli Calisan","email":"onayli@example.com","password":"StrongPass123","code":"test-join-code"}
                                 """))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -106,7 +106,7 @@ class UserTitleIntegrationTest {
         String response = mockMvc.perform(post("/erp/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"Unvanli Kullanici","username":"%s","password":"StrongPass123"}
+                                {"name":"Unvanli Kullanici","username":"%s","password":"StrongPass123","code":"test-join-code"}
                                 """.formatted(username)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
