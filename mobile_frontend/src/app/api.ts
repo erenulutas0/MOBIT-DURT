@@ -1103,6 +1103,64 @@ export async function getTenderBrief(tenderId: string): Promise<TenderBrief> {
   return response.json();
 }
 
+export type CompanyCredential = {
+  id: number;
+  name: string;
+  kind: string | null;
+  issued_at: string | null;
+  valid_until: string | null;
+  document_id: number | null;
+  note: string | null;
+  /** Negative once lapsed; null when the document has no expiry, which is not urgency. */
+  days_remaining: number | null;
+};
+
+export type CompanyCredentialInput = {
+  name: string;
+  kind?: string | null;
+  issued_at?: string | null;
+  valid_until?: string | null;
+  note?: string | null;
+};
+
+/**
+ * The company's own expiring paperwork: imza sirküleri, oda kayıt belgesi, borcu yoktur yazıları.
+ * Every idare asks for them, they all expire, and nobody notices until a bid is being assembled.
+ */
+export async function getCompanyCredentials(): Promise<CompanyCredential[]> {
+  const response = await apiFetch("/erp/company-credentials");
+  if (!response.ok) throw new Error(await errorText(response, "Belgeler yüklenemedi."));
+  return response.json();
+}
+
+export async function createCompanyCredential(input: CompanyCredentialInput): Promise<CompanyCredential> {
+  const response = await apiFetch("/erp/company-credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Belge kaydedilemedi."));
+  return response.json();
+}
+
+export async function updateCompanyCredential(
+  id: number,
+  input: CompanyCredentialInput,
+): Promise<CompanyCredential> {
+  const response = await apiFetch(`/erp/company-credentials/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Belge güncellenemedi."));
+  return response.json();
+}
+
+export async function deleteCompanyCredential(id: number): Promise<void> {
+  const response = await apiFetch(`/erp/company-credentials/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await errorText(response, "Belge silinemedi."));
+}
+
 export async function sendERPDirectMessage(payload: {
   body: string;
   recipientUserId?: number | null;

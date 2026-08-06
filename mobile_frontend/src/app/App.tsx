@@ -7,6 +7,7 @@ import { AssistantPanel } from "./components/AssistantPanel";
 import { DocumentSearchPanel } from "./components/DocumentSearchPanel";
 import { TenantServerSheet } from "./components/TenantServerSheet";
 import { TenderBriefPanel } from "./components/TenderBriefPanel";
+import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
 import { MessagesTab } from "./MessagesTab";
@@ -129,7 +130,7 @@ import {
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
   Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp, Volume2,
-  FileSearch,
+  FileSearch, ShieldCheck,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -813,6 +814,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
   const isAdmin = user.role === "admin";
   const [showAssistant, setShowAssistant] = useState(false);
   const [showDocumentSearch, setShowDocumentSearch] = useState(false);
+  const [showCredentials, setShowCredentials] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
   // null = probe in flight; the status card must reflect reality, not wishful constants
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
@@ -910,6 +912,29 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
                 <p className="text-sm font-bold text-foreground">Belgelere Sor</p>
                 <p className="text-xs text-muted-foreground">
                   Şartname ve sözleşmelerde arayın: "Gecikirsem ne kadar ceza öderim?"
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </button>
+          </div>
+          )}
+
+          {/* Şirket Belgelerim — the company's own expiring paperwork. Its own entry because the
+              question "is our imza sirküleri still valid" is asked days before a bid, not while
+              browsing an archive. */}
+          {isAdmin && (
+          <div className="rounded-2xl p-px bg-gradient-to-br from-emerald-500/40 via-emerald-500/10 to-transparent surface-elevated">
+          <button onClick={() => setShowCredentials(true)}
+            className="w-full bg-gradient-to-br from-[#0F2318] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-foreground">Şirket Belgelerim</p>
+                <p className="text-xs text-muted-foreground">
+                  İmza sirküleri, oda kaydı, borcu yoktur — süresi dolmadan haber verelim
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -1039,6 +1064,10 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
 
       {showDocumentSearch && (
         <DocumentSearchPanel onClose={() => setShowDocumentSearch(false)} />
+      )}
+
+      {showCredentials && (
+        <CompanyCredentialsPanel onClose={() => setShowCredentials(false)} />
       )}
     </div>
   );

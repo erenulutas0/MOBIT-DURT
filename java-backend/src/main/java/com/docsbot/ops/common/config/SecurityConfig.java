@@ -239,6 +239,10 @@ public class SecurityConfig {
                         // The brief quotes the same clauses, so it carries the same lock.
                         .requestMatchers(HttpMethod.GET, "/erp/assistant/tenders/*/brief")
                         .hasRole("ADMIN")
+                        // The company's own expiring paperwork: these dates decide whether a bid
+                        // can be submitted, and they sit with the rest of the archive behind admin.
+                        .requestMatchers("/erp/company-credentials", "/erp/company-credentials/**")
+                        .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/erp/notifications/*/read",

@@ -100,7 +100,11 @@ public class NotificationService {
             .of(DEADLINE_SUPERSEDE_TYPES.stream(),
                     DIGEST_SUPERSEDE_TYPES.stream(),
                     Stream.of("task_blocked_escalation", "task_completion_approval_escalation",
-                            "tender_deadline_soon", "tender_deadline_passed"))
+                            "tender_deadline_soon", "tender_deadline_passed",
+                            // A "belge süresi doluyor" from two months ago is about a date that has
+                            // been and gone; the record itself stays, so nothing is lost by
+                            // retiring the alert.
+                            CompanyCredentialService.EXPIRY_TYPE))
             .flatMap(stream -> stream)
             .collect(Collectors.toUnmodifiableSet());
 
