@@ -25,16 +25,22 @@ public class TenderTextExtractionService {
 
     private static final int MAX_STORED_TEXT_CHARS = 1_000_000;
 
+    /** Below this a document has no searchable text, whatever the extractor thought. */
+    private static final int USABLE_TEXT_CHARS = 40;
+
     private final TenderDocumentRepository documentRepository;
     private final DashboardFileService fileService;
+    private final com.docsbot.ops.rag.OcrClient ocrClient;
     private final AutoDetectParser parser = new AutoDetectParser();
 
     public TenderTextExtractionService(
             TenderDocumentRepository documentRepository,
-            DashboardFileService fileService
+            DashboardFileService fileService,
+            com.docsbot.ops.rag.OcrClient ocrClient
     ) {
         this.documentRepository = documentRepository;
         this.fileService = fileService;
+        this.ocrClient = ocrClient;
     }
 
     @Transactional
@@ -44,6 +50,13 @@ public class TenderTextExtractionService {
         DashboardFileService.StoredFile file = fileService.documentFile(documentId);
         Instant now = Instant.now();
         if (!supported(file)) {
+            // A photograph of a page is not "unsupported" once there is something that can read
+            // it; only give up when OCR is off or has nothing to say either.
+            String scanned = ocrClient.read(file.path(), file.filename());
+            if (scanned.length() >= USABLE_TEXT_CHARS) {
+                document.markTextExtracted(scanned, now);
+                return documentRepository.saveAndFlush(document);
+            }
             document.markTextExtractionUnsupported(
                     "File type is not supported for text extraction",
                     now);
@@ -51,6 +64,15 @@ public class TenderTextExtractionService {
         }
         try {
             String extracted = parse(file);
+            if (extracted.length() < USABLE_TEXT_CHARS) {
+                // A PDF with no text layer parses perfectly and yields nothing. Marking that
+                // 'extracted' is how a third of this archive came to sit in it answering no
+                // questions while looking complete.
+                String scanned = ocrClient.read(file.path(), file.filename());
+                if (scanned.length() >= USABLE_TEXT_CHARS) {
+                    extracted = scanned;
+                }
+            }
             document.markTextExtracted(extracted, now);
         } catch (Exception exception) {
             document.markTextExtractionFailed(exception.getMessage(), now);
