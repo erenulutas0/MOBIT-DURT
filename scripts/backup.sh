@@ -19,6 +19,12 @@ ROOT="${DOCSBOT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BACKUP_DIR="${DOCSBOT_BACKUP_DIR:-$ROOT/backups}"
 PG_CONTAINER="${DOCSBOT_PG_CONTAINER:-docsbot-postgres}"
 RETENTION_DAYS="${DOCSBOT_BACKUP_RETENTION_DAYS:-14}"
+# How many pre-deploy sets to keep. These are age-independent on purpose — the point of one is
+# to roll back a bad release, and a release can sit unnoticed for longer than the nightly
+# window. But "not by age" was being read as "forever": 44 sets had built up, 5.6GB of it, and
+# nothing anywhere would have removed them. Counting keeps the rollbacks worth having and
+# bounds the rest.
+PREDEPLOY_KEEP="${DOCSBOT_BACKUP_PREDEPLOY_KEEP:-10}"
 
 # Read POSTGRES_USER/DB from the deploy .env if present, else fall back to the compose defaults.
 ENV_FILE="$ROOT/.env"
@@ -53,9 +59,20 @@ if [[ -d "$ROOT/data" ]]; then
   echo "[$(date -Is)] data  -> $data_out ($(du -h "$data_out" | cut -f1))"
 fi
 
-# 3. Prune backups older than the retention window (never touches predeploy backups).
+# 3. Prune the nightly backups by age.
 find "$BACKUP_DIR" -maxdepth 1 -type f \
   \( -name 'db-*.sql.gz' -o -name 'vault-*.tar.gz' -o -name 'data-*.tar.gz' \) \
   -mtime "+$RETENTION_DAYS" -print -delete || true
+
+# 4. Prune the pre-deploy sets by count, newest kept. Each deploy leaves a jar (~130MB), a dump and
+# a copy of .env; none of it was ever removed, so the directory only grew. Pruned per pattern rather
+# than per timestamp, so a set half-written when this runs loses only its finished parts.
+for pattern in 'docsbot-postgres.*-predeploy.sql' 'docsbot-ops-backend-*-predeploy.jar' 'env.*-predeploy.bak'; do
+    # shellcheck disable=SC2012  # this project timestamps its names, so a name sort is a time sort
+    ls -1t "$BACKUP_DIR"/$pattern 2>/dev/null | tail -n "+$((PREDEPLOY_KEEP + 1))" | while read -r stale; do
+        echo "[$(date -Is)] prune $stale"
+        rm -f -- "$stale"
+    done
+done
 
 echo "[$(date -Is)] backup done"
