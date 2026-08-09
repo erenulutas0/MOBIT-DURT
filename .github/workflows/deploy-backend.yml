@@ -72,6 +72,15 @@ jobs:
           scp -i ~/.ssh/deploy_key "java-backend/${{ steps.jar.outputs.path }}" \
             ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.REMOTE_STAGED_JAR }}
 
+      # The sidecar's build context lived only on the server and drifted from the repo: its
+      # Dockerfile was changed and committed, the image was rebuilt on the box, and the rebuild
+      # silently used the old file — it succeeded and shipped nothing. Syncing keeps the two equal.
+      # Deliberately does not rebuild: that takes minutes and downloads a model, so remaking the
+      # image stays a decision somebody makes rather than a tax on every deploy.
+      - name: Sync sidecar sources (build context, not a rebuild)
+        run: |
+          scp -i ~/.ssh/deploy_key embedding-service/Dockerfile embedding-service/app.py ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/docsbot/embedding-service/
+
       - name: Verify checksum, swap JAR, recreate container
         run: |
           LOCAL_SHA=$(sha256sum "java-backend/${{ steps.jar.outputs.path }}" | awk '{print $1}')
