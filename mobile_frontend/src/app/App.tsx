@@ -7,6 +7,7 @@ import { AssistantPanel } from "./components/AssistantPanel";
 import { DocumentSearchPanel } from "./components/DocumentSearchPanel";
 import { TenantServerSheet } from "./components/TenantServerSheet";
 import { TenderBriefPanel } from "./components/TenderBriefPanel";
+import { TenderBulletinPanel } from "./components/TenderBulletinPanel";
 import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/image.png";
@@ -130,7 +131,7 @@ import {
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
   Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp, Volume2,
-  FileSearch, ShieldCheck,
+  FileSearch, ShieldCheck, Megaphone,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -837,6 +838,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
   const [showAssistant, setShowAssistant] = useState(false);
   const [showDocumentSearch, setShowDocumentSearch] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
+  const [showBulletin, setShowBulletin] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
   // null = probe in flight; the status card must reflect reality, not wishful constants
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
@@ -909,6 +911,28 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
                 <p className="text-sm font-bold text-foreground">Mobit-Asistan</p>
                 <p className="text-xs text-muted-foreground">
                   Günün özeti: görevler, teslim tarihleri, hatırlatmalar
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </button>
+          </div>
+
+          {/* Kamu İhale Bülteni — the tenders published today.
+              Not admin-only, unlike everything below it: this is a public document on EKAP's own
+              site, and the people who spot a tender worth bidding on are rarely the people with
+              keys to the archive. */}
+          <div className="rounded-2xl p-px bg-gradient-to-br from-amber-500/40 via-amber-500/10 to-transparent surface-elevated">
+          <button onClick={() => setShowBulletin(true)}
+            className="w-full bg-gradient-to-br from-[#2A1E0B] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <Megaphone className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-foreground">Kamu İhale Bülteni</p>
+                <p className="text-xs text-muted-foreground">
+                  Bugün yayımlanan ihaleler — işinize göre ve ilinize göre süzülmüş
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -1090,6 +1114,10 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
 
       {showCredentials && (
         <CompanyCredentialsPanel onClose={() => setShowCredentials(false)} />
+      )}
+
+      {showBulletin && (
+        <TenderBulletinPanel isAdmin={isAdmin} onClose={() => setShowBulletin(false)} />
       )}
     </div>
   );

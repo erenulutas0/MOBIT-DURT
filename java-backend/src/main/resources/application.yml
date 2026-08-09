@@ -111,6 +111,15 @@ docsbot:
     provider: ${DOCSBOT_ASSISTANT_PROVIDER:rule-based}
     # Self-hosted Piper TTS HTTP server (e.g. http://docsbot-piper:5000). Empty = speech off (503).
     tts-url: ${DOCSBOT_TTS_URL:}
+  bulletin:
+    # Kamu İhale Bülteni. Read through the embedding sidecar, which owns poppler and holds the
+    # day's read for a few hours so every tenant does not download the same public PDFs.
+    enabled: ${DOCSBOT_BULLETIN_ENABLED:true}
+    # Weekday mornings, after publication and early enough to act on the same day.
+    cron: ${DOCSBOT_BULLETIN_CRON:0 30 9 * * MON-FRI}
+    # Announcements older than this are dropped nightly. Three hundred a day arrive with their
+    # whole printed text; nothing is lost that EKAP does not still publish. 0 keeps everything.
+    retention-days: ${DOCSBOT_BULLETIN_RETENTION_DAYS:120}
   retention:
     activity-event-days: ${DOCSBOT_RETENTION_ACTIVITY_EVENT_DAYS:180}
     push-outbox-days: ${DOCSBOT_RETENTION_PUSH_OUTBOX_DAYS:30}

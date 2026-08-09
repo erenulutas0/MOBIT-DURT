@@ -1072,6 +1072,76 @@ export async function askDocuments(question: string): Promise<DocumentAnswer> {
   return response.json();
 }
 
+export type TenderNotice = {
+  id: number;
+  ikn: string;
+  title: string;
+  authority: string;
+  province: string | null;
+  category: string;
+  category_label: string;
+  bulletin_type: string;
+  tender_at_text: string;
+  tender_at: string | null;
+  quantity: string;
+  delivery_place: string;
+  address: string;
+};
+
+export type TenderCategoryCount = { code: string; label: string; count: number };
+export type TenderProvinceCount = { province: string; count: number };
+
+/**
+ * Published tenders from the Kamu İhale Bülteni.
+ *
+ * <p>Only live announcements come back: cancellations are stored but never offered as something to
+ * bid on. Every filter is optional and they narrow together.
+ */
+export async function getTenderNotices(filters: {
+  province?: string | null;
+  category?: string | null;
+  type?: string | null;
+  limit?: number;
+} = {}): Promise<TenderNotice[]> {
+  const query = new URLSearchParams();
+  if (filters.province) query.set("province", filters.province);
+  if (filters.category) query.set("category", filters.category);
+  if (filters.type) query.set("type", filters.type);
+  query.set("limit", String(filters.limit ?? 100));
+  const response = await apiFetch(`/erp/bulletin/notices?${query}`);
+  if (!response.ok) throw new Error(await errorText(response, "İhale bülteni alınamadı."));
+  return response.json();
+}
+
+/** The whole announcement as printed, fetched only when one is opened — several KB each. */
+export async function getTenderNoticeDetail(
+  id: number,
+): Promise<{ notice: TenderNotice; body: string; section: string }> {
+  const response = await apiFetch(`/erp/bulletin/notices/${id}`);
+  if (!response.ok) throw new Error(await errorText(response, "İlan açılamadı."));
+  return response.json();
+}
+
+export async function getTenderCategories(): Promise<TenderCategoryCount[]> {
+  const response = await apiFetch("/erp/bulletin/categories");
+  if (!response.ok) throw new Error(await errorText(response, "Kategoriler alınamadı."));
+  return response.json();
+}
+
+export async function getTenderProvinces(): Promise<TenderProvinceCount[]> {
+  const response = await apiFetch("/erp/bulletin/provinces");
+  if (!response.ok) throw new Error(await errorText(response, "İl dağılımı alınamadı."));
+  return response.json();
+}
+
+/** Pulls today's bulletins now instead of waiting for the morning run. Admin only. */
+export async function refreshTenderBulletin(): Promise<number> {
+  const response = await apiFetch("/erp/bulletin/refresh", { method: "POST" });
+  if (!response.ok) throw new Error(await errorText(response, "Bülten çekilemedi."));
+  const body = await response.json();
+  return Number(body.stored ?? 0);
+}
+
 export type TenderBriefEntry = {
   key: string;
   label: string;

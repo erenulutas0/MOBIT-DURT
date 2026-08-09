@@ -28,6 +28,7 @@ export type Page =
   | "obsidian"
   | "tender-detail"
   | "ai-extraction"
+  | "tender-bulletin"
   | "feedback";
 
 export type LiveData = {

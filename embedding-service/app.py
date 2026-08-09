@@ -16,6 +16,7 @@ are meaningless. Expect the corpus to be briefly unsearchable while that runs.
 
 import io
 import os
+import time
 from typing import List
 
 import bulletin
@@ -36,6 +37,13 @@ OCR_LANGUAGES = os.getenv("OCR_LANGUAGES", "tur+eng")
 OCR_MAX_PAGES = int(os.getenv("OCR_MAX_PAGES", "40"))
 # 150 DPI reads clean scans reliably and costs a quarter of what 300 does.
 OCR_DPI = int(os.getenv("OCR_DPI", "150"))
+
+# The bulletin is published once a day and does not change afterwards, so holding a read for a few
+# hours costs nothing in freshness. Four is long enough to cover every tenant's morning run and
+# short enough that an admin who presses "çek" in the afternoon still gets the day's bulletin.
+BULLETIN_CACHE_SECONDS = int(os.getenv("BULLETIN_CACHE_SECONDS", str(4 * 3600)))
+# kind -> (monotonic seconds when it was read, the answer). At most four entries.
+_BULLETIN_CACHE: dict = {}
 
 app = FastAPI(title="DocsBot Document Services")
 model = SentenceTransformer(MODEL_NAME)
@@ -102,7 +110,16 @@ def read_bulletin(kind: str):
     Served from here rather than the backend because both halves of the job already live in this
     container — poppler reads the PDF, and the bulletin is the same public document for every
     tenant, so it is fetched once and shared instead of once per customer.
+
+    The answer is held for a few hours. Every tenant's backend asks for the same four bulletins
+    within the same minute each morning, and the bulletin does not change during the day: without
+    this, ten customers means forty downloads of the same public PDFs off somebody else's servers,
+    which is both slower for us and rude to them.
     """
+    cached = _BULLETIN_CACHE.get(kind)
+    if cached and time.monotonic() - cached[0] < BULLETIN_CACHE_SECONDS:
+        return {**cached[1], "cached": True}
+
     try:
         files = bulletin.fetch_bulletin(kind)
     except Exception as error:
@@ -117,13 +134,17 @@ def read_bulletin(kind: str):
 
     text = bulletin.pdf_to_text(files[name])
     notices = bulletin.parse_announcements(text)
-    return {
+    payload = {
         "ok": True,
         "source": name,
         "bulletin_type": kind,
         "count": len(notices),
         "notices": notices,
     }
+    # Only successful reads are cached. A failure held for four hours would keep answering with
+    # yesterday's problem long after their site came back.
+    _BULLETIN_CACHE[kind] = (time.monotonic(), payload)
+    return payload
 
 
 @app.post("/embed/query")

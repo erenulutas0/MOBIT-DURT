@@ -29,6 +29,7 @@ export const navItems = [
     group: "TENDER HUB",
     items: [
       { label: "Dashboard", icon: TrendingUp, page: "tender-dashboard" as Page },
+      { label: "Kamu İhale Bülteni", icon: Megaphone, page: "tender-bulletin" as Page },
       { label: "Telegram Grupları", icon: Send, page: "telegram-groups" as Page },
       { label: "Belgeler", icon: FileText, page: "documents" as Page },
       { label: "Klasör Ağacı", icon: FolderOpen, page: "folder-tree" as Page },

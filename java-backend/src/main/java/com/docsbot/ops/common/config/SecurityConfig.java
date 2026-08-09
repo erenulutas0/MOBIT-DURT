@@ -243,6 +243,20 @@ public class SecurityConfig {
                         // can be submitted, and they sit with the rest of the archive behind admin.
                         .requestMatchers("/erp/company-credentials", "/erp/company-credentials/**")
                         .hasRole("ADMIN")
+                        // Published tenders, unlike everything above, are a public document: the
+                        // Kamu İhale Bülteni is on EKAP's own site for anyone to download. Every
+                        // employee can read it. Only pulling it is restricted, because that reaches
+                        // out to their servers and one impatient finger should not be able to do so
+                        // repeatedly.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/erp/bulletin/notices",
+                                "/erp/bulletin/notices/*",
+                                "/erp/bulletin/provinces",
+                                "/erp/bulletin/categories")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.POST, "/erp/bulletin/refresh")
+                        .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/erp/notifications/*/read",

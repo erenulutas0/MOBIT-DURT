@@ -25,6 +25,7 @@ const UploadPage = lazy(() => import("./pages/UploadPage").then((m) => ({ defaul
 const ObsidianPage = lazy(() => import("./pages/ObsidianPage").then((m) => ({ default: m.ObsidianPage })));
 const TenderDetailPage = lazy(() => import("./pages/TenderDetailPage").then((m) => ({ default: m.TenderDetailPage })));
 const AIExtractionPage = lazy(() => import("./pages/AIExtractionPage").then((m) => ({ default: m.AIExtractionPage })));
+const TenderBulletinPage = lazy(() => import("./pages/TenderBulletinPage").then((m) => ({ default: m.TenderBulletinPage })));
 const FeedbackPage = lazy(() => import("./pages/FeedbackPage").then((m) => ({ default: m.FeedbackPage })));
 
 function PageFallback() {
@@ -115,6 +116,7 @@ export default function App() {
           {page === "obsidian" && isAdmin(session) && <ObsidianPage live={live} />}
           {page === "tender-detail" && isAdmin(session) && <TenderDetailPage />}
           {page === "ai-extraction" && isAdmin(session) && <AIExtractionPage />}
+          {page === "tender-bulletin" && isAdmin(session) && <TenderBulletinPage />}
           {page === "feedback" && isAdmin(session) && <FeedbackPage />}
           </Suspense>
         </main>

@@ -66,5 +66,6 @@ export const PAGE_TITLES: Record<Page, string> = {
   obsidian: "Obsidian Demo",
   "tender-detail": "İhale Detayı",
   "ai-extraction": "AI Çıkarımı",
+  "tender-bulletin": "Kamu İhale Bülteni",
   feedback: "Dönütler & Duyuru",
 };

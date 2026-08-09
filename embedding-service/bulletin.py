@@ -66,7 +66,28 @@ _PROVINCE_KEYS = [(name, name.replace("İ", "i").casefold()) for name in PROVINC
 IKN_LINE = re.compile(r"^\s*İhale Kayıt Numarası[^:]*:\s*(\d{4}/\d+)\s*$", re.MULTILINE)
 # Section headings, e.g. "2. İHALE İLANLARI" or "4. İHALE İPTAL İLANLARI".
 SECTION_LINE = re.compile(r"^\s*\d+\.\s+([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ ]{5,60})\s*$", re.MULTILINE)
-FIELD_LINE = re.compile(r"^\s*(\d+\.\d+\.)\s*(.+?)\s{2,}:\s*(.*)$")
+# "3.1. Adı" and "3.1 Adı" are the same field. The trailing dot is optional in their own template
+# — the hizmet bulletin prints the tender's name without it — and requiring it cost the title on 58
+# of one day's 75 service announcements, along with the value of whichever field came before, since
+# an unrecognised label leaves the wrapped lines below it attached to the previous one.
+FIELD_LINE = re.compile(r"^\s*(\d+\.\d+)\.?\s*(.+?)\s{2,}:\s*(.*)$")
+# The İSTİSNA announcements do not number their fields at all: they write "İşin Adı" and
+# "b) Tarihi ve saati". Same two-column layout, different left-hand side, so they are read by label.
+LABEL_LINE = re.compile(
+    r"^\s*(?:\d+\s*-\s*|[A-Za-zÇĞİÖŞÜçğıöşü]\)\s*)?([^:]{3,60}?)\s{2,}:\s*(.*)$")
+# What those announcements call the two fields that matter most.
+LABEL_TITLE = "işin adı"
+LABEL_TENDER_AT = "tarihi ve saati"
+
+# The two-column separator. A line carrying one belongs to an announcement's field table.
+FIELD_SEPARATOR = re.compile(r"\s{2,}:")
+# How every headline in the bulletin ends. Used to tell the headline apart from the buyer's name,
+# which is printed in the same capitals directly beneath it.
+HEADLINE_VERB = re.compile(
+    r"(ALINACAKTIR|YAPTIRILACAKTIR|YAPILACAKTIR|EDİLECEKTİR|KİRALANACAKTIR|SATILACAKTIR)")
+# "26.08.2026 - 10:00", wherever it sits in the value. The dash is not always there — the
+# danışmanlık bulletin writes "24.08.2026 10:00" — so it is optional rather than assumed.
+TENDER_AT_VALUE = re.compile(r"\d{2}\.\d{2}\.\d{4}\s*(?:-\s*)?\d{2}[:.]\d{2}")
 
 
 def _turkish_fold(value: str) -> str:
@@ -177,38 +198,115 @@ def _section_at(sections: list, position: int) -> str:
     return current
 
 
-def _fields_of(block: str) -> dict:
-    """The numbered fields of one announcement, with wrapped values joined back together."""
-    fields = {}
+def _fields_of(block: str):
+    """The fields of one announcement, keyed both by number and by label.
+
+    Two layouts share the bulletin: most announcements number their fields, the ones published as
+    İSTİSNA label them. Reading both costs one extra pattern and saves losing the name and the date
+    of every exempt tender — fourteen of them on an ordinary day.
+
+    Wrapped values are joined back together. A label is only recognised in the left-hand column,
+    because a value that wrapped far to the right and happens to contain a colon is a continuation,
+    not a new field.
+    """
+    by_number, by_label = {}, {}
     current = None
     for line in block.split("\n"):
-        match = FIELD_LINE.match(line)
+        indented = line.startswith(" " * 20)
+        match = FIELD_LINE.match(line) if not indented else None
         if match:
-            current = match.group(1)
-            fields[current] = {"label": match.group(2).strip(), "value": match.group(3).strip()}
+            current = {"label": match.group(2).strip(), "value": match.group(3).strip()}
+            by_number[match.group(1)] = current
+            by_label.setdefault(_turkish_fold(current["label"]), current)
+            continue
+        match = LABEL_LINE.match(line) if not indented else None
+        if match:
+            current = {"label": match.group(1).strip(), "value": match.group(2).strip()}
+            # First occurrence wins: the numbered layout calls both the buyer and the work "Adı",
+            # and the buyer is printed first.
+            by_label.setdefault(_turkish_fold(current["label"]), current)
             continue
         # A continuation: the value column wrapped, so the line is indented with no label.
-        if current and line.startswith(" " * 20) and line.strip():
-            fields[current]["value"] += " " + line.strip()
-    return fields
+        if current and indented and line.strip():
+            current["value"] += " " + line.strip()
+    return by_number, by_label
+
+
+def _block_start(text: str, ikn_position: int, floor: int) -> int:
+    """Where an announcement really begins: at its headline, not at its İhale Kayıt Numarası.
+
+    Above the İKN the bulletin prints a headline in capitals, an index line, the buyer's name (in
+    the İSTİSNA layout, which has no field for it) and a sentence naming the work. Starting at the
+    İKN files all of that under the announcement *before* it — which is how the buyer went missing
+    on exempt tenders, and how one tender's opening paragraph ended up in another's text.
+
+    The walk backwards stops at the first line carrying a field separator, because that line still
+    belongs to the announcement above.
+    """
+    start = ikn_position
+    for _ in range(14):
+        if start <= floor:
+            break
+        previous = text.rfind("\n", floor, start - 1)
+        if previous < 0:
+            break
+        if FIELD_SEPARATOR.search(text[previous + 1:start - 1]):
+            break
+        start = previous + 1
+    return start
+
+
+def _authority_from_header(header: str) -> str:
+    """The buyer's name as printed above the İKN, for the layout that has no field for it.
+
+    Read from the bottom up: the name sits directly above the İhale Kayıt Numarası, in the same
+    capitals as the headline above it, and the headline is told apart by the verb it ends with.
+    """
+    names = []
+    for line in reversed(header.split("\n")):
+        stripped = line.strip()
+        if not stripped:
+            if names:
+                break
+            continue
+        if HEADLINE_VERB.search(stripped) or FIELD_SEPARATOR.search(stripped):
+            break
+        letters = [character for character in stripped if character.isalpha()]
+        if not letters or sum(1 for c in letters if c.isupper()) < len(letters) * 0.8:
+            break
+        names.append(stripped)
+        if len(names) == 2:
+            break
+    return " ".join(reversed(names))[:400]
+
+
+def _tender_at(raw: str) -> str:
+    """Just the date and time. The value can pick up whatever the page printed after it."""
+    match = TENDER_AT_VALUE.search(raw or "")
+    return match.group(0) if match else (raw or "").strip()
 
 
 def parse_announcements(text: str) -> list:
     """Splits the bulletin into announcements and pulls the fields worth searching on."""
     starts = [(match.start(), match.group(1)) for match in IKN_LINE.finditer(text)]
+    bounds = [
+        _block_start(text, position, starts[index - 1][0] if index else 0)
+        for index, (position, _) in enumerate(starts)
+    ]
     sections = _sections_by_position(text)
     announcements = []
     for index, (position, ikn) in enumerate(starts):
-        end = starts[index + 1][0] if index + 1 < len(starts) else len(text)
-        block = text[position:end]
-        fields = _fields_of(block)
+        begin = bounds[index]
+        end = bounds[index + 1] if index + 1 < len(bounds) else len(text)
+        block = text[begin:end]
+        by_number, by_label = _fields_of(block)
 
-        def value(key, default=""):
-            entry = fields.get(key)
+        def value(key, label=None, default=""):
+            entry = by_number.get(key) or (by_label.get(label) if label else None)
             return entry["value"] if entry else default
 
-        authority = value("1.1.")
-        address = value("1.2.")
+        authority = value("1.1") or _authority_from_header(text[begin:position])
+        address = value("1.2", "adresi")
         section = _section_at(sections, position)
         announcements.append({
             "ikn": ikn,
@@ -219,10 +317,10 @@ def parse_announcements(text: str) -> list:
             # Looked for in the address first and the whole block second: an idare's name often
             # carries the province ("… İl Özel İdaresi") when the address is a PO box.
             "province": find_province(address) or find_province(block),
-            "tender_at": value("2.1."),
-            "title": value("3.1."),
-            "quantity": value("3.2."),
-            "delivery_place": value("3.3."),
+            "tender_at": _tender_at(value("2.1", LABEL_TENDER_AT)),
+            "title": value("3.1", LABEL_TITLE),
+            "quantity": value("3.2", "niteliği, türü ve miktarı"),
+            "delivery_place": value("3.3", "teslim yeri"),
             # Kept whole. The fields say what a tender is; the body says whether it is one this
             # company can do — "3x240/25 mm² XLPE" lives here and nowhere else.
             "text": block.strip(),
