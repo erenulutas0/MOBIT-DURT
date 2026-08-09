@@ -60,6 +60,52 @@ class TenderCategoryTest {
     }
 
     @Test
+    void aKeywordOnlyMatchesWhereAWordStarts() {
+        // "Hizmet Alımı" ends nearly every service title in the bulletin, and it contains "et
+        // alım". Before the boundary, that filed forty-five live tenders as food — cleaning
+        // contracts, uniforms, a transport plan. This is the single most expensive mistake the
+        // table has made, and it is the reason matching is anchored rather than substring.
+        assertThat(classify("Ordu Üniversitesi Güvenlik Görevlileri İçin Kıyafet Alımı"))
+                .isEqualTo(TenderCategory.BURO);
+        assertThat(classify("Ankara Sürdürülebilir Ulaşım Ana Planı Danışmanlık Hizmet Alımı İşi"))
+                .isEqualTo(TenderCategory.MUHENDISLIK);
+        // "ekmek" sits inside "gerekmektedir", which is in the body of almost every announcement.
+        assertThat(TenderCategory.classify("",
+                "İhale dokümanının EKAP üzerinden indirilmesi gerekmektedir. Teklifler elektronik "
+                        + "ortamda sunulacak ve tekliflerin EKAP'a yüklenmesi gerekmektedir."))
+                .isEqualTo(TenderCategory.DIGER);
+    }
+
+    @Test
+    void aKeywordStillMatchesThroughTurkishSuffixes() {
+        // The other half of the rule: the boundary is at the start only, because "kablo" has to
+        // find "kabloları" and "hastane" has to find "hastanesi". A rule strict at both ends would
+        // match almost nothing in Turkish.
+        assertThat(classify("Muhtelif Kabloların Yenilenmesi")).isEqualTo(TenderCategory.ELEKTRIK);
+        assertThat(classify("Parke Taşlarının Döşenmesi İşi")).isEqualTo(TenderCategory.INSAAT);
+    }
+
+    @Test
+    void schoolsGluedToTheFrontOfAWordAreListedInTheirOwnRight() {
+        // "okul" cannot find "ilkokul" once matching is anchored, so the compounds are entries of
+        // their own. Turkish builds these constantly and they are half the yapım bulletin.
+        assertThat(classify("Aydın İli Nazilli İlçesi 24 Derslik Sümer Ortaokulu Yapım İşi"))
+                .isEqualTo(TenderCategory.INSAAT);
+        assertThat(classify("Van İli Bahçesaray İlçesi 2 Derslikli İlkokul Yapım İşi"))
+                .isEqualTo(TenderCategory.INSAAT);
+    }
+
+    @Test
+    void schoolTransportIsTransportRatherThanTheSchoolItNames() {
+        // Taşımalı eğitim is a large recurring slice of the hizmet bulletin, and its titles name
+        // the school, not the vehicle. Filed under construction, a bus operator never sees it.
+        assertThat(classify("2026-2027 Eğitim Öğretim Yılı İlkokul ve İmam Hatip Taşımalı Eğitim İşi"))
+                .isEqualTo(TenderCategory.ULASIM);
+        assertThat(classify("Taşımalı Eğitim Kapsamında 346 İlköğretim Öğrencisinin Taşıma İşi"))
+                .isEqualTo(TenderCategory.ULASIM);
+    }
+
+    @Test
     void shortTurkishWordsDoNotMatchInsideLongerOnes() {
         // Each of these was a real misfiling: "et " inside "Adet" and "Hizmet", "un " inside
         // "Hatun", "aşı" inside "Taşı", "akü" inside "Fakültesi", "ilaç" inside "ilaçlama".

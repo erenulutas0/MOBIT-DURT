@@ -59,7 +59,10 @@ public enum TenderCategory {
             "kit karşılığı", "görüntüleme", "röntgen", "tomografi", "diyaliz", "hemodiyaliz",
             "reaktif", "steril", "serum", "anjiyografi", "muayene", "ilaç alım", "tıbbi cihaz",
             "dental", "pedodonti", "intraoküler", "endoskop", "üretroskop", "ortopedi", "anestezi",
-            "kardiyoloji")),
+            "kardiyoloji", "biyomedikal", "radyoterapi", "patoloji",
+            // As it is spelled in a real announcement. The bulletin is typeset by hand and a
+            // tender nobody can find because of a typo is still a tender nobody can find.
+            "pataloji")),
 
     /**
      * Food, from raw materials to the served meal.
@@ -71,7 +74,7 @@ public enum TenderCategory {
             "gıda", "yemek", "ekmek", "kuru gıda", "sebze", "meyve", "yaş sebze", "süt ürün",
             "süt alım", "malzemeli yemek", "tabldot", "kumanya", "mutfak", "et alım", "kırmızı et",
             "beyaz et", "tavuk", "unlu mam", "erzak", "içecek", "şarküteri", "kahvaltılık",
-            "zeytin", "pirinç", "bakliyat")),
+            "zeytin", "pirinç", "bakliyat", "catering", "aşçı", "yemekhane")),
 
     /**
      * Vehicles, fuel, and moving people or things.
@@ -81,6 +84,10 @@ public enum TenderCategory {
      */
     ULASIM("ulasim", "Araç ve Ulaşım", List.of(
             "araç kiralama", "araç kiralanması", "akaryakıt", "motorin", "benzin", "nakliye hizmet",
+            // Taşımalı eğitim is a large, recurring slice of the hizmet bulletin, and its titles
+            // name the school rather than the vehicle: without these the announcement falls
+            // through to construction on the word "ilkokul".
+            "taşımalı eğitim", "taşıma işi", "taşınması işi",
             "taşıma hizmet", "personel taşıma", "öğrenci taşıma", "şoförlü", "sürücülü", "lastik",
             "yedek parça", "iş makinesi", "kamyon", "otobüs", "minibüs", "araç bakım",
             "servis hizmeti", "lokomotif", "vagon", "demiryolu", "pantograf", "raylı sistem")),
@@ -93,8 +100,9 @@ public enum TenderCategory {
      */
     PERSONEL("personel", "Temizlik, Güvenlik ve Personel", List.of(
             "temizlik hizmet", "malzemeli temizlik", "malzemesiz temizlik", "genel temizlik",
-            "özel güvenlik", "güvenlik hizmet", "personel çalıştır", "bahçe bakım", "ilaçlama",
-            "çamaşırhane", "bekçi", "danışma ve yönlendirme", "hasta bakıcı")),
+            "özel güvenlik", "güvenlik hizmet", "personel çalıştır", "temizlik personel",
+            "kat hizmetleri", "bahçe bakım", "ilaçlama", "çamaşırhane", "bekçi",
+            "danışma ve yönlendirme", "hasta bakıcı")),
 
     /** Offices and the things that get consumed in them. */
     BURO("buro", "Büro, Kırtasiye ve Tüketim", List.of(
@@ -111,7 +119,8 @@ public enum TenderCategory {
     TARIM("tarim", "Tarım ve Hayvancılık", List.of(
             "tohum", "fide", "gübre", "büyükbaş", "küçükbaş", "canlı hayvan", "hayvancılık",
             "hayvan yem", "yem alım", "sulama", "damla sulama", "fidan", "orman işletme",
-            "orman bölge", "ormancılık", "arıcılık", "veteriner", "zirai", "tarımsal")),
+            "orman bölge", "ormancılık", "arıcılık", "veteriner", "zirai", "tarımsal", "sera",
+            "hububat", "balya", "pancar")),
 
     /** Drawing it, surveying it, checking somebody else built it right. */
     MUHENDISLIK("muhendislik", "Mühendislik ve Danışmanlık", List.of(
@@ -134,6 +143,9 @@ public enum TenderCategory {
             "kanalizasyon", "içme suyu", "içmesuyu", "yağmur suyu", "altyapı", "üstyapı", "bina",
             "prefabrik", "çatı", "izolasyon", "hafriyat", "sondaj", "stabilize", "yıkı",
             "güçlendirme", "kaba yapı", "ince yapı", "duvar", "derslik", "okul", "lise",
+            // Compounds, because a keyword only matches where a word starts and Turkish glues
+            // these together: "okul" does not find "ilkokul".
+            "ilkokul", "ortaokul", "ilköğretim", "otopark",
             "anaokulu", "kreş", "yurd", "yurt", "pansiyon", "yatakhane", "cami", "kütüphane",
             "park", "spor", "stadyum", "halı saha", "salon", "kavşak", "konut", "lojman",
             "barına", "depo", "tesis yapım", "yol yapım", "yol açma", "poliklinik", "mezarlık",
@@ -222,11 +234,38 @@ public enum TenderCategory {
     private static int hits(String haystack, TenderCategory category) {
         int found = 0;
         for (String keyword : category.keywords) {
-            if (haystack.contains(fold(keyword))) {
+            if (KEYWORD_PATTERNS.get(keyword).matcher(haystack).find()) {
                 found++;
             }
         }
         return found;
+    }
+
+    /**
+     * A keyword matches where a word starts, and may run on from there.
+     *
+     * <p>Both halves are needed. Without the boundary, "et alım" matches "Hizmet Alımı" — which is
+     * in the title of nearly every service tender in the bulletin, and filed forty-five of them as
+     * food. "ekmek" matches "gerekmektedir", "akü" matches "Fakültesi", "aşı" matches "Bordür
+     * Taşı". Without the run-on, Turkish suffixes break everything the other way: "kablo" would
+     * miss "kabloları" and "hastane" would miss "hastanesi".
+     *
+     * <p>The cost is compounds, where a word is glued to the front: "okul" no longer finds
+     * "ilkokul", so those are listed in their own right. That is a handful of entries in exchange
+     * for a whole class of quiet misfilings, and a missing category is visible in a way that a
+     * wrong one is not.
+     */
+    private static final java.util.Map<String, java.util.regex.Pattern> KEYWORD_PATTERNS = buildPatterns();
+
+    private static java.util.Map<String, java.util.regex.Pattern> buildPatterns() {
+        java.util.Map<String, java.util.regex.Pattern> patterns = new java.util.HashMap<>();
+        for (TenderCategory category : values()) {
+            for (String keyword : category.keywords) {
+                patterns.computeIfAbsent(keyword, word -> java.util.regex.Pattern.compile(
+                        "(?<!\\p{L})" + java.util.regex.Pattern.quote(fold(word))));
+            }
+        }
+        return patterns;
     }
 
     public static TenderCategory fromCode(String code) {
