@@ -563,6 +563,61 @@ export type TenderDocumentFacets = {
   timestamp_max: string | null;
 };
 
+export type DocumentPassage = {
+  document_id: number;
+  document_name: string | null;
+  chunk_index: number;
+  content: string;
+  similarity: number;
+};
+
+export type DocumentAnswer = {
+  ready: boolean;
+  message: string;
+  passages: DocumentPassage[];
+};
+
+/**
+ * Ask the company's own documents a question. The answer is the clauses themselves with the file
+ * each came from — for a şartname that is the product rather than a shortcoming, because a quoted
+ * clause can be opened and checked while a paraphrase cannot.
+ */
+export async function askDocuments(question: string): Promise<DocumentAnswer> {
+  const response = await apiFetch("/api/erp/assistant/documents/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, limit: 5 }),
+  });
+  if (!response.ok) throw new Error("Belgelerde arama yapılamadı.");
+  return response.json();
+}
+
+export type TenderBriefEntry = {
+  key: string;
+  label: string;
+  question: string;
+  found: boolean;
+  document_id: number | null;
+  document_name: string | null;
+  content: string | null;
+  similarity: number | null;
+  same_as: string | null;
+};
+
+export type TenderBrief = {
+  ready: boolean;
+  message: string;
+  tender_id: string;
+  entries: TenderBriefEntry[];
+};
+
+/** The dozen facts a company decides on before bidding, each answered by the clause stating it. */
+export async function getTenderBrief(tenderId: string): Promise<TenderBrief> {
+  const response = await apiFetch(`/api/erp/assistant/tenders/${encodeURIComponent(tenderId)}/brief`);
+  if (!response.ok) throw new Error("İhale künyesi çıkarılamadı.");
+  return response.json();
+}
+
 export async function getDocuments(): Promise<ApiDocument[]> {
   const response = await apiFetch("/api/documents");
   if (!response.ok) throw new Error("Documents could not be loaded");
