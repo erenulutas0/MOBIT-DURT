@@ -1,6 +1,8 @@
 package com.docsbot.ops.erp;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 
 import com.jayway.jsonpath.JsonPath;
@@ -109,8 +111,8 @@ class AssistantBriefingIntegrationTest {
                 java.sql.Timestamp.from(Instant.now().minus(2, ChronoUnit.DAYS)),
                 overdueId);
 
-        // Due within minutes -> "today"; due in 3 days -> "this week".
-        long dueTodayId = createTask(adminToken, "Bugun teslim", aylin.id(), Instant.now().plus(5, ChronoUnit.MINUTES));
+        // Due before midnight -> "today"; due in 3 days -> "this week".
+        long dueTodayId = createTask(adminToken, "Bugun teslim", aylin.id(), endOfTodayInBusinessZone());
         long dueWeekId = createTask(adminToken, "Hafta ici teslim", aylin.id(), Instant.now().plus(3, ChronoUnit.DAYS));
 
         // Dependency pair: successor starts blocked, becomes ready when the predecessor is done.
@@ -219,6 +221,19 @@ class AssistantBriefingIntegrationTest {
                     assertThat(notification.getType()).isEqualTo("assistant_briefing");
                     assertThat(notification.getTitle()).contains("Mobit-Asistan").contains("Burak");
                 });
+    }
+
+    /**
+     * The last second of today, in the zone the briefing groups by.
+     *
+     * <p>"Due today" is anything before midnight in Europe/Istanbul, so a deadline of "five minutes
+     * from now" is only today for most of the day. This suite once failed a production deploy at
+     * 23:57 local: the task landed at 00:02, the briefing correctly filed it under this week, and
+     * the assertion read as a broken feature. The end of today is today at every hour.
+     */
+    private static Instant endOfTodayInBusinessZone() {
+        ZoneId zone = ZoneId.of("Europe/Istanbul");
+        return LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant().minusSeconds(1);
     }
 
     private long createTask(String adminToken, String title, long assigneeUserId, Instant deadlineAt) throws Exception {
