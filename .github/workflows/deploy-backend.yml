@@ -40,6 +40,22 @@ jobs:
         working-directory: java-backend
         run: ./mvnw -B -ntp -DskipTests package
 
+      # The web panel is deployed by this job too. It was not, and nobody noticed for four weeks:
+      # the copy on the server dated from 15 July while the repository moved on, so features that
+      # had been written, reviewed and merged were simply not there. Building it here costs a few
+      # seconds and removes the chance of that happening again quietly.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build web panel
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          tar czf ../frontend-dist.tgz -C dist .
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -71,6 +87,21 @@ jobs:
         run: |
           scp -i ~/.ssh/deploy_key "java-backend/${{ steps.jar.outputs.path }}" \
             ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.REMOTE_STAGED_JAR }}
+
+      # Extracted over the directory rather than swapping it: that path is bind-mounted into Caddy,
+      # so replacing the directory would leave the container holding the old inode and serving the
+      # previous panel forever. Old assets are cleared first — the bundle names are hashed, so
+      # without that every deploy leaves its predecessor behind.
+      - name: Publish web panel
+        run: |
+          scp -i ~/.ssh/deploy_key frontend-dist.tgz ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/tmp/frontend-dist.tgz
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} '
+            set -euo pipefail
+            rm -rf /srv/docsbot/frontend/assets
+            tar xzf /tmp/frontend-dist.tgz -C /srv/docsbot/frontend
+            rm -f /tmp/frontend-dist.tgz
+            ls -1 /srv/docsbot/frontend
+          '
 
       # The sidecar's build context lived only on the server and drifted from the repo: its
       # Dockerfile was changed and committed, the image was rebuilt on the box, and the rebuild
