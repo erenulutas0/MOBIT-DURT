@@ -1,4 +1,4 @@
-"""Self-hosted embedding service for the company-document assistant.
+"""Self-hosted document services for the assistant: embeddings, OCR, and the tender bulletin.
 
 Runs the same way Piper does: a small container on the internal Docker network, reachable only by
 the backend. No API key, no per-document cost, and no document text ever leaving the server — which
@@ -18,6 +18,7 @@ import io
 import os
 from typing import List
 
+import bulletin
 import pytesseract
 from fastapi import FastAPI, File, UploadFile
 from pdf2image import convert_from_bytes
@@ -92,6 +93,37 @@ async def ocr(file: UploadFile = File(...)):
         # A corrupt or password-protected file is an ordinary outcome for an archive, not a fault
         # in this service: reported so the caller can mark the document and move on.
         return {"text": "", "pages": 0, "pages_read": 0, "error": str(error)[:200]}
+
+
+@app.get("/bulletin/{kind}")
+def read_bulletin(kind: str):
+    """Fetches and parses one of the day's four Kamu İhale Bülteni PDFs.
+
+    Served from here rather than the backend because both halves of the job already live in this
+    container — poppler reads the PDF, and the bulletin is the same public document for every
+    tenant, so it is fetched once and shared instead of once per customer.
+    """
+    try:
+        files = bulletin.fetch_bulletin(kind)
+    except Exception as error:
+        # Reported rather than answered with an empty list: "their page changed" and "there were no
+        # tenders today" must not look the same to the caller.
+        return {"ok": False, "error": str(error)[:300], "notices": []}
+
+    # The archive holds the announcements and the results bulletin; only the first is wanted here.
+    name = next((n for n in files if n.upper().endswith(".PDF") and "SONUC" not in n.upper()), None)
+    if name is None:
+        return {"ok": False, "error": "arşivde ilan bülteni bulunamadı", "notices": []}
+
+    text = bulletin.pdf_to_text(files[name])
+    notices = bulletin.parse_announcements(text)
+    return {
+        "ok": True,
+        "source": name,
+        "bulletin_type": kind,
+        "count": len(notices),
+        "notices": notices,
+    }
 
 
 @app.post("/embed/query")

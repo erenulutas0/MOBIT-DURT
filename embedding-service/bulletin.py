@@ -15,6 +15,7 @@ Two things about the extraction that are not obvious and cost an afternoon to fi
 
 import io
 import re
+import ssl
 import subprocess
 import tempfile
 import urllib.parse
@@ -23,6 +24,18 @@ import zipfile
 from http.cookiejar import CookieJar
 
 BULLETIN_URL = "https://ekap.kik.gov.tr/ekap/ilan/bultenindirme.aspx"
+
+
+def _tls_context() -> ssl.SSLContext:
+    """The site negotiates a cipher Debian's default security level refuses.
+
+    Python fails the handshake outright where curl succeeds, which reads like the site being down.
+    Level 1 is what it takes; certificates are still verified and the hostname still checked, so
+    this loosens which ciphers are acceptable and nothing else.
+    """
+    context = ssl.create_default_context()
+    context.set_ciphers("DEFAULT@SECLEVEL=1")
+    return context
 
 # The four bulletins, and the postback each button raises.
 BULLETIN_TYPES = {
@@ -76,7 +89,8 @@ def fetch_bulletin(kind: str, timeout: int = 300) -> dict:
         raise ValueError(f"bilinmeyen bülten türü: {kind}")
 
     opener = urllib.request.build_opener(
-        urllib.request.HTTPCookieProcessor(CookieJar()))
+        urllib.request.HTTPCookieProcessor(CookieJar()),
+        urllib.request.HTTPSHandler(context=_tls_context()))
     opener.addheaders = [
         ("User-Agent", "Mozilla/5.0 (compatible; DocsBotOps/1.0)"),
         ("Referer", BULLETIN_URL),

@@ -110,7 +110,7 @@ jobs:
       # image stays a decision somebody makes rather than a tax on every deploy.
       - name: Sync sidecar sources (build context, not a rebuild)
         run: |
-          scp -i ~/.ssh/deploy_key embedding-service/Dockerfile embedding-service/app.py ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/docsbot/embedding-service/
+          scp -i ~/.ssh/deploy_key embedding-service/Dockerfile embedding-service/app.py embedding-service/bulletin.py ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/docsbot/embedding-service/
 
       - name: Verify checksum, swap JAR, recreate container
         run: |
