@@ -8,6 +8,7 @@ import {
   refreshTenderBulletin,
   type TenderCategoryCount, type TenderNotice, type TenderProvinceCount,
 } from "../api";
+import { TurkeyTenderMap } from "../components/TurkeyTenderMap";
 
 /**
  * "Kamu İhale Bülteni" — the tenders published today, narrowed to the ones worth reading.
@@ -93,6 +94,8 @@ export function TenderBulletinPage() {
 
   const busiest = useMemo(() => provinces.slice(0, 14), [provinces]);
   const total = useMemo(() => provinces.reduce((sum, row) => sum + row.count, 0), [provinces]);
+  const countsByProvince = useMemo(
+    () => Object.fromEntries(provinces.map(row => [row.province, row.count])), [provinces]);
 
   const open = useCallback(async (notice: TenderNotice) => {
     try {
@@ -156,6 +159,12 @@ export function TenderBulletinPage() {
           ))}
         </div>
       </div>
+
+      <TurkeyTenderMap
+        counts={countsByProvince}
+        selected={province}
+        onSelect={setProvince}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-5">
         <div className="space-y-3">
