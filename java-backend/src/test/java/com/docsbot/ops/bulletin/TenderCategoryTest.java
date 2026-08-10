@@ -77,6 +77,29 @@ class TenderCategoryTest {
     }
 
     @Test
+    void equipmentIsNotAutomaticallyComputerEquipment() {
+        // "Donanım" is Turkish for equipment of any kind. On its own it filed a water network's
+        // valve rooms and a forestry crew's protective gear as IT — both found by an admin looking
+        // at the screen, which is the expensive way to find them.
+        assertThat(classify("İçme Suyu Şebekelerinin İzole Alt Bölge Odalarının Donanımlarının Temini"))
+                .isEqualTo(TenderCategory.INSAAT);
+        assertThat(classify("Orman Bölge Müdürlüğü Personeline Koruyucu Giyim ve Donanım Malzemesi"))
+                .isEqualTo(TenderCategory.BURO);
+        // It still counts when something says which kind of equipment.
+        assertThat(classify("Bilişim Donanımları ve Çevre Birimleri Alımı"))
+                .isEqualTo(TenderCategory.BILISIM);
+    }
+
+    @Test
+    void theWorkIsTheAutomationEvenWhenItPumpsFuel() {
+        // Genuinely both: an AI-supported fuel automation system with tanks and pumps. The
+        // distinguishing work is the system, and without "yapay zekâ" the tie broke to mechanical
+        // on the word "pompa".
+        assertThat(classify("Şantiye İstasyonları İçin Yapay Zekâ Destekli Entegre Akaryakıt "
+                + "Otomasyon Sistemi, Tank ve Pompa Donanımı")).isEqualTo(TenderCategory.BILISIM);
+    }
+
+    @Test
     void aKeywordStillMatchesThroughTurkishSuffixes() {
         // The other half of the rule: the boundary is at the start only, because "kablo" has to
         // find "kabloları" and "hastane" has to find "hastanesi". A rule strict at both ends would

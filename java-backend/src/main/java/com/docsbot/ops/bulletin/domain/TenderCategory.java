@@ -41,10 +41,16 @@ public enum TenderCategory {
 
     /** Software, hardware, and the network in between. */
     BILISIM("bilisim", "Bilişim ve Teknoloji", List.of(
-            "yazılım", "donanım", "bilgisayar", "sunucu", "server", "lisans", "veri merkezi",
+            // "donanım" on its own is Turkish for equipment of any kind: it filed a water network's
+            // valve rooms and a forestry crew's protective gear as IT. It only counts here when
+            // something says which kind of equipment.
+            "yazılım", "bilişim donanım", "donanım ve yazılım", "bilgisayar donanım",
+            "bilgisayar", "sunucu", "server", "lisans", "veri merkezi",
             "bilgi işlem", "ağ altyapı", "switch", "firewall", "kamera sistemi", "güvenlik kamera",
             "plaka tanıma", "otomasyon", "bilişim", "yazıcı", "tablet", "projeksiyon", "siber",
-            "turnike", "geçiş kontrol", "kgys", "veri tabanı")),
+            "turnike", "geçiş kontrol", "kgys", "veri tabanı",
+            // Both spellings: the bulletin writes "Yapay Zekâ" and the circumflex survives folding.
+            "yapay zeka", "yapay zekâ")),
 
     /**
      * Medical goods and services.
