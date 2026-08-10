@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, Building2, CalendarClock, Loader2, MapPin, Megaphone, Package, RefreshCw, X,
+  ArrowLeft, Building2, CalendarClock, ClipboardList, Loader2, MapPin, Megaphone, Package,
+  RefreshCw, X,
 } from "lucide-react";
 
 import {
   getTenderCategories, getTenderNoticeDetail, getTenderNotices, getTenderProfile,
-  refreshTenderBulletin, saveTenderProfile,
+  openTenderTask, refreshTenderBulletin, saveTenderProfile,
   type TenderCategoryCount, type TenderNotice, type TenderWatchProfile,
 } from "../api";
 
@@ -288,7 +289,10 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
         <div className="h-4" />
       </div>
 
-      {opened && <NoticeSheet notice={opened.notice} body={opened.body} onClose={() => setOpened(null)} />}
+      {opened && (
+        <NoticeSheet notice={opened.notice} body={opened.body} isAdmin={isAdmin}
+          onClose={() => setOpened(null)} />
+      )}
 
       {editingProfile && profile && (
         <ProfileSheet
@@ -461,7 +465,30 @@ function Chip({ active, label, onClick, tone = "amber" }: {
  * like "3x240/25 mm² XLPE kablo" buried in the specification, and a summary is exactly what drops
  * it.
  */
-function NoticeSheet({ notice, body, onClose }: { notice: TenderNotice; body: string; onClose: () => void }) {
+function NoticeSheet({ notice, body, isAdmin, onClose }: {
+  notice: TenderNotice;
+  body: string;
+  isAdmin: boolean;
+  onClose: () => void;
+}) {
+  const [taskId, setTaskId] = useState<number | null>(notice.task_id);
+  const [opening, setOpening] = useState(false);
+  const [taskError, setTaskError] = useState("");
+
+  const openTask = async () => {
+    if (opening || taskId !== null) return;
+    setOpening(true);
+    setTaskError("");
+    try {
+      const created = await openTenderTask(notice.id);
+      setTaskId(created.task_id);
+    } catch (exception) {
+      setTaskError(exception instanceof Error ? exception.message : "Görev açılamadı.");
+    } finally {
+      setOpening(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col">
       <div className="px-4 pt-12 pb-3 border-b border-white/10 flex items-start gap-3">
@@ -475,6 +502,29 @@ function NoticeSheet({ notice, body, onClose }: { notice: TenderNotice; body: st
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {isAdmin && (
+          <button
+            onClick={() => void openTask()}
+            disabled={opening || taskId !== null}
+            className="w-full h-11 rounded-xl bg-emerald-500/25 text-emerald-100 text-sm font-semibold active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {taskId !== null
+              ? `Görev açıldı (#${taskId})`
+              : opening ? "Görev açılıyor…" : "Hazırlık görevi aç"}
+          </button>
+        )}
+        {taskError && (
+          <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-3 py-2.5 text-sm text-red-300">
+            {taskError}
+          </div>
+        )}
+        {taskId !== null && !taskError && (
+          <p className="text-[11px] text-muted-foreground px-1">
+            Görev, ihale saatine göre son teslim tarihi taşıyor; hatırlatmalar ona göre çalışır.
+          </p>
+        )}
+
         <div className="rounded-xl bg-white/[0.03] border border-white/10 divide-y divide-white/5">
           <Row icon={<Building2 className="w-3.5 h-3.5" />} label="İdare" value={notice.authority} />
           {notice.province && (

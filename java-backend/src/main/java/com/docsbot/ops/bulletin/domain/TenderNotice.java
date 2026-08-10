@@ -63,6 +63,16 @@ public class TenderNotice {
     @Column(length = 40)
     private String category;
 
+    /**
+     * The preparation task somebody opened for this tender, once one exists.
+     *
+     * <p>Not a foreign key: the notice is a copy of a public document and gets purged after the
+     * retention window, while what the company decided to do about a tender is its own record and
+     * has to outlive it.
+     */
+    @Column(name = "task_id")
+    private Long taskId;
+
     @Column(columnDefinition = "text")
     private String title;
 
@@ -123,6 +133,15 @@ public class TenderNotice {
     public Instant getTenderAt() { return tenderAt; }
     public String getCategory() { return category; }
     public String getCategoryLabel() { return TenderCategory.fromCode(category).label(); }
+    public Long getTaskId() { return taskId; }
+
+    /** Records the preparation task. Refuses to overwrite one, so a second click cannot orphan it. */
+    public void attachTask(long newTaskId) {
+        if (this.taskId != null) {
+            throw new IllegalStateException("Bu ilan için zaten görev açılmış: #" + this.taskId);
+        }
+        this.taskId = newTaskId;
+    }
     public String getTitle() { return title; }
     public String getQuantity() { return quantity; }
     public String getDeliveryPlace() { return deliveryPlace; }

@@ -33,6 +33,7 @@ function notice(overrides: Partial<TenderNotice> = {}): TenderNotice {
     quantity: '12 km',
     delivery_place: 'Siirt',
     address: 'Siirt Merkez/Siirt',
+    task_id: null,
     ...overrides,
   };
 }

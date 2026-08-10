@@ -1086,6 +1086,8 @@ export type TenderNotice = {
   quantity: string;
   delivery_place: string;
   address: string;
+  /** The preparation task, once somebody has opened one. */
+  task_id: number | null;
 };
 
 export type TenderCategoryCount = { code: string; label: string; count: number };
@@ -1133,6 +1135,25 @@ export async function getTenderCategories(): Promise<TenderCategoryCount[]> {
 export async function getTenderProvinces(): Promise<TenderProvinceCount[]> {
   const response = await apiFetch("/erp/bulletin/provinces");
   if (!response.ok) throw new Error(await errorText(response, "İl dağılımı alınamadı."));
+  return response.json();
+}
+
+/**
+ * Opens the preparation task for a tender, due at the hour the tender closes.
+ *
+ * <p>409 when one already exists: two people reading the same bulletin on the same morning is the
+ * normal case, and the second one should be told about the first task, not given another.
+ */
+export async function openTenderTask(noticeId: number, assigneeUserIds: number[] = []): Promise<{
+  task_id: number;
+  title: string;
+}> {
+  const response = await apiFetch(`/erp/bulletin/notices/${noticeId}/task`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignee_user_ids: assigneeUserIds }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Görev açılamadı."));
   return response.json();
 }
 

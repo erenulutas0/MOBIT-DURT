@@ -606,6 +606,8 @@ export type TenderNotice = {
   quantity: string;
   delivery_place: string;
   address: string;
+  /** The preparation task, once somebody has opened one. */
+  task_id: number | null;
 };
 
 export type TenderCategoryCount = { code: string; label: string; count: number };

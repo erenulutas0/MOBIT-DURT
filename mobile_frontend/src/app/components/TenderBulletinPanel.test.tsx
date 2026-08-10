@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   refreshTenderBulletin: vi.fn(),
   getTenderProfile: vi.fn(),
   saveTenderProfile: vi.fn(),
+  openTenderTask: vi.fn(),
 }));
 vi.mock("../api", () => mocks);
 
@@ -32,6 +33,7 @@ function notice(overrides: Partial<TenderNotice> = {}): TenderNotice {
     quantity: "12 km",
     delivery_place: "Siirt",
     address: "Siirt Merkez/Siirt",
+    task_id: null,
     ...overrides,
   };
 }
@@ -185,6 +187,50 @@ describe("TenderBulletinPanel", () => {
     await waitFor(() => expect(mocks.saveTenderProfile).toHaveBeenCalledWith(
       expect.objectContaining({ categories: ["elektrik"], notifyDaily: true })));
     expect(await screen.findByText("✓ Bize uygun (8)")).toBeInTheDocument();
+  });
+
+  it("ilandan hazırlık görevi açar", async () => {
+    mocks.getTenderNotices.mockResolvedValue([notice()]);
+    mocks.getTenderNoticeDetail.mockResolvedValue({
+      notice: notice(), body: "gövde", section: "İHALE İLANLARI",
+    });
+    mocks.openTenderTask.mockResolvedValue({ task_id: 42, title: "İhale hazırlığı: ..." });
+    render(<TenderBulletinPanel isAdmin onClose={vi.fn()} />);
+
+    await userEvent.click(await screen.findByText(/Muhtelif Köylerin Altyapı/));
+    await userEvent.click(await screen.findByText("Hazırlık görevi aç"));
+
+    expect(mocks.openTenderTask).toHaveBeenCalledWith(1);
+    // The button becomes the answer to "is anyone on this", so the next person does not open it
+    // again from the same screen.
+    expect(await screen.findByText("Görev açıldı (#42)")).toBeInTheDocument();
+  });
+
+  it("görevi olan ilan tekrar açtırmaz", async () => {
+    mocks.getTenderNotices.mockResolvedValue([notice({ task_id: 7 })]);
+    mocks.getTenderNoticeDetail.mockResolvedValue({
+      notice: notice({ task_id: 7 }), body: "gövde", section: "İHALE İLANLARI",
+    });
+    render(<TenderBulletinPanel isAdmin onClose={vi.fn()} />);
+
+    await userEvent.click(await screen.findByText(/Muhtelif Köylerin Altyapı/));
+
+    expect(await screen.findByText("Görev açıldı (#7)")).toBeInTheDocument();
+    expect(screen.queryByText("Hazırlık görevi aç")).not.toBeInTheDocument();
+  });
+
+  it("görev açmayı yalnızca yöneticiye verir", async () => {
+    mocks.getTenderNotices.mockResolvedValue([notice()]);
+    mocks.getTenderNoticeDetail.mockResolvedValue({
+      notice: notice(), body: "gövde", section: "İHALE İLANLARI",
+    });
+    render(<TenderBulletinPanel isAdmin={false} onClose={vi.fn()} />);
+
+    await userEvent.click(await screen.findByText(/Muhtelif Köylerin Altyapı/));
+
+    // Task creation is admin-only everywhere else in the app; the server refuses it either way.
+    expect(await screen.findByText("İlan metni")).toBeInTheDocument();
+    expect(screen.queryByText("Hazırlık görevi aç")).not.toBeInTheDocument();
   });
 
   it("çekme sonrası yeni ilan yoksa bunu söyler", async () => {

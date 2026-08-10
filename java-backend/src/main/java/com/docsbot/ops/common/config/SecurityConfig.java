@@ -261,6 +261,10 @@ public class SecurityConfig {
                         .authenticated()
                         .requestMatchers(HttpMethod.POST, "/erp/bulletin/refresh")
                         .hasRole("ADMIN")
+                        // Opening a tender's preparation task is task creation, and task creation
+                        // is admin-only everywhere else in this application.
+                        .requestMatchers(HttpMethod.POST, "/erp/bulletin/notices/*/task")
+                        .hasRole("ADMIN")
                         // Deciding it is another matter: this changes what every employee sees and
                         // what the morning notification says.
                         .requestMatchers(HttpMethod.PUT, "/erp/bulletin/profile")

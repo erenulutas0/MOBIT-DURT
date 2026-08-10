@@ -22,6 +22,7 @@ import com.docsbot.ops.bulletin.domain.TenderNotice;
 import com.docsbot.ops.bulletin.domain.TenderWatchProfile;
 import com.docsbot.ops.bulletin.infrastructure.TenderNoticeRepository;
 import com.docsbot.ops.erp.application.ErpPrincipal;
+import com.docsbot.ops.erp.domain.ErpTask;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -38,12 +39,14 @@ public class BulletinController {
     private final TenderNoticeRepository repository;
     private final BulletinIngestService ingestService;
     private final TenderWatchService watchService;
+    private final BulletinTaskService taskService;
 
     public BulletinController(TenderNoticeRepository repository, BulletinIngestService ingestService,
-                              TenderWatchService watchService) {
+                              TenderWatchService watchService, BulletinTaskService taskService) {
         this.repository = repository;
         this.ingestService = ingestService;
         this.watchService = watchService;
+        this.taskService = taskService;
     }
 
     @GetMapping("/notices")
@@ -158,6 +161,37 @@ public class BulletinController {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    /**
+     * Opens the preparation task for a tender, with its deadline set to the tender hour.
+     *
+     * <p>Conflict rather than a second task when one already exists: two people reading the same
+     * bulletin on the same morning is the normal case, not the exception.
+     */
+    @PostMapping("/notices/{id}/task")
+    Map<String, Object> openTask(
+            JwtAuthenticationToken authentication,
+            @PathVariable long id,
+            @RequestBody(required = false) OpenTaskRequest request
+    ) {
+        ErpPrincipal principal = ErpPrincipal.from(authentication);
+        try {
+            ErpTask task = taskService.openTask(principal, id,
+                    request == null ? List.of() : request.assigneeUserIds(),
+                    request == null ? null : request.priority());
+            return Map.of("task_id", task.getId(), "title", task.getTitle());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage());
+        } catch (IllegalStateException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, exception.getMessage());
+        }
+    }
+
+    record OpenTaskRequest(
+            @JsonProperty("assignee_user_ids") List<Long> assigneeUserIds,
+            String priority
+    ) {
+    }
+
     /** Pulls the bulletins now instead of waiting for the morning run. */
     @PostMapping("/refresh")
     Map<String, Object> refresh(JwtAuthenticationToken authentication) {
@@ -185,7 +219,9 @@ public class BulletinController {
             @JsonProperty("tender_at") Instant tenderAt,
             String quantity,
             @JsonProperty("delivery_place") String deliveryPlace,
-            String address
+            String address,
+            /** The preparation task, when somebody has already opened one. */
+            @JsonProperty("task_id") Long taskId
     ) {
         static NoticeResponse from(TenderNotice notice) {
             return new NoticeResponse(
@@ -201,7 +237,8 @@ public class BulletinController {
                     notice.getTenderAt(),
                     notice.getQuantity(),
                     notice.getDeliveryPlace(),
-                    notice.getAddress());
+                    notice.getAddress(),
+                    notice.getTaskId());
         }
     }
 
