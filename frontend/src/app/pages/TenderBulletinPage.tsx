@@ -4,9 +4,9 @@ import {
 } from "lucide-react";
 
 import {
-  getTenderCategories, getTenderNoticeDetail, getTenderNotices, getTenderProvinces,
-  refreshTenderBulletin,
-  type TenderCategoryCount, type TenderNotice, type TenderProvinceCount,
+  getTenderCategories, getTenderNoticeDetail, getTenderNotices, getTenderProfile,
+  getTenderProvinces, refreshTenderBulletin, saveTenderProfile,
+  type TenderCategoryCount, type TenderNotice, type TenderProvinceCount, type TenderWatchProfile,
 } from "../api";
 import { TurkeyTenderMap } from "../components/TurkeyTenderMap";
 
@@ -51,27 +51,58 @@ export function TenderBulletinPage() {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [opened, setOpened] = useState<{ notice: TenderNotice; body: string } | null>(null);
+  const [profile, setProfile] = useState<TenderWatchProfile | null>(null);
+  const [saving, setSaving] = useState(false);
+  /** On by default: a company that set a profile wants its own work first. */
+  const [mineOnly, setMineOnly] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     setNote("");
     try {
-      const [list, categoryCounts, provinceCounts] = await Promise.all([
-        getTenderNotices({ province, category, type: bulletinType }),
+      const [list, categoryCounts, provinceCounts, watch] = await Promise.all([
+        getTenderNotices({ province, category, type: bulletinType, mine: mineOnly }),
         getTenderCategories(),
         getTenderProvinces(),
+        getTenderProfile(),
       ]);
       setNotices(list);
       setCategories(categoryCounts);
       setProvinces(provinceCounts);
+      setProfile(watch);
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "İhale bülteni alınamadı.");
       setNotices([]);
     } finally {
       setLoading(false);
     }
-  }, [province, category, bulletinType]);
+  }, [province, category, bulletinType, mineOnly]);
+
+  /**
+   * Saving from the same chips the screen filters by: the admin picks a category, sees what it
+   * leaves, and keeps it. A separate settings page would make them set the filter blind.
+   */
+  const keepAsProfile = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await saveTenderProfile({
+        categories: category ? [category] : (profile?.categories ?? []),
+        provinces: province ? [province] : (profile?.provinces ?? []),
+        notifyDaily: profile?.notify_daily ?? true,
+      });
+      setProfile(saved);
+      setNote(saved.categories.length || saved.provinces.length
+        ? `Profil kaydedildi: bugün ${saved.matching_count} ihale eşleşiyor.`
+        : "Profil temizlendi, bültenin tamamı gösterilecek.");
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Profil kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, category, province, profile]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -133,6 +164,37 @@ export function TenderBulletinPage() {
       )}
       {note && !error && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">{note}</div>
+      )}
+
+      {profile && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <button
+            onClick={() => setMineOnly(!mineOnly)}
+            className={`h-8 px-3 rounded-full border text-xs ${
+              mineOnly
+                ? "bg-emerald-600 text-white border-emerald-600"
+                : "bg-white text-slate-600 border-slate-200"
+            }`}
+          >
+            {mineOnly ? "✓ " : ""}Bize uygun
+            {(profile.categories.length > 0 || profile.provinces.length > 0)
+              ? ` (${profile.matching_count})` : ""}
+          </button>
+          <span className="text-xs text-slate-500">
+            {profile.categories.length === 0 && profile.provinces.length === 0
+              ? "Profil boş — bülten olduğu gibi gösteriliyor."
+              : `Profil: ${[...profile.categories.map(code =>
+                  categories.find(entry => entry.code === code)?.label ?? code),
+                  ...profile.provinces].join(", ")}`}
+          </span>
+          <button
+            onClick={() => void keepAsProfile()}
+            disabled={saving}
+            className="ml-auto text-xs text-amber-700 underline disabled:opacity-50"
+          >
+            {category || province ? "Bu seçimi profil yap" : "Profili temizle"}
+          </button>
+        </div>
       )}
 
       <div className="space-y-2">

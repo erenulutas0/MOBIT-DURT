@@ -1,5 +1,6 @@
 package com.docsbot.ops.bulletin.domain;
 
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -266,6 +267,17 @@ public enum TenderCategory {
             }
         }
         return patterns;
+    }
+
+    /**
+     * Whether this is a code the table still knows.
+     *
+     * <p>Distinct from {@link #fromCode} answering DIGER, which it does both for "diger" and for
+     * anything it does not recognise. A saved filter holding a code that no longer exists matches
+     * nothing, and an empty screen with no explanation is indistinguishable from a quiet day.
+     */
+    public static boolean isKnownCode(String code) {
+        return code != null && Arrays.stream(values()).anyMatch(c -> c.code.equalsIgnoreCase(code));
     }
 
     public static TenderCategory fromCode(String code) {

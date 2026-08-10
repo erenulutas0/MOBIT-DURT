@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TenderNotice } from "../api";
+import type { TenderNotice, TenderWatchProfile } from "../api";
 import { TenderBulletinPanel } from "./TenderBulletinPanel";
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   getTenderCategories: vi.fn(),
   getTenderNoticeDetail: vi.fn(),
   refreshTenderBulletin: vi.fn(),
+  getTenderProfile: vi.fn(),
+  saveTenderProfile: vi.fn(),
 }));
 vi.mock("../api", () => mocks);
 
@@ -34,6 +36,14 @@ function notice(overrides: Partial<TenderNotice> = {}): TenderNotice {
   };
 }
 
+/** An untouched profile: nothing narrowed, so the whole bulletin is "ours". */
+function profile(overrides: Partial<TenderWatchProfile> = {}): TenderWatchProfile {
+  return {
+    categories: [], provinces: [], notify_daily: true, matching_count: 0,
+    updated_by: null, updated_at: null, ...overrides,
+  };
+}
+
 describe("TenderBulletinPanel", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -41,6 +51,7 @@ describe("TenderBulletinPanel", () => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.getTenderNotices.mockResolvedValue([]);
     mocks.getTenderCategories.mockResolvedValue([]);
+    mocks.getTenderProfile.mockResolvedValue(profile());
   });
 
   afterEach(() => {
@@ -113,6 +124,67 @@ describe("TenderBulletinPanel", () => {
 
     // The line that decides whether a company can do the work lives in the body and nowhere else.
     expect(await screen.findByText(/3x240\/25 mm² XLPE kablo/)).toBeInTheDocument();
+  });
+
+  it("varsayılan olarak şirkete uygun ilanları ister", async () => {
+    render(<TenderBulletinPanel isAdmin={false} onClose={vi.fn()} />);
+
+    // A company that set a profile wants its own work first. One that has not set a profile is
+    // watching everything anyway, so the default costs it nothing either way.
+    await waitFor(() => expect(mocks.getTenderNotices).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mine: true })));
+  });
+
+  it("süzgeci kapatınca bültenin tamamını ister", async () => {
+    mocks.getTenderProfile.mockResolvedValue(profile({ categories: ["elektrik"], matching_count: 4 }));
+    render(<TenderBulletinPanel isAdmin={false} onClose={vi.fn()} />);
+
+    await userEvent.click(await screen.findByText("✓ Bize uygun (4)"));
+
+    await waitFor(() => expect(mocks.getTenderNotices).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mine: false })));
+  });
+
+  it("profil boşken listenin neden kısalmadığını söyler", async () => {
+    render(<TenderBulletinPanel isAdmin={false} onClose={vi.fn()} />);
+
+    // Otherwise the switch looks broken: it is on, and the list is the whole bulletin.
+    expect(await screen.findByText("Henüz iş kolu seçilmedi, bülten olduğu gibi gösteriliyor."))
+      .toBeInTheDocument();
+  });
+
+  it("profili yalnızca yönetici düzenler", async () => {
+    const { unmount } = render(<TenderBulletinPanel isAdmin={false} onClose={vi.fn()} />);
+    await screen.findByText("Kamu İhale Bülteni");
+    // It decides what every employee sees and what the morning notification says.
+    expect(screen.queryByText("Profil belirle")).not.toBeInTheDocument();
+    unmount();
+
+    render(<TenderBulletinPanel isAdmin onClose={vi.fn()} />);
+    expect(await screen.findByText("Profil belirle")).toBeInTheDocument();
+  });
+
+  it("profil kaydedilince liste yeniden yüklenir", async () => {
+    mocks.getTenderCategories.mockResolvedValue([
+      { code: "elektrik", label: "Elektrik ve Enerji", count: 8 },
+    ]);
+    const saved = profile({ categories: ["elektrik"], matching_count: 8 });
+    mocks.saveTenderProfile.mockResolvedValue(saved);
+    // The reload after saving reads the profile back from the server, so the fake one has to agree
+    // with itself — otherwise the test is asserting against a server that forgot what it just saved.
+    mocks.getTenderProfile.mockResolvedValueOnce(profile()).mockResolvedValue(saved);
+    render(<TenderBulletinPanel isAdmin onClose={vi.fn()} />);
+
+    await userEvent.click(await screen.findByText("Profil belirle"));
+    // Scoped to the sheet: the same chip is on the list behind it, and clicking that one would
+    // filter the screen instead of setting the profile.
+    const sheet = within((await screen.findByText("İhale profili")).closest("div.fixed")!);
+    await userEvent.click(sheet.getByText("Elektrik ve Enerji 8"));
+    await userEvent.click(sheet.getByText("Kaydet"));
+
+    await waitFor(() => expect(mocks.saveTenderProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: ["elektrik"], notifyDaily: true })));
+    expect(await screen.findByText("✓ Bize uygun (8)")).toBeInTheDocument();
   });
 
   it("çekme sonrası yeni ilan yoksa bunu söyler", async () => {

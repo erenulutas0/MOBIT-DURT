@@ -1101,12 +1101,14 @@ export async function getTenderNotices(filters: {
   province?: string | null;
   category?: string | null;
   type?: string | null;
+  mine?: boolean;
   limit?: number;
 } = {}): Promise<TenderNotice[]> {
   const query = new URLSearchParams();
   if (filters.province) query.set("province", filters.province);
   if (filters.category) query.set("category", filters.category);
   if (filters.type) query.set("type", filters.type);
+  if (filters.mine) query.set("mine", "true");
   query.set("limit", String(filters.limit ?? 100));
   const response = await apiFetch(`/erp/bulletin/notices?${query}`);
   if (!response.ok) throw new Error(await errorText(response, "İhale bülteni alınamadı."));
@@ -1131,6 +1133,41 @@ export async function getTenderCategories(): Promise<TenderCategoryCount[]> {
 export async function getTenderProvinces(): Promise<TenderProvinceCount[]> {
   const response = await apiFetch("/erp/bulletin/provinces");
   if (!response.ok) throw new Error(await errorText(response, "İl dağılımı alınamadı."));
+  return response.json();
+}
+
+export type TenderWatchProfile = {
+  categories: string[];
+  provinces: string[];
+  notify_daily: boolean;
+  matching_count: number;
+  updated_by: string | null;
+  updated_at: string | null;
+};
+
+/** What the company watches for. Empty lists mean the whole bulletin. */
+export async function getTenderProfile(): Promise<TenderWatchProfile> {
+  const response = await apiFetch("/erp/bulletin/profile");
+  if (!response.ok) throw new Error(await errorText(response, "İhale profili alınamadı."));
+  return response.json();
+}
+
+/** Admin only: this decides what every employee sees and what the morning notification says. */
+export async function saveTenderProfile(payload: {
+  categories: string[];
+  provinces: string[];
+  notifyDaily: boolean;
+}): Promise<TenderWatchProfile> {
+  const response = await apiFetch("/erp/bulletin/profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      categories: payload.categories,
+      provinces: payload.provinces,
+      notify_daily: payload.notifyDaily,
+    }),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "İhale profili kaydedilemedi."));
   return response.json();
 }
 

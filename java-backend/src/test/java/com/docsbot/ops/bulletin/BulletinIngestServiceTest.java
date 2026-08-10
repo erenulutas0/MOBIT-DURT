@@ -51,6 +51,7 @@ class BulletinIngestServiceTest {
     private volatile int status = 200;
 
     private final TenderNoticeRepository repository = mock(TenderNoticeRepository.class);
+    private final TenderWatchService watchService = mock(TenderWatchService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final String NOTICE = """
@@ -79,7 +80,8 @@ class BulletinIngestServiceTest {
 
     private BulletinIngestService service(boolean enabled) {
         return new BulletinIngestService(
-                repository, objectMapper, baseUrl, enabled, 120, Clock.fixed(NOW, ZoneOffset.UTC));
+                repository, watchService, objectMapper, baseUrl, enabled, 120,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -203,7 +205,7 @@ class BulletinIngestServiceTest {
 
     @Test
     void aRetentionWindowOfZeroKeepsEverything() {
-        new BulletinIngestService(repository, objectMapper, baseUrl, true, 0,
+        new BulletinIngestService(repository, watchService, objectMapper, baseUrl, true, 0,
                 Clock.fixed(NOW, ZoneOffset.UTC)).purgeOld();
 
         verify(repository, never()).deleteOlderThan(any());

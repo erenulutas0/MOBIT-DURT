@@ -253,9 +253,17 @@ public class SecurityConfig {
                                 "/erp/bulletin/notices",
                                 "/erp/bulletin/notices/*",
                                 "/erp/bulletin/provinces",
-                                "/erp/bulletin/categories")
+                                "/erp/bulletin/categories",
+                                // Readable by everyone: what the company watches for is what the
+                                // screen filters by, and an employee has to be able to see why
+                                // their list is short.
+                                "/erp/bulletin/profile")
                         .authenticated()
                         .requestMatchers(HttpMethod.POST, "/erp/bulletin/refresh")
+                        .hasRole("ADMIN")
+                        // Deciding it is another matter: this changes what every employee sees and
+                        // what the morning notification says.
+                        .requestMatchers(HttpMethod.PUT, "/erp/bulletin/profile")
                         .hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.PATCH,

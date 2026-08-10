@@ -10,6 +10,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.docsbot.ops.bulletin.domain.TenderCategory;
 import com.docsbot.ops.bulletin.domain.TenderNotice;
+import com.docsbot.ops.bulletin.domain.TenderWatchProfile;
 import com.docsbot.ops.bulletin.infrastructure.TenderNoticeRepository;
 import com.docsbot.ops.erp.application.ErpPrincipal;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -34,10 +37,13 @@ public class BulletinController {
 
     private final TenderNoticeRepository repository;
     private final BulletinIngestService ingestService;
+    private final TenderWatchService watchService;
 
-    public BulletinController(TenderNoticeRepository repository, BulletinIngestService ingestService) {
+    public BulletinController(TenderNoticeRepository repository, BulletinIngestService ingestService,
+                              TenderWatchService watchService) {
         this.repository = repository;
         this.ingestService = ingestService;
+        this.watchService = watchService;
     }
 
     @GetMapping("/notices")
@@ -46,14 +52,67 @@ public class BulletinController {
             @RequestParam(name = "province", required = false) String province,
             @RequestParam(name = "category", required = false) String category,
             @RequestParam(name = "type", required = false) String bulletinType,
+            @RequestParam(name = "mine", defaultValue = "false") boolean mineOnly,
             @RequestParam(name = "limit", defaultValue = "50") int limit
     ) {
         ErpPrincipal.from(authentication);
-        return repository.findOpen(Instant.now(), blankToNull(province), blankToNull(category),
-                        blankToNull(bulletinType)).stream()
+        List<TenderNotice> open = repository.findOpen(Instant.now(), blankToNull(province),
+                blankToNull(category), blankToNull(bulletinType));
+        // The profile narrows on top of whatever the chips already narrowed, rather than replacing
+        // it: "our line of work, in this province" is the question, not one or the other.
+        if (mineOnly) {
+            open = watchService.matching(open, watchService.profile());
+        }
+        return open.stream()
                 .limit(Math.max(1, Math.min(limit, 200)))
                 .map(NoticeResponse::from)
                 .toList();
+    }
+
+    /** What the company watches for. Readable by everyone; only an admin decides it. */
+    @GetMapping("/profile")
+    ProfileResponse profile(JwtAuthenticationToken authentication) {
+        ErpPrincipal.from(authentication);
+        return ProfileResponse.from(watchService.profile(),
+                watchService.matching(repository.findOpen(Instant.now(), null, null, null),
+                        watchService.profile()).size());
+    }
+
+    @PutMapping("/profile")
+    ProfileResponse saveProfile(JwtAuthenticationToken authentication, @RequestBody ProfileRequest request) {
+        ErpPrincipal principal = ErpPrincipal.from(authentication);
+        TenderWatchProfile saved = watchService.save(
+                request.categories(), request.provinces(),
+                request.notifyDaily() == null || request.notifyDaily(),
+                principal.displayName());
+        return ProfileResponse.from(saved,
+                watchService.matching(repository.findOpen(Instant.now(), null, null, null), saved).size());
+    }
+
+    record ProfileRequest(
+            List<String> categories,
+            List<String> provinces,
+            @JsonProperty("notify_daily") Boolean notifyDaily
+    ) {
+    }
+
+    record ProfileResponse(
+            List<String> categories,
+            List<String> provinces,
+            @JsonProperty("notify_daily") boolean notifyDaily,
+            /** How many of today's open announcements this profile keeps — the form's own feedback. */
+            @JsonProperty("matching_count") int matchingCount,
+            @JsonProperty("updated_by") String updatedBy,
+            @JsonProperty("updated_at") Instant updatedAt
+    ) {
+        static ProfileResponse from(TenderWatchProfile profile, int matchingCount) {
+            if (profile == null) {
+                return new ProfileResponse(List.of(), List.of(), false, matchingCount, null, null);
+            }
+            return new ProfileResponse(
+                    profile.categoryCodes(), profile.provinceNames(), profile.isNotifyDaily(),
+                    matchingCount, profile.getUpdatedBy(), profile.getUpdatedAt());
+        }
     }
 
     /** One announcement in full — the text a user reads before deciding to bid. */

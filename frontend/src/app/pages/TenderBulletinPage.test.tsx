@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   getTenderProvinces: vi.fn(),
   getTenderNoticeDetail: vi.fn(),
   refreshTenderBulletin: vi.fn(),
+  getTenderProfile: vi.fn(),
+  saveTenderProfile: vi.fn(),
 }));
 vi.mock('../api', () => mocks);
 
@@ -35,6 +37,14 @@ function notice(overrides: Partial<TenderNotice> = {}): TenderNotice {
   };
 }
 
+/** An untouched profile: nothing narrowed, so the whole bulletin counts as "ours". */
+function watchProfile(overrides = {}) {
+  return {
+    categories: [], provinces: [], notify_daily: true, matching_count: 0,
+    updated_by: null, updated_at: null, ...overrides,
+  };
+}
+
 describe('TenderBulletinPage', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -43,6 +53,7 @@ describe('TenderBulletinPage', () => {
     mocks.getTenderNotices.mockResolvedValue([]);
     mocks.getTenderCategories.mockResolvedValue([]);
     mocks.getTenderProvinces.mockResolvedValue([]);
+    mocks.getTenderProfile.mockResolvedValue(watchProfile());
   });
 
   afterEach(() => {

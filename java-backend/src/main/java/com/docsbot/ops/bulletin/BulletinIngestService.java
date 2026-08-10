@@ -56,6 +56,7 @@ public class BulletinIngestService {
     private static final DateTimeFormatter FILE_DATE = DateTimeFormatter.ofPattern("ddMMyyyy");
 
     private final TenderNoticeRepository repository;
+    private final TenderWatchService watchService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final String baseUrl;
@@ -66,16 +67,18 @@ public class BulletinIngestService {
     @org.springframework.beans.factory.annotation.Autowired
     public BulletinIngestService(
             TenderNoticeRepository repository,
+            TenderWatchService watchService,
             ObjectMapper objectMapper,
             @Value("${docsbot.rag.embedding-url:http://docsbot-embeddings:5001}") String baseUrl,
             @Value("${docsbot.bulletin.enabled:true}") boolean enabled,
             @Value("${docsbot.bulletin.retention-days:120}") int retentionDays
     ) {
-        this(repository, objectMapper, baseUrl, enabled, retentionDays, Clock.systemUTC());
+        this(repository, watchService, objectMapper, baseUrl, enabled, retentionDays, Clock.systemUTC());
     }
 
     BulletinIngestService(
             TenderNoticeRepository repository,
+            TenderWatchService watchService,
             ObjectMapper objectMapper,
             String baseUrl,
             boolean enabled,
@@ -83,6 +86,7 @@ public class BulletinIngestService {
             Clock clock
     ) {
         this.repository = repository;
+        this.watchService = watchService;
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.enabled = enabled;
@@ -188,6 +192,13 @@ public class BulletinIngestService {
             log.info("bulletin_scan_complete new={}", stored);
         } catch (RuntimeException exception) {
             log.warn("bulletin_scan_failed", exception);
+        }
+        try {
+            // Announced even when the pull failed: three quarters of the bulletins may have landed,
+            // and what did land is still worth telling somebody about.
+            watchService.announceToday();
+        } catch (RuntimeException exception) {
+            log.warn("bulletin_announce_failed", exception);
         }
         try {
             purgeOld();

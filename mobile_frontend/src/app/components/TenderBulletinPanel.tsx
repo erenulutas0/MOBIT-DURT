@@ -4,8 +4,9 @@ import {
 } from "lucide-react";
 
 import {
-  getTenderCategories, getTenderNoticeDetail, getTenderNotices, refreshTenderBulletin,
-  type TenderCategoryCount, type TenderNotice,
+  getTenderCategories, getTenderNoticeDetail, getTenderNotices, getTenderProfile,
+  refreshTenderBulletin, saveTenderProfile,
+  type TenderCategoryCount, type TenderNotice, type TenderWatchProfile,
 } from "../api";
 
 /**
@@ -53,25 +54,34 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
   /** Kept apart from the error: what a pull found is news, not a fault. */
   const [note, setNote] = useState("");
   const [opened, setOpened] = useState<{ notice: TenderNotice; body: string } | null>(null);
+  const [profile, setProfile] = useState<TenderWatchProfile | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  /**
+   * Starts on. A company that set a profile wants its own work first; one that has not set a
+   * profile is watching everything anyway, so the switch costs it nothing either way.
+   */
+  const [mineOnly, setMineOnly] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     setNote("");
     try {
-      const [list, counts] = await Promise.all([
-        getTenderNotices({ province, category, type: bulletinType }),
+      const [list, counts, watch] = await Promise.all([
+        getTenderNotices({ province, category, type: bulletinType, mine: mineOnly }),
         getTenderCategories(),
+        getTenderProfile(),
       ]);
       setNotices(list);
       setCategories(counts);
+      setProfile(watch);
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "İhale bülteni alınamadı.");
       setNotices([]);
     } finally {
       setLoading(false);
     }
-  }, [province, category, bulletinType]);
+  }, [province, category, bulletinType, mineOnly]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -135,6 +145,37 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
             </button>
           )}
         </div>
+
+        {/* What the company watches for, and the switch that applies it. Shown to everyone,
+            editable by an admin: an employee whose list is short has to be able to see why. */}
+        {profile && (
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={() => setMineOnly(!mineOnly)}
+              className={`h-8 px-3 rounded-full border text-xs whitespace-nowrap active:scale-95 ${
+                mineOnly
+                  ? "bg-emerald-500/25 text-emerald-100 border-emerald-400/40"
+                  : "bg-white/[0.04] text-muted-foreground border-white/10"
+              }`}
+            >
+              {mineOnly ? "✓ " : ""}Bize uygun{profileIsSet(profile) ? ` (${profile.matching_count})` : ""}
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setEditingProfile(true)}
+                className="h-8 px-3 rounded-full border border-white/10 bg-white/[0.04] text-xs text-muted-foreground active:scale-95"
+              >
+                {profileIsSet(profile) ? "Profili düzenle" : "Profil belirle"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {profile && !profileIsSet(profile) && mineOnly && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Henüz iş kolu seçilmedi, bülten olduğu gibi gösteriliyor.
+          </p>
+        )}
 
         <div className="mt-3 -mx-4 px-4 overflow-x-auto">
           <div className="flex items-center gap-2 w-max pb-1">
@@ -248,6 +289,144 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
       </div>
 
       {opened && <NoticeSheet notice={opened.notice} body={opened.body} onClose={() => setOpened(null)} />}
+
+      {editingProfile && profile && (
+        <ProfileSheet
+          profile={profile}
+          categories={categories}
+          provinces={provinces.map(([name]) => name)}
+          onClose={() => setEditingProfile(false)}
+          onSaved={saved => { setProfile(saved); setEditingProfile(false); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** True once somebody has actually narrowed something; an untouched profile watches everything. */
+function profileIsSet(profile: TenderWatchProfile) {
+  return profile.categories.length > 0 || profile.provinces.length > 0;
+}
+
+/**
+ * The form that decides what "bize uygun" means.
+ *
+ * <p>It shows the count as you pick, because the only question anybody has here is "how much does
+ * this leave me" — and a filter you cannot see the effect of is a filter people set once, get an
+ * empty screen from, and never trust again.
+ */
+function ProfileSheet({ profile, categories, provinces, onClose, onSaved }: {
+  profile: TenderWatchProfile;
+  categories: TenderCategoryCount[];
+  provinces: string[];
+  onClose: () => void;
+  onSaved: (saved: TenderWatchProfile) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>(profile.categories);
+  const [places, setPlaces] = useState<string[]>(profile.provinces);
+  const [notify, setNotify] = useState(profile.notify_daily);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const toggle = (list: string[], value: string) =>
+    list.includes(value) ? list.filter(item => item !== value) : [...list, value];
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      onSaved(await saveTenderProfile({ categories: picked, provinces: places, notifyDaily: notify }));
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-background flex flex-col">
+      <div className="px-4 pt-12 pb-3 border-b border-white/10 flex items-center gap-3">
+        <button onClick={onClose} className="p-2 -ml-2 text-muted-foreground active:scale-95"
+          aria-label="Kapat">
+          <X className="w-5 h-5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-foreground">İhale profili</p>
+          <p className="text-xs text-muted-foreground">Hangi ihaleler sizin işiniz?</p>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+        {error && (
+          <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-3 py-2.5 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <section className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            İş kolu — hiçbiri seçilmezse tüm iş kolları gösterilir
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {categories.map(entry => (
+              <Chip
+                key={entry.code}
+                active={picked.includes(entry.code)}
+                label={`${entry.label} ${entry.count}`}
+                onClick={() => setPicked(toggle(picked, entry.code))}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            İl — hiçbiri seçilmezse Türkiye geneli
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {[...new Set([...places, ...provinces])].map(name => (
+              <Chip
+                key={name}
+                tone="slate"
+                active={places.includes(name)}
+                label={name}
+                onClick={() => setPlaces(toggle(places, name))}
+              />
+            ))}
+          </div>
+          {provinces.length === 0 && places.length === 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Bugünün bülteninde il bilgisi yok; iller çekim yapıldıkça listelenir.
+            </p>
+          )}
+        </section>
+
+        <label className="flex items-center gap-3 rounded-xl bg-white/[0.03] border border-white/10 px-3.5 py-3">
+          <input
+            type="checkbox"
+            checked={notify}
+            onChange={event => setNotify(event.target.checked)}
+            className="w-4 h-4 accent-emerald-500"
+          />
+          <span className="text-sm text-foreground flex-1">Her sabah bildirim gönder</span>
+        </label>
+        <p className="text-[11px] text-muted-foreground -mt-3">
+          Size uygun ihale çıkmayan günlerde bildirim gitmez.
+        </p>
+
+        <div className="h-4" />
+      </div>
+
+      <div className="px-4 pb-8 pt-3 border-t border-white/10">
+        <button
+          onClick={() => void save()}
+          disabled={saving}
+          className="w-full h-11 rounded-xl bg-amber-500/25 text-amber-100 text-sm font-semibold active:scale-[0.99] disabled:opacity-40"
+        >
+          {saving ? "Kaydediliyor…" : "Kaydet"}
+        </button>
+      </div>
     </div>
   );
 }
