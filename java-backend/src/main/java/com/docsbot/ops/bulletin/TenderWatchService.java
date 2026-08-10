@@ -117,6 +117,13 @@ public class TenderWatchService {
         if (profile == null || !profile.isNotifyDaily()) {
             return 0;
         }
+        if (profile.watchesEverything()) {
+            // Nothing has been narrowed yet, so "your" tenders are all three hundred of them, and
+            // the line would read "bugün size uygun 254 ihale var" — which is not news, it is the
+            // bulletin. Announcing that every morning is how a notification gets switched off, and
+            // this project has already had one badge people learned to ignore.
+            return 0;
+        }
         Instant now = clock.instant();
         List<TenderNotice> mine = matching(noticeRepository.findOpen(now, null, null, null), profile);
         if (mine.isEmpty()) {

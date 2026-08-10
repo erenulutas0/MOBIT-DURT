@@ -412,7 +412,9 @@ function ProfileSheet({ profile, categories, provinces, onClose, onSaved }: {
           <span className="text-sm text-foreground flex-1">Her sabah bildirim gönder</span>
         </label>
         <p className="text-[11px] text-muted-foreground -mt-3">
-          Size uygun ihale çıkmayan günlerde bildirim gitmez.
+          {picked.length === 0 && places.length === 0
+            ? "İş kolu ya da il seçilmeden bildirim gönderilmez — aksi hâlde her sabah bültenin tamamı bildirilirdi."
+            : "Size uygun ihale çıkmayan günlerde bildirim gitmez."}
         </p>
 
         <div className="h-4" />

@@ -151,6 +151,19 @@ class TenderWatchServiceTest {
     }
 
     @Test
+    void nothingIsAnnouncedUntilTheCompanyHasNarrowedSomething() {
+        // The profile ships empty, so without this the first morning after release tells every
+        // employee "bugün size uygun 254 ihale var" — the whole bulletin, dressed as a
+        // recommendation. That is the noise the feature exists to remove.
+        when(notices.findOpen(any(), any(), any(), any()))
+                .thenReturn(List.of(notice("2026/1", "elektrik", "Ankara")));
+
+        assertThat(service.announceToday()).isZero();
+        verify(notifications, never()).notifyUsers(any(), anyString(), anyString(), anyString(),
+                any(), anyString(), anyString(), any());
+    }
+
+    @Test
     void switchingTheDailyLineOffStopsIt() {
         profile.update(List.of("elektrik"), List.of(), false, "admin", NOW);
         when(notices.findOpen(any(), any(), any(), any()))
