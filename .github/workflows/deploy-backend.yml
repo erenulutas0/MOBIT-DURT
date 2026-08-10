@@ -161,6 +161,24 @@ jobs:
             echo 'Rolled back to pre-deploy jar (backup ${BACKUP_TS}). Database changes (if any migrations ran) are NOT auto-reverted — check Flyway state manually.'
           "
 
+      # Deliberately after the rollback step, and the ordering is load-bearing. Every customer
+      # backend bind-mounts the same jar, so after a deploy they are all *serving* the old one
+      # until they restart — the demo tenant sat four schema versions behind for a week that way,
+      # and would have applied those migrations at whatever random moment it next restarted.
+      #
+      # Placed here so a customer failing to come back up cannot roll production back: production
+      # was verified healthy two steps ago, and reverting it because customer three broke would
+      # turn one tenant's problem into everybody's. The job still fails, loudly.
+      - name: Update tenant backends
+        run: |
+          # Copied from the repo every time rather than trusting the copy on the box. The sidecar
+          # taught this lesson already: a script that lives only on the server drifts from the one
+          # in version control, and the drift is invisible until it matters.
+          scp -i ~/.ssh/deploy_key scripts/update-tenants.sh \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/docsbot/update-tenants.sh
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            'chmod +x /opt/docsbot/update-tenants.sh && /opt/docsbot/update-tenants.sh'
+
       - name: Clean up SSH key
         if: always()
         run: rm -f ~/.ssh/deploy_key

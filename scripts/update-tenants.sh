@@ -34,9 +34,15 @@ for container in "${containers[@]}"; do
     docker restart "$container" >/dev/null
 
     healthy=0
+    schema=""
     for attempt in $(seq 1 40); do
-        if docker exec "$container" wget -qO- http://127.0.0.1:8080/health 2>/dev/null | grep -q ok; then
+        health=$(docker exec "$container" wget -qO- http://127.0.0.1:8080/health 2>/dev/null || true)
+        if printf '%s' "$health" | grep -q '"status":"ok"'; then
             healthy=1
+            # Reported per tenant so the log shows them converging on one schema. A tenant that
+            # restarted but stayed on an older version is the failure this whole script exists to
+            # prevent, and "OK" on its own would hide it.
+            schema=$(printf '%s' "$health" | sed -n 's/.*"schema":"\([^"]*\)".*/\1/p')
             break
         fi
         sleep 5
@@ -49,7 +55,7 @@ for container in "${containers[@]}"; do
         docker logs --tail 40 "$container" >&2
         exit 1
     fi
-    echo "OK"
+    echo "OK${schema:+ (sema $schema)}"
 done
 
 echo
