@@ -504,17 +504,17 @@ export function AssistantPanel({
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      <div className="px-4 pt-12 pb-4 bg-gradient-to-b from-violet-950/60 to-background border-b border-violet-500/20">
+      <div className="px-4 pt-12 pb-4 border-b border-border">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="p-2 -ml-2 text-muted-foreground active:scale-95">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="w-10 h-10 rounded-xl bg-violet-500/25 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-violet-300" />
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-foreground truncate">Mobit-Asistan</p>
-            <p className="text-xs text-violet-300/80 truncate">{userName}</p>
+            <p className="text-xs text-muted-foreground truncate">{userName}</p>
           </div>
           {briefing && (
             <button
@@ -522,7 +522,7 @@ export function AssistantPanel({
                 ? bossSummaryToSpeech(userName, briefing, roster, overview, performance)
                 : briefingToSpeech(userName, briefing))}
               className={`px-3 h-9 rounded-full flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-colors ${
-                speaking ? "bg-red-500/20 text-red-300" : "bg-violet-500/25 text-violet-200"
+                speaking ? "bg-red-500/20 text-red-300" : "bg-primary/10 text-primary"
               }`}
               aria-label={speaking ? "Konuşmayı durdur" : "Günü sesli anlat"}
             >
@@ -539,13 +539,13 @@ export function AssistantPanel({
           </button>
         </div>
         {speaking && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-violet-500/15 border border-violet-500/30 px-3 py-2">
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-primary/10 border border-border px-3 py-2">
             <span className="flex gap-0.5 items-end" aria-hidden="true">
-              <span className="w-1 h-2 bg-violet-300 rounded-full animate-pulse" />
-              <span className="w-1 h-3.5 bg-violet-300 rounded-full animate-pulse [animation-delay:120ms]" />
-              <span className="w-1 h-2.5 bg-violet-300 rounded-full animate-pulse [animation-delay:240ms]" />
+              <span className="w-1 h-2 bg-primary rounded-full animate-pulse" />
+              <span className="w-1 h-3.5 bg-primary rounded-full animate-pulse [animation-delay:120ms]" />
+              <span className="w-1 h-2.5 bg-primary rounded-full animate-pulse [animation-delay:240ms]" />
             </span>
-            <p className="text-xs font-semibold text-violet-200 flex-1 truncate">
+            <p className="text-xs font-semibold text-primary flex-1 truncate">
               🔊 {voiceHint || "Konuşuyor"}…
             </p>
             <button onClick={stopSpeech} className="text-[11px] font-bold text-red-300">
@@ -579,8 +579,8 @@ export function AssistantPanel({
             </p>
 
             {/* Spoken next-steps: exactly what the voice offers, tappable on screen. */}
-            <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 space-y-2">
-              <p className="text-xs font-semibold text-violet-200">
+            <div className="rounded-2xl border border-border bg-primary/10 p-3 space-y-2">
+              <p className="text-xs font-semibold text-primary">
                 {isAdmin
                   ? "Dilerseniz size şunların raporunu verebilirim:"
                   : "Tekrar dinlemek istediğiniz bir şey var mı?"}
@@ -595,13 +595,13 @@ export function AssistantPanel({
                       }
                       void speak(teamSummaryToSpeech(roster, overview, performance), "Tüm çalışanların özeti");
                     }}
-                    className="py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/40 text-xs font-bold text-violet-100 active:scale-[0.97] transition-transform flex items-center justify-center gap-1.5"
+                    className="py-2.5 rounded-xl bg-primary/10 border border-primary/40 text-xs font-bold text-primary active:scale-[0.97] transition-transform flex items-center justify-center gap-1.5"
                   >
                     <Users className="w-4 h-4" /> Tüm Çalışanlar
                   </button>
                   <button
                     onClick={() => setPickerOpen(true)}
-                    className="py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/40 text-xs font-bold text-violet-100 active:scale-[0.97] transition-transform flex items-center justify-center gap-1.5"
+                    className="py-2.5 rounded-xl bg-primary/10 border border-primary/40 text-xs font-bold text-primary active:scale-[0.97] transition-transform flex items-center justify-center gap-1.5"
                   >
                     <TrendingUp className="w-4 h-4" /> Belirli Bir Çalışan
                   </button>
@@ -612,14 +612,14 @@ export function AssistantPanel({
                   <button
                     key={chip.key}
                     onClick={() => void speak(sectionToSpeech(briefing, chip.key), chip.label.replace(/^\S+\s/, ""))}
-                    className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 active:scale-95 transition-transform"
+                    className="rounded-full border border-border bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary active:scale-95 transition-transform"
                   >
                     {chip.label}
                   </button>
                 ))}
               </div>
               {selectedEmployee && (
-                <p className="text-[11px] text-violet-300/80">
+                <p className="text-[11px] text-muted-foreground">
                   Son okunan çalışan: <span className="font-semibold">{selectedEmployee.name}</span>
                 </p>
               )}
@@ -679,7 +679,7 @@ export function AssistantPanel({
                 className="bg-card border border-border rounded-xl p-3.5 text-left active:scale-[0.97] transition-transform"
               >
                 <div className="flex items-center gap-2 mb-1">
-                  <Bell className="w-4 h-4 text-violet-400" />
+                  <Bell className="w-4 h-4 text-primary" />
                   <span className="text-lg font-bold text-foreground">{briefing.unread_notifications}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">Okunmamış bildirim</p>
@@ -688,7 +688,7 @@ export function AssistantPanel({
 
             <button
               onClick={onOpenTasks}
-              className="w-full bg-violet-500/15 border border-violet-500/30 rounded-xl py-3 text-sm font-semibold text-violet-300 active:scale-[0.98] transition-transform"
+              className="w-full bg-primary/10 border border-border rounded-xl py-3 text-sm font-semibold text-primary active:scale-[0.98] transition-transform"
             >
               Görevlerime Git
             </button>
@@ -698,7 +698,7 @@ export function AssistantPanel({
         {/* Chat thread */}
         <div className="pt-2">
           <div className="flex items-center gap-2 mb-2">
-            <MessageSquare className="w-4 h-4 text-violet-300" />
+            <MessageSquare className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">Asistana sor</span>
           </div>
           {turns.length === 0 && (
@@ -712,7 +712,7 @@ export function AssistantPanel({
                     key={prompt}
                     onClick={() => void send(prompt)}
                     disabled={sending}
-                    className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 active:scale-95 disabled:opacity-40 transition-transform"
+                    className="rounded-full border border-border bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary active:scale-95 disabled:opacity-40 transition-transform"
                   >
                     {prompt}
                   </button>
@@ -730,7 +730,7 @@ export function AssistantPanel({
                   className={
                     "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap " +
                     (turn.role === "user"
-                      ? "bg-violet-500/25 text-violet-50 rounded-br-sm"
+                      ? "bg-primary/15 text-foreground rounded-br-sm"
                       : "bg-card border border-border text-foreground rounded-bl-sm")
                   }
                 >
@@ -740,7 +740,7 @@ export function AssistantPanel({
                   <div className="mt-1.5 flex items-center gap-2">
                     <button
                       onClick={() => void speak(turn.text)}
-                      className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-200 active:scale-95"
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary active:scale-95"
                       aria-label="Cevabı seslendir"
                     >
                       <Volume2 className="w-3.5 h-3.5" />
@@ -748,7 +748,7 @@ export function AssistantPanel({
                     {turn.target && (
                       <button
                         onClick={() => (turn.target === "messages" ? onOpenMessages() : onOpenTasks())}
-                        className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200 active:scale-95"
+                        className="inline-flex items-center gap-1 rounded-full border border-border bg-primary/10 px-3 py-1 text-xs font-semibold text-primary active:scale-95"
                       >
                         {turn.target === "messages" ? "Mesajlara git" : "Görevlere git"} →
                       </button>
@@ -778,7 +778,7 @@ export function AssistantPanel({
                 key={prompt}
                 onClick={() => void send(prompt)}
                 disabled={sending}
-                className="shrink-0 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 active:scale-95 disabled:opacity-40 transition-transform"
+                className="shrink-0 rounded-full border border-border bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary active:scale-95 disabled:opacity-40 transition-transform"
               >
                 {prompt}
               </button>
@@ -797,13 +797,13 @@ export function AssistantPanel({
             }}
             placeholder="Bir şey sor…"
             maxLength={2000}
-            className="flex-1 bg-card border border-border rounded-full px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-violet-500/50"
+            className="flex-1 bg-card border border-border rounded-full px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40"
           />
           <button
             onClick={() => void send()}
             disabled={sending || draft.trim().length === 0}
             aria-label="Gönder"
-            className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center disabled:opacity-40 active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-full bg-primary flex items-center justify-center disabled:opacity-40 active:scale-95 transition-transform"
           >
             <Send className="w-4 h-4 text-white" />
           </button>

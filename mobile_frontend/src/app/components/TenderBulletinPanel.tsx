@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, Building2, CalendarClock, ClipboardList, Loader2, MapPin, Megaphone, Package,
+  ArrowLeft, Building2, CalendarClock, Check, ClipboardList, Loader2, MapPin, Megaphone, Package,
   RefreshCw, X,
 } from "lucide-react";
 
@@ -124,24 +124,24 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      <div className="px-4 pt-12 pb-3 bg-gradient-to-b from-amber-950/50 to-background border-b border-amber-500/20">
+      <div className="px-4 pt-12 pb-3 border-b border-border">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="p-2 -ml-2 text-muted-foreground active:scale-95"
             aria-label="Geri">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="w-10 h-10 rounded-xl bg-amber-500/25 flex items-center justify-center">
-            <Megaphone className="w-5 h-5 text-amber-300" />
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Megaphone className="w-5 h-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-foreground truncate">Kamu İhale Bülteni</p>
-            <p className="text-xs text-amber-300/80 truncate">
+            <p className="text-xs text-muted-foreground truncate">
               {loading ? "Yükleniyor…" : `${notices.length} açık ihale`}
             </p>
           </div>
           {isAdmin && (
             <button onClick={() => void refresh()} disabled={refreshing}
-              className="p-2 text-amber-300 active:scale-95 disabled:opacity-40" aria-label="Bülteni çek">
+              className="p-2 text-primary active:scale-95 disabled:opacity-40" aria-label="Bülteni çek">
               <RefreshCw className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`} />
             </button>
           )}
@@ -153,13 +153,14 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() => setMineOnly(!mineOnly)}
-              className={`h-8 px-3 rounded-full border text-xs whitespace-nowrap active:scale-95 ${
+              className={`h-8 px-3 rounded-lg border text-xs whitespace-nowrap active:scale-95 inline-flex items-center gap-1.5 ${
                 mineOnly
-                  ? "bg-emerald-500/25 text-emerald-100 border-emerald-400/40"
+                  ? "bg-primary/15 text-primary border-primary/40"
                   : "bg-white/[0.04] text-muted-foreground border-white/10"
               }`}
             >
-              {mineOnly ? "✓ " : ""}Bize uygun{profileIsSet(profile) ? ` (${profile.matching_count})` : ""}
+              {mineOnly && <Check className="w-3.5 h-3.5" />}
+              Bize uygun{profileIsSet(profile) ? ` (${profile.matching_count})` : ""}
             </button>
             {isAdmin && (
               <button
@@ -224,7 +225,7 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
         )}
 
         {note && !error && (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2.5 text-sm text-amber-200">
+          <div className="rounded-xl bg-primary/10 border border-border px-3 py-2.5 text-sm text-primary">
             {note}
           </div>
         )}
@@ -254,8 +255,8 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
               onClick={() => void open(notice)}
               className="w-full text-left rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden active:scale-[0.99] transition-transform"
             >
-              <div className="flex items-center gap-2 px-3.5 py-2 bg-amber-500/10 border-b border-amber-500/15">
-                <span className="text-[11px] font-semibold text-amber-200">{notice.category_label}</span>
+              <div className="flex items-center gap-2 px-3.5 py-2 bg-primary/10 border-b border-border">
+                <span className="text-[11px] font-semibold text-primary">{notice.category_label}</span>
                 <span className="text-[11px] text-muted-foreground">·</span>
                 <span className="text-[11px] text-muted-foreground">{notice.ikn}</span>
                 {left && (
@@ -428,7 +429,7 @@ function ProfileSheet({ profile, categories, provinces, onClose, onSaved }: {
         <button
           onClick={() => void save()}
           disabled={saving}
-          className="w-full h-11 rounded-xl bg-amber-500/25 text-amber-100 text-sm font-semibold active:scale-[0.99] disabled:opacity-40"
+          className="w-full h-11 rounded-xl bg-primary/10 text-primary text-sm font-semibold active:scale-[0.99] disabled:opacity-40"
         >
           {saving ? "Kaydediliyor…" : "Kaydet"}
         </button>
@@ -444,7 +445,7 @@ function Chip({ active, label, onClick, tone = "amber" }: {
   tone?: "amber" | "slate";
 }) {
   const palette = tone === "amber"
-    ? "bg-amber-500/25 text-amber-100 border-amber-400/40"
+    ? "bg-primary/10 text-primary border-primary/40"
     : "bg-sky-500/20 text-sky-100 border-sky-400/40";
   return (
     <button
@@ -506,7 +507,7 @@ function NoticeSheet({ notice, body, isAdmin, onClose }: {
           <button
             onClick={() => void openTask()}
             disabled={opening || taskId !== null}
-            className="w-full h-11 rounded-xl bg-emerald-500/25 text-emerald-100 text-sm font-semibold active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full h-11 rounded-xl bg-primary/15 text-primary text-sm font-semibold active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <ClipboardList className="w-4 h-4" />
             {taskId !== null

@@ -58,18 +58,18 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      <div className="px-4 pt-12 pb-4 bg-gradient-to-b from-teal-950/60 to-background border-b border-teal-500/20">
+      <div className="px-4 pt-12 pb-4 border-b border-border">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="p-2 -ml-2 text-muted-foreground active:scale-95"
             aria-label="Geri">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="w-10 h-10 rounded-xl bg-teal-500/25 flex items-center justify-center">
-            <FileSearch className="w-5 h-5 text-teal-300" />
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <FileSearch className="w-5 h-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-foreground truncate">Belgelere Sor</p>
-            <p className="text-xs text-teal-300/80 truncate">Şartname, sözleşme ve eklerde ara</p>
+            <p className="text-xs text-muted-foreground truncate">Şartname, sözleşme ve eklerde ara</p>
           </div>
         </div>
 
@@ -84,7 +84,7 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
               onChange={event => setDraft(event.target.value)}
               placeholder="Sorunuzu yazın…"
               enterKeyHint="search"
-              className="w-full h-11 pl-4 pr-9 rounded-xl bg-black/30 border border-teal-500/25 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-teal-400/50"
+              className="w-full h-11 pl-4 pr-9 rounded-xl bg-black/30 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40"
             />
             {draft && (
               <button
@@ -100,7 +100,7 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
           <button
             type="submit"
             disabled={!draft.trim() || searching}
-            className="h-11 w-11 rounded-xl bg-teal-500/25 text-teal-200 flex items-center justify-center active:scale-95 disabled:opacity-40"
+            className="h-11 w-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center active:scale-95 disabled:opacity-40"
             aria-label="Ara"
           >
             {searching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
@@ -163,11 +163,11 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
                 key={`${passage.document_id}-${passage.chunk_index}`}
                 className="rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden"
               >
-                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-teal-500/10 border-b border-teal-500/15">
-                  <FileText className="w-4 h-4 text-teal-300 shrink-0" />
+                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-primary/10 border-b border-border">
+                  <FileText className="w-4 h-4 text-primary shrink-0" />
                   {/* The file name is the citation. Without it the passage is an assertion nobody
                       can go and check, which is exactly what makes people distrust these answers. */}
-                  <p className="text-xs font-semibold text-teal-200 truncate flex-1">
+                  <p className="text-xs font-semibold text-primary truncate flex-1">
                     {passage.document_name || `Belge #${passage.document_id}`}
                   </p>
                 </div>

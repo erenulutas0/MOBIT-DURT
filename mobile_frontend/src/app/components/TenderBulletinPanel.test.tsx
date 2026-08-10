@@ -141,7 +141,7 @@ describe("TenderBulletinPanel", () => {
     mocks.getTenderProfile.mockResolvedValue(profile({ categories: ["elektrik"], matching_count: 4 }));
     render(<TenderBulletinPanel isAdmin={false} onClose={vi.fn()} />);
 
-    await userEvent.click(await screen.findByText("✓ Bize uygun (4)"));
+    await userEvent.click(await screen.findByText("Bize uygun (4)"));
 
     await waitFor(() => expect(mocks.getTenderNotices).toHaveBeenLastCalledWith(
       expect.objectContaining({ mine: false })));
@@ -186,7 +186,7 @@ describe("TenderBulletinPanel", () => {
 
     await waitFor(() => expect(mocks.saveTenderProfile).toHaveBeenCalledWith(
       expect.objectContaining({ categories: ["elektrik"], notifyDaily: true })));
-    expect(await screen.findByText("✓ Bize uygun (8)")).toBeInTheDocument();
+    expect(await screen.findByText("Bize uygun (8)")).toBeInTheDocument();
   });
 
   it("ilandan hazırlık görevi açar", async () => {

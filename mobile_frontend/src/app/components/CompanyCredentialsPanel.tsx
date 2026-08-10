@@ -98,7 +98,7 @@ export function CompanyCredentialsPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      <div className="px-4 pt-12 pb-4 bg-gradient-to-b from-emerald-950/50 to-background border-b border-emerald-500/20">
+      <div className="px-4 pt-12 pb-4 border-b border-border">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="p-2 -ml-2 text-muted-foreground active:scale-95"
             aria-label="Geri">

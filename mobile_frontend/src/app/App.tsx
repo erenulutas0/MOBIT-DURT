@@ -888,27 +888,28 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
           <Building2 className="w-3.5 h-3.5" />
           <span>Mobit</span>
           <span className="opacity-30">·</span>
-          <div className={`w-2 h-2 rounded-full ${isAdmin ? "bg-teal-500" : "bg-blue-500"}`} />
-          <span className={isAdmin ? "text-teal-400" : "text-blue-400"}>
-            {isAdmin ? "Admin" : "Kullanıcı"}
-          </span>
+          <div className="w-2 h-2 rounded-full bg-primary" />
+          <span className="text-primary">{isAdmin ? "Admin" : "Kullanıcı"}</span>
         </div>
       </div>
 
       <div className="flex-1 px-4 py-5 space-y-5">
         {appUpdate && <AppUpdateBanner update={appUpdate} />}
 
+        {/* One card language for every entry: flat surface, neutral border, the single brand
+            accent on the icon. No gradients and no per-feature colours — when every feature
+            arrives in its own hue the palette stops meaning anything, and the product reads as
+            a demo rather than a tool. Hierarchy comes from order, not decoration. */}
         <div className="space-y-3">
           {/* Mobit-Asistan — the personal briefing entry point */}
-          <div className="rounded-2xl p-px bg-gradient-to-br from-violet-500/40 via-violet-500/10 to-transparent surface-elevated">
           <button onClick={() => setShowAssistant(true)}
-            className="w-full bg-gradient-to-br from-[#1B1330] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-violet-400" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">Mobit-Asistan</p>
+                <p className="text-sm font-semibold text-foreground">Mobit-Asistan</p>
                 <p className="text-xs text-muted-foreground">
                   Günün özeti: görevler, teslim tarihleri, hatırlatmalar
                 </p>
@@ -916,21 +917,19 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </div>
           </button>
-          </div>
 
           {/* Kamu İhale Bülteni — the tenders published today.
               Not admin-only, unlike everything below it: this is a public document on EKAP's own
               site, and the people who spot a tender worth bidding on are rarely the people with
               keys to the archive. */}
-          <div className="rounded-2xl p-px bg-gradient-to-br from-amber-500/40 via-amber-500/10 to-transparent surface-elevated">
           <button onClick={() => setShowBulletin(true)}
-            className="w-full bg-gradient-to-br from-[#2A1E0B] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <Megaphone className="w-5 h-5 text-amber-400" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Megaphone className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">Kamu İhale Bülteni</p>
+                <p className="text-sm font-semibold text-foreground">Kamu İhale Bülteni</p>
                 <p className="text-xs text-muted-foreground">
                   Bugün yayımlanan ihaleler — işinize göre ve ilinize göre süzülmüş
                 </p>
@@ -938,7 +937,6 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </div>
           </button>
-          </div>
 
           {/* Belgelere Sor — semantic search over the company's own şartname and contract text.
               Its own entry rather than a corner of the assistant chat: "ask the documents" is a
@@ -947,15 +945,14 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
               Admin-only, matching who can open those documents in the first place. Showing it to
               everyone would have offered the archive to people the server then refuses. */}
           {isAdmin && (
-          <div className="rounded-2xl p-px bg-gradient-to-br from-teal-500/40 via-teal-500/10 to-transparent surface-elevated">
           <button onClick={() => setShowDocumentSearch(true)}
-            className="w-full bg-gradient-to-br from-[#0F2320] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center">
-                <FileSearch className="w-5 h-5 text-teal-400" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <FileSearch className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">Belgelere Sor</p>
+                <p className="text-sm font-semibold text-foreground">Belgelere Sor</p>
                 <p className="text-xs text-muted-foreground">
                   Şartname ve sözleşmelerde arayın: "Gecikirsem ne kadar ceza öderim?"
                 </p>
@@ -963,22 +960,20 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </div>
           </button>
-          </div>
           )}
 
           {/* Şirket Belgelerim — the company's own expiring paperwork. Its own entry because the
               question "is our imza sirküleri still valid" is asked days before a bid, not while
               browsing an archive. */}
           {isAdmin && (
-          <div className="rounded-2xl p-px bg-gradient-to-br from-emerald-500/40 via-emerald-500/10 to-transparent surface-elevated">
           <button onClick={() => setShowCredentials(true)}
-            className="w-full bg-gradient-to-br from-[#0F2318] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
+            className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">Şirket Belgelerim</p>
+                <p className="text-sm font-semibold text-foreground">Şirket Belgelerim</p>
                 <p className="text-xs text-muted-foreground">
                   İmza sirküleri, oda kaydı, borcu yoktur — süresi dolmadan haber verelim
                 </p>
@@ -986,51 +981,40 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </div>
           </button>
-          </div>
           )}
 
-          <div className="rounded-2xl p-px bg-gradient-to-br from-blue-500/40 via-blue-500/10 to-transparent surface-elevated">
+          {/* The inner "banner" bars these two used to carry repeated the description in a second
+              colour; decoration posing as information. The row itself is the whole message. */}
           <button onClick={() => setTab("erp")}
-            className="w-full bg-gradient-to-br from-[#131B2E] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                <ClipboardList className="w-5 h-5 text-blue-400" />
+            className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <ClipboardList className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-foreground">Operasyon Yönetimi</p>
+                <p className="text-sm font-semibold text-foreground">Operasyon Yönetimi</p>
                 <p className="text-xs text-muted-foreground">
                   {isAdmin ? "Görev ve çalışan yönetimi" : "Görevlerim ve mesajlarım"}
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </div>
-            <div className="bg-black/20 rounded-xl px-3 py-2.5 text-center">
-              <p className="text-sm text-blue-300 font-medium">
-                {isAdmin ? "Tüm çalışan & görev yönetimi" : "Kendi görevleriniz ve mesajlarınız"}
-              </p>
-            </div>
           </button>
-          </div>
 
           {isAdmin && (
-            <div className="rounded-2xl p-px bg-gradient-to-br from-teal-500/40 via-teal-500/10 to-transparent surface-elevated">
             <button onClick={() => setTab("tender")}
-              className="w-full bg-gradient-to-br from-[#12211F] to-[#10101A] rounded-[calc(1rem-1px)] p-4 text-left active:scale-[0.98] transition-transform">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-teal-400" />
+              className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-bold text-foreground">Doküman Ağı</p>
+                  <p className="text-sm font-semibold text-foreground">Doküman Ağı</p>
                   <p className="text-xs text-muted-foreground">Şirket, belge ve çalışma alanları</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </div>
-              <div className="bg-black/20 rounded-xl px-3 py-2.5 text-center">
-                <p className="text-sm text-teal-300 font-medium">Belgeler, çalışma alanları ve bilgi ağı</p>
-              </div>
             </button>
-            </div>
           )}
         </div>
 
@@ -1045,7 +1029,15 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
                   tone: backendUp === null ? "pending" : backendUp ? "ok" : "down",
                   detail: backendUp === null ? "Kontrol ediliyor…" : backendUp ? "Aktif" : "Ulaşılamıyor",
                 },
-                { label: "AI Servisi", tone: "planned", detail: "Yakında" },
+                {
+                  // The assistant answers through the same backend, so its availability is the
+                  // backend's. This line used to be hardcoded "Yakında" — advertising a feature
+                  // that had been live for weeks as missing, which is the kind of stale line a
+                  // customer notices in a demo.
+                  label: "Belge Asistanı (AI)",
+                  tone: backendUp === null ? "pending" : backendUp ? "ok" : "down",
+                  detail: backendUp === null ? "Kontrol ediliyor…" : backendUp ? "Aktif" : "Ulaşılamıyor",
+                },
               ].map((s, i) => (
                 <div key={i} className="flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2.5">
@@ -1070,17 +1062,17 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
             <SectionHeader title="Hızlı Erişim" />
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Görevlerim",  icon: ClipboardList, tab: "erp"      as Tab, color: "text-blue-400",   bg: "bg-blue-500/15" },
-                { label: "Mesajlarım",  icon: MessageSquare, tab: "messages" as Tab, color: "text-teal-400",   bg: "bg-teal-500/15" },
-                { label: "Bildirimler", icon: Bell,          tab: "erp"      as Tab, color: "text-violet-400", bg: "bg-violet-500/15" },
-                { label: "Profilim",    icon: User,          tab: "profile"  as Tab, color: "text-slate-400",  bg: "bg-slate-500/15" },
+                { label: "Görevlerim",  icon: ClipboardList, tab: "erp"      as Tab },
+                { label: "Mesajlarım",  icon: MessageSquare, tab: "messages" as Tab },
+                { label: "Bildirimler", icon: Bell,          tab: "erp"      as Tab },
+                { label: "Profilim",    icon: User,          tab: "profile"  as Tab },
               ].map((item, i) => {
                 const Icon = item.icon;
                 return (
                   <button key={i} onClick={() => setTab(item.tab)}
                     className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                    <div className={`w-9 h-9 rounded-xl ${item.bg} flex items-center justify-center`}>
-                      <Icon className={`w-5 h-5 ${item.color}`} />
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Icon className="w-5 h-5 text-primary" />
                     </div>
                     <span className="text-sm font-semibold text-foreground">{item.label}</span>
                   </button>
@@ -1865,7 +1857,7 @@ function ERPTab({
                 <button
                   onClick={event => { event.stopPropagation(); void speakTask(task); }}
                   aria-label={`${task.title} görevini sesli anlat`}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-500/10 text-violet-300 active:scale-90 transition-transform"
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-primary/10 text-primary active:scale-90 transition-transform"
                 >
                   <Volume2 className="w-4 h-4" />
                 </button>
@@ -1953,23 +1945,28 @@ function ERPTab({
         {/* Counters render only from real data — no misleading zeros while the load fails */}
         {isAdmin && overview && (
           <>
+            {/* Colour only where it carries meaning: red is "somebody is late", amber is
+                "somebody is waiting on you", and a zero earns neither. Six tiles in six hues
+                said nothing except that six hues were available. */}
             <KPIRow items={[
-              { label: "Aktif Görev",    value: activeTasks.length, icon: ClipboardList, color: "text-blue-400" },
-              { label: "Onay Bekleyen",  value: pendingTasks.length, icon: CheckSquare,  color: "text-violet-400" },
-              { label: "Gecikmiş",       value: overdueTasks.length, icon: AlertTriangle, color: "text-red-400" },
+              { label: "Aktif Görev",    value: activeTasks.length, icon: ClipboardList },
+              { label: "Onay Bekleyen",  value: pendingTasks.length, icon: CheckSquare },
+              { label: "Gecikmiş",       value: overdueTasks.length, icon: AlertTriangle,
+                color: overdueTasks.length > 0 ? "text-red-400" : undefined },
             ]} />
             <KPIRow items={[
-              { label: "Çevrimiçi",      value: onlineUserCount, icon: Wifi,      color: "text-emerald-400", onClick: () => navTo("employees") },
-              { label: "Yardım Mesajı",  value: (overview?.help_messages || []).length, icon: HelpCircle,color: "text-amber-400" },
-              { label: "Bildirim",       value: unreadNotifications, icon: Bell,  color: "text-teal-400" },
+              { label: "Çevrimiçi",      value: onlineUserCount, icon: Wifi, onClick: () => navTo("employees") },
+              { label: "Yardım Mesajı",  value: (overview?.help_messages || []).length, icon: HelpCircle,
+                color: (overview?.help_messages || []).length > 0 ? "text-amber-400" : undefined },
+              { label: "Bildirim",       value: unreadNotifications, icon: Bell },
             ]} />
           </>
         )}
         {!isAdmin && overview && (
           <KPIRow items={[
-            { label: "Aktif",      value: activeTasks.length, icon: ClipboardList, color: "text-blue-400" },
-            { label: "Çevrimiçi",  value: onlineUserCount, icon: Wifi, color: "text-emerald-400", onClick: () => navTo("employees") },
-            { label: "Bildirim",   value: unreadNotifications, icon: Bell,        color: "text-teal-400" },
+            { label: "Aktif",      value: activeTasks.length, icon: ClipboardList },
+            { label: "Çevrimiçi",  value: onlineUserCount, icon: Wifi, onClick: () => navTo("employees") },
+            { label: "Bildirim",   value: unreadNotifications, icon: Bell },
           ]} />
         )}
 
@@ -1978,43 +1975,43 @@ function ERPTab({
             <>
               <button onClick={() => navTo("employees")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Çalışanlar</span>
               </button>
               <button onClick={() => navTo("tasks")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-teal-500/15 flex items-center justify-center">
-                  <ClipboardList className="w-5 h-5 text-teal-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <ClipboardList className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Görevler</span>
               </button>
               <button onClick={startTaskCreation}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-                  <Plus className="w-5 h-5 text-emerald-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Görev Ver</span>
               </button>
               <button onClick={() => navTo("approvals")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
-                  <CheckSquare className="w-5 h-5 text-violet-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <CheckSquare className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Onaylar</span>
               </button>
               <button onClick={() => navTo("account-requests")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                  <UserPlus className="w-5 h-5 text-amber-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <UserPlus className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Hesap Talepleri</span>
               </button>
               <button onClick={() => navTo("performance")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-rose-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Performans</span>
               </button>
@@ -2023,22 +2020,22 @@ function ERPTab({
             <>
               <button onClick={() => navTo("tasks")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
-                  <ClipboardList className="w-5 h-5 text-blue-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <ClipboardList className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Görevlerim</span>
               </button>
               <button onClick={() => navTo("notifications")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
-                  <Bell className="w-5 h-5 text-violet-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Bell className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Bildirimler</span>
               </button>
               <button onClick={() => navTo("employees")}
                 className="bg-card border border-border rounded-xl p-4 flex flex-col gap-2 active:scale-[0.97] transition-transform text-left">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-400" />
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Çalışanlar</span>
               </button>
@@ -2124,7 +2121,7 @@ function ERPTab({
                   <button
                     onClick={() => void editUserTitle(employee)}
                     aria-label={`${employee.name} ünvanını düzenle`}
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-500/10 text-blue-400 active:scale-90 transition-transform shrink-0"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-primary/10 text-primary active:scale-90 transition-transform shrink-0"
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
@@ -2191,7 +2188,7 @@ function ERPTab({
               <>
                 <button
                   onClick={() => { const target = profileUser; setProfileUser(null); void editUserTitle(target); }}
-                  className="mt-2 w-full py-2.5 rounded-xl bg-blue-500/15 text-xs font-bold text-blue-300 active:scale-[0.98] transition-transform"
+                  className="mt-2 w-full py-2.5 rounded-xl bg-primary/10 text-xs font-semibold text-primary active:scale-[0.98] transition-transform"
                 >
                   ✏️ Ünvanı Düzenle
                 </button>
@@ -2681,7 +2678,7 @@ function ERPTab({
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => void speakTask(task)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-500/15 text-violet-300 active:scale-95 transition-transform"
+                      className="w-8 h-8 flex items-center justify-center rounded-full bg-primary/10 text-primary active:scale-95 transition-transform"
                       title="Görevi sesli anlat"
                     >
                       <Volume2 className="w-3.5 h-3.5" />
@@ -2722,8 +2719,8 @@ function ERPTab({
                 </div>
               )}
               {isAdmin && task.status === "pending_approval" && (
-                <Card className="p-3 border-violet-500/30 bg-violet-500/10">
-                  <p className="text-xs font-semibold text-violet-200 mb-2">
+                <Card className="p-3 border-border bg-primary/5">
+                  <p className="text-xs font-semibold text-foreground mb-2">
                     Tamamlama talebi bekliyor — nihai rapor aşağıdaki notlarda.
                   </p>
                   <div className="grid grid-cols-2 gap-2">
@@ -2759,7 +2756,7 @@ function ERPTab({
                     </button>
                     <button
                       onClick={() => openEditTask(task)}
-                      className="py-2.5 rounded-xl bg-blue-500/20 border border-blue-500/40 text-xs font-bold text-blue-200 active:scale-[0.97] transition-transform"
+                      className="py-2.5 rounded-xl bg-primary/15 border border-primary/40 text-xs font-semibold text-primary active:scale-[0.97] transition-transform"
                     >
                       📅 Yeni Deadline Belirle
                     </button>
@@ -4055,11 +4052,11 @@ function TenderTab({
         <KPIRow items={[
           { label: "Şirket Kaydı",  value: tenders.length, color: "text-foreground" },
           { label: "Toplam Belge",  value: documents.length, color: "text-teal-400" },
-          { label: "Bugün Alınan",  value: todayDocumentCount, color: "text-blue-400" },
+          { label: "Bugün Alınan",  value: todayDocumentCount },
         ]} />
         <KPIRow items={[
           { label: "Sınıflanmamış", value: documents.filter(item => item.status === "unclassified").length, color: "text-amber-400" },
-          { label: "Çalışma Alanı",value: documentGroups.length, color: "text-violet-400" },
+          { label: "Çalışma Alanı",value: documentGroups.length },
           { label: "Bilgi Notu", value: vaultNotes.length, color: "text-emerald-400" },
         ]} />
         </>)}
@@ -4167,7 +4164,7 @@ function TenderTab({
           </button>
           <button onClick={() => navTo("ai-extraction")}
             className="py-3.5 bg-card border border-border rounded-xl text-sm font-semibold text-foreground flex items-center justify-center gap-2">
-            <Cpu className="w-4 h-4 text-violet-400" /> AI Çıkarımı
+            <Cpu className="w-4 h-4 text-primary" /> AI Çıkarımı
           </button>
         </div>
         <div className="h-4" />
@@ -4543,7 +4540,7 @@ function TenderTab({
       <div className="flex-1 px-4 py-4 space-y-4">
         <div className="rounded-xl p-4 flex items-start gap-3"
           style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}>
-          <Cpu className="w-4 h-4 text-violet-400 mt-0.5 shrink-0" />
+          <Cpu className="w-4 h-4 text-primary mt-0.5 shrink-0" />
           <p className="text-xs" style={{ color: "rgba(196,181,253,0.8)" }}>
             Planlanan AI özellikleri önizlemesi. Çıkarım yapabilmek için önce bir belge seçin.
           </p>
