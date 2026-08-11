@@ -1180,6 +1180,61 @@ export async function openTenderTask(noticeId: number, assigneeUserIds: number[]
   return response.json();
 }
 
+export type TenderResult = {
+  id: number;
+  ikn: string;
+  title: string | null;
+  authority: string | null;
+  province: string | null;
+  category: string;
+  category_label: string;
+  bulletin_type: string;
+  work_place: string | null;
+  procedure: string | null;
+  tender_date: string | null;
+  contract_date: string | null;
+  estimated_cost: string | null;
+  contract_amount: string | null;
+  currency: string | null;
+  bid_count: number | null;
+  valid_bid_count: number | null;
+  winner: string | null;
+  winner_province: string | null;
+  /**
+   * How far under the idare's estimate the work was let. Null means the server refused to say —
+   * a lot award, a missing figure, two currencies — and null is not zero: a tender let at the
+   * estimate is a real 0%, and showing "—" for both would hide the difference.
+   */
+  discount_percent: string | null;
+  partial_award: boolean;
+};
+
+/**
+ * Awarded contracts: who took the work, for how much, against how many bidders.
+ *
+ * <p>Pass `ikn` to ask about one tender and every other filter is ignored — a company following a
+ * tender in Ankara still wants its result when the work turned out to be let in Konya.
+ */
+export async function getTenderResults(filters: {
+  province?: string | null;
+  category?: string | null;
+  type?: string | null;
+  ikn?: string | null;
+  mine?: boolean;
+  limit?: number;
+} = {}): Promise<TenderResult[]> {
+  const query = new URLSearchParams();
+  if (filters.ikn) query.set("ikn", filters.ikn);
+  if (filters.province) query.set("province", filters.province);
+  if (filters.category) query.set("category", filters.category);
+  if (filters.type) query.set("type", filters.type);
+  if (filters.mine) query.set("mine", "true");
+  query.set("limit", String(filters.limit ?? 100));
+  const response = await apiFetch(`/erp/bulletin/results?${query}`);
+  if (!response.ok) throw new Error(await errorText(response, "İhale sonuçları alınamadı."));
+  return response.json();
+}
+
 export type TenderWatchProfile = {
   categories: string[];
   provinces: string[];

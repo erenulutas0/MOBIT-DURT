@@ -1,6 +1,8 @@
 package com.docsbot.ops.bulletin;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -19,8 +21,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.docsbot.ops.bulletin.domain.TenderCategory;
 import com.docsbot.ops.bulletin.domain.TenderNotice;
+import com.docsbot.ops.bulletin.domain.TenderResult;
 import com.docsbot.ops.bulletin.domain.TenderWatchProfile;
 import com.docsbot.ops.bulletin.infrastructure.TenderNoticeRepository;
+import com.docsbot.ops.bulletin.infrastructure.TenderResultRepository;
 import com.docsbot.ops.erp.application.ErpPrincipal;
 import com.docsbot.ops.erp.domain.ErpTask;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -37,13 +41,16 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class BulletinController {
 
     private final TenderNoticeRepository repository;
+    private final TenderResultRepository resultRepository;
     private final BulletinIngestService ingestService;
     private final TenderWatchService watchService;
     private final BulletinTaskService taskService;
 
-    public BulletinController(TenderNoticeRepository repository, BulletinIngestService ingestService,
+    public BulletinController(TenderNoticeRepository repository, TenderResultRepository resultRepository,
+                              BulletinIngestService ingestService,
                               TenderWatchService watchService, BulletinTaskService taskService) {
         this.repository = repository;
+        this.resultRepository = resultRepository;
         this.ingestService = ingestService;
         this.watchService = watchService;
         this.taskService = taskService;
@@ -155,6 +162,96 @@ public class BulletinController {
                         category.code(), category.label(), counts.getOrDefault(category.code(), 0L)))
                 .sorted(java.util.Comparator.comparingLong(CategoryCount::count).reversed())
                 .toList();
+    }
+
+    /**
+     * Awarded contracts: who took the work, for how much, against how many bidders.
+     *
+     * <p>The one screen in this application that answers "what should we bid". An announcement says
+     * what an idare wants; a result says what somebody else got it for, next to the idare's own
+     * estimate — and that gap is the number a company has otherwise had to guess at.
+     */
+    @GetMapping("/results")
+    List<ResultResponse> results(
+            JwtAuthenticationToken authentication,
+            @RequestParam(name = "province", required = false) String province,
+            @RequestParam(name = "category", required = false) String category,
+            @RequestParam(name = "type", required = false) String bulletinType,
+            @RequestParam(name = "ikn", required = false) String ikn,
+            @RequestParam(name = "mine", defaultValue = "false") boolean mineOnly,
+            @RequestParam(name = "limit", defaultValue = "50") int limit
+    ) {
+        ErpPrincipal.from(authentication);
+        // Asking by İKN is asking about one tender, and the filters would only get in its way —
+        // a company following a tender in Ankara still wants its result when the work was let in
+        // Konya.
+        if (blankToNull(ikn) != null) {
+            return resultRepository.findByIkn(ikn.trim()).stream().map(ResultResponse::from).toList();
+        }
+        List<TenderResult> recent = resultRepository.findRecent(
+                blankToNull(province), blankToNull(category), blankToNull(bulletinType));
+        if (mineOnly) {
+            recent = watchService.matchingResults(recent, watchService.profile());
+        }
+        return recent.stream()
+                .limit(Math.max(1, Math.min(limit, 200)))
+                .map(ResultResponse::from)
+                .toList();
+    }
+
+    record ResultResponse(
+            long id,
+            String ikn,
+            String title,
+            String authority,
+            String province,
+            String category,
+            @JsonProperty("category_label") String categoryLabel,
+            @JsonProperty("bulletin_type") String bulletinType,
+            @JsonProperty("work_place") String workPlace,
+            String procedure,
+            @JsonProperty("tender_date") LocalDate tenderDate,
+            @JsonProperty("contract_date") LocalDate contractDate,
+            @JsonProperty("estimated_cost") BigDecimal estimatedCost,
+            @JsonProperty("contract_amount") BigDecimal contractAmount,
+            String currency,
+            @JsonProperty("bid_count") Integer bidCount,
+            @JsonProperty("valid_bid_count") Integer validBidCount,
+            String winner,
+            @JsonProperty("winner_province") String winnerProvince,
+            /**
+             * How far under the estimate the work was let, or null when saying would be a lie —
+             * see {@link TenderResult#discountPercent()}. Null and zero mean opposite things here,
+             * so the client has to be given the null.
+             */
+            @JsonProperty("discount_percent") BigDecimal discountPercent,
+            @JsonProperty("partial_award") boolean partialAward
+    ) {
+        static ResultResponse from(TenderResult result) {
+            return new ResultResponse(
+                    result.getId(),
+                    result.getIkn(),
+                    result.getTitle(),
+                    result.getAuthority(),
+                    result.getProvince(),
+                    result.getCategory(),
+                    result.getCategoryLabel(),
+                    result.getBulletinType(),
+                    result.getWorkPlace(),
+                    result.getProcedureName(),
+                    result.getTenderDate(),
+                    result.getContractDate(),
+                    result.getEstimatedCost(),
+                    result.getContractAmount(),
+                    result.getContractCurrency() != null
+                            ? result.getContractCurrency() : result.getEstimatedCurrency(),
+                    result.getBidCount(),
+                    result.getValidBidCount(),
+                    result.getWinner(),
+                    result.getWinnerProvince(),
+                    result.discountPercent(),
+                    result.isPartialAward());
+        }
     }
 
     private static String blankToNull(String value) {

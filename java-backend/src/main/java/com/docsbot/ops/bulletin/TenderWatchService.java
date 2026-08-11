@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.docsbot.ops.bulletin.domain.TenderCategory;
 import com.docsbot.ops.bulletin.domain.TenderNotice;
+import com.docsbot.ops.bulletin.domain.TenderResult;
 import com.docsbot.ops.bulletin.domain.TenderWatchProfile;
 import com.docsbot.ops.bulletin.infrastructure.TenderNoticeRepository;
 import com.docsbot.ops.bulletin.infrastructure.TenderWatchProfileRepository;
@@ -102,6 +103,26 @@ public class TenderWatchService {
                 .filter(notice -> categories.isEmpty() || categories.contains(notice.getCategory()))
                 .filter(notice -> provinces.isEmpty()
                         || (notice.getProvince() != null && provinces.contains(notice.getProvince())))
+                .toList();
+    }
+
+    /**
+     * The awarded contracts this company watches for, out of the ones already recorded.
+     *
+     * <p>Same two axes and the same rule as the announcements, because it is the same profile: a
+     * company that follows electrical work in Konya wants Konya's electrical results, and being
+     * shown a different filter on each screen would make the profile mean two things.
+     */
+    public List<TenderResult> matchingResults(List<TenderResult> results, TenderWatchProfile profile) {
+        if (profile == null || profile.watchesEverything()) {
+            return results;
+        }
+        Set<String> categories = Set.copyOf(profile.categoryCodes());
+        Set<String> provinces = Set.copyOf(profile.provinceNames());
+        return results.stream()
+                .filter(result -> categories.isEmpty() || categories.contains(result.getCategory()))
+                .filter(result -> provinces.isEmpty()
+                        || (result.getProvince() != null && provinces.contains(result.getProvince())))
                 .toList();
     }
 

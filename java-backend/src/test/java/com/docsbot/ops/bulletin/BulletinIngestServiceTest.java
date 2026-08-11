@@ -21,7 +21,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.docsbot.ops.bulletin.domain.TenderNotice;
+import com.docsbot.ops.bulletin.domain.TenderResult;
 import com.docsbot.ops.bulletin.infrastructure.TenderNoticeRepository;
+import com.docsbot.ops.bulletin.infrastructure.TenderResultRepository;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -51,6 +53,7 @@ class BulletinIngestServiceTest {
     private volatile int status = 200;
 
     private final TenderNoticeRepository repository = mock(TenderNoticeRepository.class);
+    private final TenderResultRepository resultRepository = mock(TenderResultRepository.class);
     private final TenderWatchService watchService = mock(TenderWatchService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -80,7 +83,7 @@ class BulletinIngestServiceTest {
 
     private BulletinIngestService service(boolean enabled) {
         return new BulletinIngestService(
-                repository, watchService, objectMapper, baseUrl, enabled, 120,
+                repository, resultRepository, watchService, objectMapper, baseUrl, enabled, 120,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -205,7 +208,7 @@ class BulletinIngestServiceTest {
 
     @Test
     void aRetentionWindowOfZeroKeepsEverything() {
-        new BulletinIngestService(repository, watchService, objectMapper, baseUrl, true, 0,
+        new BulletinIngestService(repository, resultRepository, watchService, objectMapper, baseUrl, true, 0,
                 Clock.fixed(NOW, ZoneOffset.UTC)).purgeOld();
 
         verify(repository, never()).deleteOlderThan(any());
@@ -234,9 +237,82 @@ class BulletinIngestServiceTest {
         }
     }
 
+
+    private static final String RESULT = """
+            {"ikn":"2026/951756","kind":"sonuc",
+             "title":"Açık stok alanlarının yapılması işi",
+             "authority":"TCDD 3. BÖLGE MÜDÜRLÜĞÜ","work_place":"Aliağa İstasyonu",
+             "province":"İzmir","procedure":"Açık","tender_date":"30.06.2026",
+             "contract_date":"07.08.2026","estimated_cost":"82368000.00",
+             "estimated_currency":"TRY","contract_amount":"54524045.00",
+             "contract_currency":"TRY","bid_count":"45","valid_bid_count":"31",
+             "winner":"Tavsun Enerji A.Ş.","winner_address":"Yenişehir/Diyarbakır",
+             "winner_province":"Diyarbakır","text":"1- İhalenin ..."}""";
+
+    /** Same tender, second lot: one İKN, one estimate, a different contract. */
+    private static final String RESULT_SECOND_LOT = """
+            {"ikn":"2026/951756","kind":"sonuc",
+             "title":"Açık stok alanlarının yapılması işi",
+             "authority":"TCDD 3. BÖLGE MÜDÜRLÜĞÜ","province":"İzmir",
+             "estimated_cost":"82368000.00","estimated_currency":"TRY",
+             "contract_amount":"1250000.00","contract_currency":"TRY",
+             "winner":"Başka İnşaat Ltd.","text":"1- İhalenin ..."}""";
+
+    @Test
+    void storesTheAwardedContractBesideTheAnnouncements() {
+        response = results("BULTEN_07082026_YAPIM.pdf", RESULT, NOTICE);
+
+        service(true).ingest("yapim");
+
+        ArgumentCaptor<TenderResult> saved = ArgumentCaptor.forClass(TenderResult.class);
+        verify(resultRepository).save(saved.capture());
+        TenderResult result = saved.getValue();
+        assertThat(result.getIkn()).isEqualTo("2026/951756");
+        assertThat(result.getWinner()).isEqualTo("Tavsun Enerji A.Ş.");
+        assertThat(result.getContractAmount()).isEqualByComparingTo("54524045.00");
+        assertThat(result.getBidCount()).isEqualTo(45);
+        // Where the work is, not where the winner is registered.
+        assertThat(result.getProvince()).isEqualTo("İzmir");
+        assertThat(result.getWinnerProvince()).isEqualTo("Diyarbakır");
+        // 54.524.045 against an 82.368.000 estimate.
+        assertThat(result.discountPercent()).isEqualByComparingTo("33.8");
+    }
+
+    @Test
+    void aSecondContractUnderOneIknMarksTheWholeTenderPartial() {
+        when(resultRepository.findByIkn("2026/951756"))
+                .thenReturn(List.of(mock(TenderResult.class)));
+        response = results("BULTEN_07082026_YAPIM.pdf", RESULT_SECOND_LOT);
+
+        service(true).ingest("yapim");
+
+        ArgumentCaptor<TenderResult> saved = ArgumentCaptor.forClass(TenderResult.class);
+        verify(resultRepository).save(saved.capture());
+        // The estimate covers the whole tender and the amount covers one lot. Reported as a
+        // discount that is a 98% saving, which is nonsense and would teach people to distrust the
+        // number on the days it is real.
+        assertThat(saved.getValue().discountPercent()).isNull();
+        // And the row stored earlier, which looked whole because it was alone, is corrected too.
+        verify(resultRepository).markPartialByIkn("2026/951756");
+    }
+
+    @Test
+    void aBrokenResultDoesNotCostTheAnnouncements() {
+        response = results("BULTEN_07082026_YAPIM.pdf", "{\"kind\":\"sonuc\"}", NOTICE);
+
+        // No İKN, so nothing to store it under — and the day's announcements still land.
+        assertThat(service(true).ingest("yapim")).isEqualTo(1);
+        verify(resultRepository, never()).save(any());
+    }
+
     private static String payload(String source, String... notices) {
+        return results(source, "", notices);
+    }
+
+    private static String results(String source, String results, String... notices) {
         return "{\"ok\":true,\"source\":\"" + source + "\",\"count\":" + notices.length
-                + ",\"notices\":[" + String.join(",", notices) + "]}";
+                + ",\"notices\":[" + String.join(",", notices) + "]"
+                + ",\"results\":[" + results + "]}";
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {

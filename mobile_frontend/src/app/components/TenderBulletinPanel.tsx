@@ -9,6 +9,7 @@ import {
   openTenderTask, refreshTenderBulletin, saveTenderProfile, tenderProfileIsSet as profileIsSet,
   type TenderCategoryCount, type TenderNotice, type TenderWatchProfile,
 } from "../api";
+import { TenderResultsPanel } from "./TenderResultsPanel";
 
 /**
  * "Kamu İhale Bülteni" — the tenders published today, filtered down to the ones a company might
@@ -66,6 +67,8 @@ export function TenderBulletinPanel({ isAdmin, autoEditProfile = false, onClose 
   const [opened, setOpened] = useState<{ notice: TenderNotice; body: string } | null>(null);
   const [profile, setProfile] = useState<TenderWatchProfile | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
+  /** Which half of the bulletin is on screen: what is open, or what the last ones went for. */
+  const [showResults, setShowResults] = useState(false);
   /**
    * Starts on. A company that set a profile wants its own work first; one that has not set a
    * profile is watching everything anyway, so the switch costs it nothing either way.
@@ -155,7 +158,9 @@ export function TenderBulletinPanel({ isAdmin, autoEditProfile = false, onClose 
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-foreground truncate">Kamu İhale Bülteni</p>
             <p className="text-xs text-muted-foreground truncate">
-              {loading ? "Yükleniyor…" : `${notices.length} açık ihale`}
+              {showResults
+                ? "Sonuçlanan ihaleler — kim, ne bedelle aldı"
+                : loading ? "Yükleniyor…" : `${notices.length} açık ihale`}
             </p>
           </div>
           {isAdmin && (
@@ -164,6 +169,28 @@ export function TenderBulletinPanel({ isAdmin, autoEditProfile = false, onClose 
               <RefreshCw className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`} />
             </button>
           )}
+        </div>
+
+        {/* Two halves of the same bulletin, and the same filters apply to both. Kept as one screen
+            rather than two entries on the home page because the question is one question: what is
+            open in our line of work, and what did the last ones go for. */}
+        <div className="mt-3 flex items-center gap-1 p-1 rounded-lg bg-white/[0.04] border border-white/10">
+          {[
+            { key: false, label: "Açık ihaleler" },
+            { key: true, label: "Sonuçlananlar" },
+          ].map(tab => (
+            <button
+              key={String(tab.key)}
+              onClick={() => setShowResults(tab.key)}
+              className={`flex-1 h-8 rounded-md text-xs transition-colors ${
+                showResults === tab.key
+                  ? "bg-primary/15 text-primary font-semibold"
+                  : "text-muted-foreground"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* What the company watches for, and the switch that applies it. Shown to everyone,
@@ -205,7 +232,10 @@ export function TenderBulletinPanel({ isAdmin, autoEditProfile = false, onClose 
               <Chip
                 key={entry.code}
                 active={category === entry.code}
-                label={`${entry.label} ${entry.count}`}
+                // The count is how many announcements are open in that line of work. On the
+                // results half it would still say that while sitting over a list of awarded
+                // contracts, which is a number describing the wrong list — so it goes away.
+                label={showResults ? entry.label : `${entry.label} ${entry.count}`}
                 onClick={() => setCategory(category === entry.code ? null : entry.code)}
               />
             ))}
@@ -223,20 +253,36 @@ export function TenderBulletinPanel({ isAdmin, autoEditProfile = false, onClose 
                 onClick={() => setBulletinType(bulletinType === entry.code ? null : entry.code)}
               />
             ))}
+            {/* Drawn from the announcements on screen, so on the results half the counts describe
+                the wrong list and the list itself would shrink to whichever provinces happen to
+                have something open today. The province the user already picked stays, so a filter
+                cannot become impossible to switch off. */}
             {provinces.slice(0, 12).map(([name, count]) => (
               <Chip
                 key={name}
                 tone="slate"
                 active={province === name}
-                label={`${name} ${count}`}
+                label={showResults ? name : `${name} ${count}`}
                 onClick={() => setProvince(province === name ? null : name)}
               />
             ))}
+            {showResults && province && !provinces.some(([name]) => name === province) && (
+              <Chip tone="slate" active label={province} onClick={() => setProvince(null)} />
+            )}
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {showResults ? (
+          <TenderResultsPanel
+            mineOnly={mineOnly}
+            province={province}
+            category={category}
+            bulletinType={bulletinType}
+          />
+        ) : (
+        <>
         {error && (
           <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-3 py-2.5 text-sm text-red-300">
             {error}
@@ -306,6 +352,8 @@ export function TenderBulletinPanel({ isAdmin, autoEditProfile = false, onClose 
             </button>
           );
         })}
+        </>
+        )}
         <div className="h-4" />
       </div>
 

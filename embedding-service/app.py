@@ -127,19 +127,36 @@ def read_bulletin(kind: str):
         # tenders today" must not look the same to the caller.
         return {"ok": False, "error": str(error)[:300], "notices": []}
 
-    # The archive holds the announcements and the results bulletin; only the first is wanted here.
+    # The archive holds two PDFs: the day's announcements and the day's results. Both are read
+    # here, because they arrive in the same download and splitting them across two calls would
+    # mean fetching the same archive twice.
     name = next((n for n in files if n.upper().endswith(".PDF") and "SONUC" not in n.upper()), None)
     if name is None:
         return {"ok": False, "error": "arşivde ilan bülteni bulunamadı", "notices": []}
 
     text = bulletin.pdf_to_text(files[name])
     notices = bulletin.parse_announcements(text)
+
+    results, result_source = [], None
+    result_name = next((n for n in files if "SONUC" in n.upper()), None)
+    if result_name:
+        # Its own try: a layout change in the results must not cost the day's announcements, which
+        # are the part somebody is waiting on at nine in the morning.
+        try:
+            results = bulletin.parse_results(bulletin.pdf_to_text(files[result_name]))
+            result_source = result_name
+        except Exception:
+            results = []
+
     payload = {
         "ok": True,
         "source": name,
         "bulletin_type": kind,
         "count": len(notices),
         "notices": notices,
+        "result_source": result_source,
+        "result_count": len(results),
+        "results": results,
     }
     # Only successful reads are cached. A failure held for four hours would keep answering with
     # yesterday's problem long after their site came back.

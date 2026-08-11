@@ -21,7 +21,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.docsbot.ops.bulletin.domain.TenderNotice;
+import com.docsbot.ops.bulletin.domain.TenderResult;
 import com.docsbot.ops.bulletin.infrastructure.TenderNoticeRepository;
+import com.docsbot.ops.bulletin.infrastructure.TenderResultRepository;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -54,8 +56,17 @@ public class BulletinIngestService {
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH.mm"));
     /** The archive names itself BULTEN_07082026_YAPIM.pdf — that is the bulletin's own date. */
     private static final DateTimeFormatter FILE_DATE = DateTimeFormatter.ofPattern("ddMMyyyy");
+    /** Results print their contract and tender dates without a time. */
+    private static final DateTimeFormatter RESULT_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    /**
+     * The line a result carries when its tender was divided into lots: "Sözleşmeye Esas
+     * Kısımlarının Yaklaşık Maliyeti". Its presence is what stops one lot's price being reported
+     * as a 98% discount off the whole tender's estimate.
+     */
+    private static final String PARTIAL_AWARD_MARKER = "Sözleşmeye Esas";
 
     private final TenderNoticeRepository repository;
+    private final TenderResultRepository resultRepository;
     private final TenderWatchService watchService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -67,17 +78,20 @@ public class BulletinIngestService {
     @org.springframework.beans.factory.annotation.Autowired
     public BulletinIngestService(
             TenderNoticeRepository repository,
+            TenderResultRepository resultRepository,
             TenderWatchService watchService,
             ObjectMapper objectMapper,
             @Value("${docsbot.rag.embedding-url:http://docsbot-embeddings:5001}") String baseUrl,
             @Value("${docsbot.bulletin.enabled:true}") boolean enabled,
             @Value("${docsbot.bulletin.retention-days:120}") int retentionDays
     ) {
-        this(repository, watchService, objectMapper, baseUrl, enabled, retentionDays, Clock.systemUTC());
+        this(repository, resultRepository, watchService, objectMapper, baseUrl, enabled,
+                retentionDays, Clock.systemUTC());
     }
 
     BulletinIngestService(
             TenderNoticeRepository repository,
+            TenderResultRepository resultRepository,
             TenderWatchService watchService,
             ObjectMapper objectMapper,
             String baseUrl,
@@ -86,6 +100,7 @@ public class BulletinIngestService {
             Clock clock
     ) {
         this.repository = repository;
+        this.resultRepository = resultRepository;
         this.watchService = watchService;
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl.replaceAll("/+$", "");
@@ -178,7 +193,79 @@ public class BulletinIngestService {
         }
         log.info("bulletin_ingested type={} date={} new={} already_had={}",
                 bulletinType, bulletinDate, stored, skipped);
+        storeResults(payload, bulletinType, bulletinDate, now);
         return stored;
+    }
+
+    /**
+     * Stores the day's awarded contracts, which ride along in the same payload.
+     *
+     * <p>Counted separately from the announcements and never allowed to fail the pull: the
+     * announcements are what somebody is waiting on at nine in the morning, and a layout change in
+     * the results bulletin must not cost them.
+     */
+    private void storeResults(JsonNode payload, String bulletinType, LocalDate bulletinDate, Instant now) {
+        int stored = 0;
+        int partial = 0;
+        for (JsonNode result : payload.path("results")) {
+            String ikn = result.path("ikn").asString("");
+            if (ikn.isBlank()) {
+                continue;
+            }
+            try {
+                java.math.BigDecimal amount = decimal(result.path("contract_amount").asString(""));
+                String winner = result.path("winner").asString("");
+                String awardKey = TenderResult.awardKey(winner, amount);
+                if (resultRepository.existsByIknAndBulletinDateAndBulletinTypeAndAwardKey(
+                        ikn, bulletinDate, bulletinType, awardKey)) {
+                    continue;
+                }
+                // A tender says it was split into lots in two ways, and both have to be believed.
+                // The announcement itself carries a "Sözleşmeye Esas Kısımlarının" line; and a
+                // second contract turning up under the same İKN — today's bulletin or one from
+                // last month — proves it whatever the announcement said.
+                List<TenderResult> siblings = resultRepository.findByIkn(ikn);
+                boolean lots = result.path("text").asString("").contains(PARTIAL_AWARD_MARKER)
+                        || !siblings.isEmpty();
+                resultRepository.save(new TenderResult(
+                        ikn,
+                        bulletinType,
+                        bulletinDate,
+                        trim(result.path("authority").asString(""), 400),
+                        result.path("title").asString(""),
+                        trim(emptyToNull(result.path("province").asString("")), 40),
+                        result.path("work_place").asString(""),
+                        trim(result.path("procedure").asString(""), 160),
+                        date(result.path("tender_date").asString("")),
+                        date(result.path("contract_date").asString("")),
+                        decimal(result.path("estimated_cost").asString("")),
+                        trim(emptyToNull(result.path("estimated_currency").asString("")), 3),
+                        amount,
+                        trim(emptyToNull(result.path("contract_currency").asString("")), 3),
+                        integer(result.path("bid_count").asString("")),
+                        integer(result.path("valid_bid_count").asString("")),
+                        winner,
+                        result.path("winner_address").asString(""),
+                        trim(emptyToNull(result.path("winner_province").asString("")), 40),
+                        lots,
+                        result.path("text").asString(""),
+                        now));
+                stored++;
+                if (lots && !siblings.isEmpty()) {
+                    // The row stored last week looked whole because it was alone. It is not.
+                    resultRepository.markPartialByIkn(ikn);
+                    partial++;
+                }
+            } catch (RuntimeException exception) {
+                // One malformed result must not cost the rest of the bulletin.
+                log.warn("bulletin_result_skipped type={} ikn={} reason={}",
+                        bulletinType, ikn, exception.getMessage());
+            }
+        }
+        if (stored > 0) {
+            log.info("bulletin_results_ingested type={} date={} new={} lots_corrected={}",
+                    bulletinType, bulletinDate, stored, partial);
+        }
     }
 
     /**
@@ -224,8 +311,10 @@ public class BulletinIngestService {
         }
         LocalDate cutoff = LocalDate.ofInstant(clock.instant(), BUSINESS_ZONE).minusDays(retentionDays);
         int deleted = repository.deleteOlderThan(cutoff);
-        if (deleted > 0) {
-            log.info("bulletin_purged deleted={} older_than={}", deleted, cutoff);
+        int deletedResults = resultRepository.deleteOlderThan(cutoff);
+        if (deleted > 0 || deletedResults > 0) {
+            log.info("bulletin_purged deleted={} results={} older_than={}",
+                    deleted, deletedResults, cutoff);
         }
         return deleted;
     }
@@ -287,6 +376,46 @@ public class BulletinIngestService {
         // Some announcements print something else entirely. The text is kept either way, so a date
         // that cannot be parsed costs sorting, not the record.
         return null;
+    }
+
+    /** A printed "07.08.2026", or null — a date the bulletin left out costs sorting, not the row. */
+    private static LocalDate date(String printed) {
+        if (printed == null || printed.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(printed.trim(), RESULT_DATE);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * A contract sum, already normalised to "54524045.00" by the parser.
+     *
+     * <p>Kept out of {@code double} the whole way: these are the numbers a company prices its own
+     * bid against, and a sum that comes back a lira short is worse than one that never arrived.
+     */
+    private static java.math.BigDecimal decimal(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return new java.math.BigDecimal(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static Integer integer(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private static String emptyToNull(String value) {

@@ -89,6 +89,25 @@ HEADLINE_VERB = re.compile(
 # danışmanlık bulletin writes "24.08.2026 10:00" — so it is optional rather than assumed.
 TENDER_AT_VALUE = re.compile(r"\d{2}\.\d{2}\.\d{4}\s*(?:-\s*)?\d{2}[:.]\d{2}")
 
+# ── Sonuç ilanları ────────────────────────────────────────────────────────────
+# A second PDF ships in the same archive as the announcements and is laid out differently: no
+# section headings, one "SONUÇ İLANI" banner per result, and fields grouped under numbered
+# headings ("4- Sözleşmenin") whose letters restart in every group. Two fields called "Tarihi"
+# appear in every result — the tender's and the contract's — so a result is read by (group,
+# letter) rather than by label alone.
+RESULT_BANNER = re.compile(r"\n[ \t]*SONUÇ İLANI[ \t]*\n")
+# Lowercase "kayıt" here where the announcements bulletin capitalises it. Same number, other file.
+RESULT_IKN_LINE = re.compile(r"^\s*İhale kayıt numarası\s*:\s*(\d{4}/\d+)\s*$",
+                             re.MULTILINE | re.IGNORECASE)
+RESULT_GROUP_LINE = re.compile(r"^\s*(\d)-\s*(\S[^\n:]{0,60})\s*$")
+RESULT_FIELD_LINE = re.compile(r"^\s*([a-zğüşıöç])\)\s*(.+?)\s{2,}:\s*(.*)$")
+# "82.368.000,00 TRY" — Turkish grouping, and a currency that is not always the lira. Not anchored
+# to the end of the value: where a table row spilled onto the next page pdftotext leaves an arrow
+# behind it ("87.231.881,17 TRY -->"), which cost the estimate on every pazarlık result. The two
+# decimals are required, so a duration of "240" can never be mistaken for a sum of money.
+MONEY_VALUE = re.compile(r"(\d[\d.]*,\d{2})\s*([A-Z]{3})?")
+DATE_VALUE = re.compile(r"\d{2}\.\d{2}\.\d{4}")
+
 
 def _turkish_fold(value: str) -> str:
     return value.replace("İ", "i").replace("I", "ı").casefold()
@@ -326,3 +345,145 @@ def parse_announcements(text: str) -> list:
             "text": block.strip(),
         })
     return announcements
+
+
+def _result_fields(block: str) -> dict:
+    """The fields of one result, keyed both "group.letter" and "group|label".
+
+    Keyed by group rather than by name alone because the names repeat: every result carries the
+    tender's "Tarihi" under group 1 and the contract's under group 4, and a result read by label
+    alone would report the contract as having been signed before the tender was held.
+
+    Keyed by label rather than by letter alone because the letters shift. A pazarlık result adds
+    "d) Pazarlık Usulünün Seçilme Gerekçesi" and pushes the estimated cost from d to e; reading
+    position 1.d lost the estimate on all thirteen of them in one day's bulletin.
+
+    Two wrapping habits have to be handled and they pull in opposite directions. A long value
+    continues on the lines below, indented into the value column. A long *label* continues on the
+    line below at the left margin ("a) Dokümanı EKAP üzerinden" / "e-imza kullanarak indiren
+    sayısı"), which is why only indented lines are treated as value. And a value the layout chose
+    to centre vertically begins on the line *above* its own label, with the label line's own value
+    left empty — so indented lines are held until it is known which side wants them.
+    """
+    fields, group, current, pending = {}, None, None, []
+
+    def flush_backwards():
+        """Give the held lines to the field above, which is where they belong by default."""
+        nonlocal pending
+        if current is not None and pending:
+            current["value"] = (current["value"] + " " + " ".join(pending)).strip()
+        pending = []
+
+    for line in block.split("\n"):
+        stripped = line.strip()
+        indented = line.startswith(" " * 20)
+        if indented and stripped:
+            pending.append(stripped)
+            continue
+        match = RESULT_GROUP_LINE.match(line)
+        if match:
+            flush_backwards()
+            group, current = match.group(1), None
+            continue
+        match = RESULT_FIELD_LINE.match(line)
+        if match and group:
+            entry = {"label": match.group(2).strip(), "value": match.group(3).strip()}
+            if entry["value"]:
+                flush_backwards()
+            else:
+                # An empty value means the lines held above were this field's, not the last one's.
+                entry["value"] = " ".join(pending).strip()
+                pending = []
+            current = entry
+            fields.setdefault("%s.%s" % (group, match.group(1)), entry)
+            fields.setdefault("%s|%s" % (group, _turkish_fold(entry["label"])), entry)
+            continue
+        # Anything else at the left margin ends a value: a label continuation, a page footer, the
+        # closing "Kamuoyuna saygıyla duyurulur."
+        flush_backwards()
+        current = None
+    flush_backwards()
+    return fields
+
+
+def _money(raw: str):
+    """A bulletin amount as a number and its currency, or nothing if it is not one.
+
+    Returned as a string rather than a float: these are contract sums, and the caller stores them
+    in a numeric column where "54524045.00" survives and 5.4524045e7 is a rounding argument waiting
+    to happen.
+    """
+    match = MONEY_VALUE.search((raw or "").strip())
+    if not match:
+        return None, None
+    digits = match.group(1).replace(".", "").replace(",", ".")
+    try:
+        float(digits)
+    except ValueError:
+        return None, None
+    return digits, match.group(2) or "TRY"
+
+
+def parse_results(text: str) -> list:
+    """Splits the results bulletin into one record per awarded tender.
+
+    What makes this worth reading rather than the announcements alone: it prints the idare's own
+    estimate beside the price the work was actually let for. The gap between the two is the single
+    number a company wants before deciding what to bid — on today's yapım bulletin it runs from a
+    few percent to nearly sixty, and no amount of reading the announcement tells you which.
+    """
+    results = []
+    for block in RESULT_BANNER.split(text)[1:]:
+        ikn = RESULT_IKN_LINE.search(block)
+        if not ikn:
+            continue
+        # Everything above the İKN line: the index entry, the headline, and the buyer's name.
+        header = block[:ikn.start()]
+        fields = _result_fields(block)
+
+        def value(*keys, default=""):
+            """Read by label first, falling back to position for anything unlabelled."""
+            for key in keys:
+                entry = fields.get(key)
+                if entry:
+                    return entry["value"]
+            return default
+
+        estimated, estimated_currency = _money(value("1|yaklaşık maliyeti"))
+        amount, amount_currency = _money(value("4|bedeli", "4.b"))
+        address = value("4|yüklenicinin adresi", "4.f")
+        work_place = value("2|yapılacağı yer", "2.b")
+        tender_date = DATE_VALUE.search(value("1|tarihi", "1.a"))
+        contract_date = DATE_VALUE.search(value("4|tarihi", "4.a"))
+        results.append({
+            "ikn": ikn.group(1),
+            "kind": "sonuc",
+            "title": value("2|adı", "2.a"),
+            "authority": _authority_from_header(header),
+            "work_place": work_place,
+            "tender_date": tender_date.group(0) if tender_date else "",
+            "procedure": value("1|usulü", "1.c"),
+            "estimated_cost": estimated,
+            "estimated_currency": estimated_currency,
+            "bid_count": value("3|toplam teklif sayısı", "3.b"),
+            "valid_bid_count": value("3|toplam geçerli teklif sayısı", "3.c"),
+            "contract_date": contract_date.group(0) if contract_date else "",
+            "contract_amount": amount,
+            "contract_currency": amount_currency,
+            # Both spellings appear: "d) Yüklenicisi" on most, "d) Yüklenici" on a handful.
+            "winner": value("4|yüklenicisi", "4|yüklenici", "4.d"),
+            "winner_address": address,
+            # Where the work is — never where the winner sits. The two are usually different, and
+            # a company filtering for its own province would otherwise be shown an İzmir railway
+            # job because the firm that took it is registered in Diyarbakır.
+            #
+            # Only these two fields are searched. Widening the search to the whole announcement
+            # filled the blanks and got them wrong: province names are matched as substrings, and
+            # a page of Turkish prose about pazarlık grounds contains enough of them to file a
+            # railway job in Van. Roughly a fifth are left empty, which is the honest answer — a
+            # tender filed under the wrong province is worse than one filed under none.
+            "province": find_province(work_place) or find_province(header),
+            "winner_province": find_province(address),
+            "text": block.strip(),
+        })
+    return results
