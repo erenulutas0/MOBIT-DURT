@@ -52,6 +52,17 @@ public interface TenderNoticeRepository extends JpaRepository<TenderNotice, Long
     long countByBulletinDateAndBulletinType(LocalDate bulletinDate, String bulletinType);
 
     /**
+     * The preparation tasks opened for one tender, by its İKN.
+     *
+     * <p>How a result finds the people who care about it. A company sees three hundred
+     * announcements a day and bids on perhaps two; the ones it opened a task for are the ones whose
+     * outcome it has been waiting weeks to hear, and everything else is somebody else's news.
+     */
+    @Query("select distinct notice.taskId from TenderNotice notice "
+            + "where notice.ikn = :ikn and notice.taskId is not null")
+    List<Long> findTaskIdsByIkn(@Param("ikn") String ikn);
+
+    /**
      * Drops announcements from bulletins older than the cutoff.
      *
      * <p>Around three hundred announcements a day arrive with the whole printed text attached,

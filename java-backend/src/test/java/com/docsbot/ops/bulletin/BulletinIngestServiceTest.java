@@ -54,6 +54,7 @@ class BulletinIngestServiceTest {
 
     private final TenderNoticeRepository repository = mock(TenderNoticeRepository.class);
     private final TenderResultRepository resultRepository = mock(TenderResultRepository.class);
+    private final TenderResultWatcher resultWatcher = mock(TenderResultWatcher.class);
     private final TenderWatchService watchService = mock(TenderWatchService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -66,6 +67,9 @@ class BulletinIngestServiceTest {
 
     @BeforeEach
     void startStub() throws IOException {
+        // JPA hands back the managed instance, and the ingest passes that on to the announcer.
+        when(resultRepository.save(any(TenderResult.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/bulletin", exchange -> {
             calls.incrementAndGet();
@@ -83,7 +87,7 @@ class BulletinIngestServiceTest {
 
     private BulletinIngestService service(boolean enabled) {
         return new BulletinIngestService(
-                repository, resultRepository, watchService, objectMapper, baseUrl, enabled, 120,
+                repository, resultRepository, resultWatcher, watchService, objectMapper, baseUrl, enabled, 120,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -208,7 +212,7 @@ class BulletinIngestServiceTest {
 
     @Test
     void aRetentionWindowOfZeroKeepsEverything() {
-        new BulletinIngestService(repository, resultRepository, watchService, objectMapper, baseUrl, true, 0,
+        new BulletinIngestService(repository, resultRepository, resultWatcher, watchService, objectMapper, baseUrl, true, 0,
                 Clock.fixed(NOW, ZoneOffset.UTC)).purgeOld();
 
         verify(repository, never()).deleteOlderThan(any());

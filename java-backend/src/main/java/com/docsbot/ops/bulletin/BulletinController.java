@@ -199,6 +199,24 @@ public class BulletinController {
                 .toList();
     }
 
+    /**
+     * One result as printed, for the reader who does not trust a card.
+     *
+     * <p>The figures on the list are parsed out of this text, and somebody deciding what to bid is
+     * entitled to check them against the bulletin's own words — the same reason "Belgelere Sor"
+     * quotes clauses instead of paraphrasing them.
+     */
+    @GetMapping("/results/{id}")
+    ResultDetailResponse result(JwtAuthenticationToken authentication, @PathVariable long id) {
+        ErpPrincipal.from(authentication);
+        TenderResult result = resultRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sonuç bulunamadı"));
+        return new ResultDetailResponse(ResultResponse.from(result), result.getBody());
+    }
+
+    record ResultDetailResponse(ResultResponse result, String body) {
+    }
+
     record ResultResponse(
             long id,
             String ikn,

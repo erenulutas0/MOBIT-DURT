@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Building2, Gavel, Loader2, MapPin, TrendingDown, Users } from "lucide-react";
+import { Building2, Gavel, Loader2, MapPin, TrendingDown, Users, X } from "lucide-react";
 
-import { getTenderResults, type TenderResult } from "../api";
+import { getTenderResultDetail, getTenderResults, type TenderResult } from "../api";
 
 /**
  * "Sonuçlanan İhaleler" — who took the work, for how much, against how many bidders.
@@ -42,6 +42,16 @@ export function TenderResultsPanel({ mineOnly, province, category, bulletinType 
   const [results, setResults] = useState<TenderResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [opened, setOpened] = useState<{ result: TenderResult; body: string } | null>(null);
+
+  const open = useCallback(async (result: TenderResult) => {
+    try {
+      const detail = await getTenderResultDetail(result.id);
+      setOpened({ result: detail.result, body: detail.body });
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Sonuç ilanı açılamadı.");
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,7 +106,8 @@ export function TenderResultsPanel({ mineOnly, province, category, bulletinType 
         return (
           <article
             key={result.id}
-            className="rounded-xl bg-card border border-border overflow-hidden"
+            onClick={() => void open(result)}
+            className="rounded-xl bg-card border border-border overflow-hidden active:scale-[0.99] transition-transform cursor-pointer"
           >
             <div className="px-4 pt-3.5 pb-3 space-y-1.5">
               <p className="text-sm font-semibold text-foreground leading-snug">
@@ -174,6 +185,37 @@ export function TenderResultsPanel({ mineOnly, province, category, bulletinType 
           </article>
         );
       })}
+
+      {opened && (
+        <div className="fixed inset-0 z-[60] bg-black/70 flex items-end" onClick={() => setOpened(null)}>
+          <div
+            className="w-full max-h-[85vh] bg-background rounded-t-2xl border-t border-border flex flex-col"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="px-4 pt-4 pb-3 border-b border-border flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-foreground leading-snug">
+                  {opened.result.title || opened.result.ikn}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {opened.result.ikn}
+                  {opened.result.procedure && ` · ${opened.result.procedure}`}
+                </p>
+              </div>
+              <button onClick={() => setOpened(null)} className="p-1 text-muted-foreground active:scale-95"
+                aria-label="Kapat">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* As printed, whitespace and all. The card's figures were read out of this text, and
+                somebody deciding what to bid is entitled to check them against the bulletin's own
+                words rather than take a parser's word for it. */}
+            <pre className="flex-1 overflow-auto px-4 py-3 text-[11px] text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+              {opened.body}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

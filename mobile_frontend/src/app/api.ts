@@ -1235,6 +1235,15 @@ export async function getTenderResults(filters: {
   return response.json();
 }
 
+/** One result as the bulletin printed it — the text the card's figures were read out of. */
+export async function getTenderResultDetail(
+  resultId: number
+): Promise<{ result: TenderResult; body: string }> {
+  const response = await apiFetch(`/erp/bulletin/results/${resultId}`);
+  if (!response.ok) throw new Error(await errorText(response, "Sonuç ilanı açılamadı."));
+  return response.json();
+}
+
 export type TenderWatchProfile = {
   categories: string[];
   provinces: string[];

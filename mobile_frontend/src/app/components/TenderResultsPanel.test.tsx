@@ -1,11 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TenderResult } from "../api";
 import { TenderResultsPanel } from "./TenderResultsPanel";
 
-const getTenderResults = vi.hoisted(() => vi.fn());
-vi.mock("../api", () => ({ getTenderResults }));
+const mocks = vi.hoisted(() => ({ getTenderResults: vi.fn(), getTenderResultDetail: vi.fn() }));
+vi.mock("../api", () => mocks);
+const { getTenderResults, getTenderResultDetail } = mocks;
 
 function result(overrides: Partial<TenderResult> = {}): TenderResult {
   return {
@@ -49,6 +51,7 @@ function panel(props: Partial<Parameters<typeof TenderResultsPanel>[0]> = {}) {
 describe("TenderResultsPanel", () => {
   beforeEach(() => {
     getTenderResults.mockReset();
+    getTenderResultDetail.mockReset();
     getTenderResults.mockResolvedValue([result()]);
   });
 
@@ -99,6 +102,26 @@ describe("TenderResultsPanel", () => {
     render(panel());
 
     expect(await screen.findByText("Bu süzgeçle sonuçlanmış ihale yok")).toBeInTheDocument();
+  });
+
+  it("karta dokununca ilanın basıldığı hâlini açar", async () => {
+    const user = userEvent.setup();
+    getTenderResultDetail.mockResolvedValue({
+      result: result(),
+      body: [
+        "İhale kayıt numarası : 2026/951756",
+        "4- Sözleşmenin",
+        "b) Bedeli : 54.524.045,00 TRY",
+      ].join("\n"),
+    });
+    render(panel());
+
+    await user.click(await screen.findByText("Açık stok alanlarının yapılması işi"));
+
+    // The card's figures were parsed out of this text; somebody about to price a bid against them
+    // is entitled to check them against the bulletin's own words.
+    expect(await screen.findByText(/b\) Bedeli : 54.524.045,00 TRY/)).toBeInTheDocument();
+    expect(getTenderResultDetail).toHaveBeenCalledWith(1);
   });
 
   it("çekilemezse hatayı söyler", async () => {

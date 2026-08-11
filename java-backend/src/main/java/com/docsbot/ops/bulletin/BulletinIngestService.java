@@ -67,6 +67,7 @@ public class BulletinIngestService {
 
     private final TenderNoticeRepository repository;
     private final TenderResultRepository resultRepository;
+    private final TenderResultWatcher resultWatcher;
     private final TenderWatchService watchService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -79,19 +80,21 @@ public class BulletinIngestService {
     public BulletinIngestService(
             TenderNoticeRepository repository,
             TenderResultRepository resultRepository,
+            TenderResultWatcher resultWatcher,
             TenderWatchService watchService,
             ObjectMapper objectMapper,
             @Value("${docsbot.rag.embedding-url:http://docsbot-embeddings:5001}") String baseUrl,
             @Value("${docsbot.bulletin.enabled:true}") boolean enabled,
             @Value("${docsbot.bulletin.retention-days:120}") int retentionDays
     ) {
-        this(repository, resultRepository, watchService, objectMapper, baseUrl, enabled,
-                retentionDays, Clock.systemUTC());
+        this(repository, resultRepository, resultWatcher, watchService, objectMapper, baseUrl,
+                enabled, retentionDays, Clock.systemUTC());
     }
 
     BulletinIngestService(
             TenderNoticeRepository repository,
             TenderResultRepository resultRepository,
+            TenderResultWatcher resultWatcher,
             TenderWatchService watchService,
             ObjectMapper objectMapper,
             String baseUrl,
@@ -101,6 +104,7 @@ public class BulletinIngestService {
     ) {
         this.repository = repository;
         this.resultRepository = resultRepository;
+        this.resultWatcher = resultWatcher;
         this.watchService = watchService;
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl.replaceAll("/+$", "");
@@ -207,6 +211,7 @@ public class BulletinIngestService {
     private void storeResults(JsonNode payload, String bulletinType, LocalDate bulletinDate, Instant now) {
         int stored = 0;
         int partial = 0;
+        int announced = 0;
         for (JsonNode result : payload.path("results")) {
             String ikn = result.path("ikn").asString("");
             if (ikn.isBlank()) {
@@ -227,7 +232,7 @@ public class BulletinIngestService {
                 List<TenderResult> siblings = resultRepository.findByIkn(ikn);
                 boolean lots = result.path("text").asString("").contains(PARTIAL_AWARD_MARKER)
                         || !siblings.isEmpty();
-                resultRepository.save(new TenderResult(
+                TenderResult record = new TenderResult(
                         ikn,
                         bulletinType,
                         bulletinDate,
@@ -249,13 +254,17 @@ public class BulletinIngestService {
                         trim(emptyToNull(result.path("winner_province").asString("")), 40),
                         lots,
                         result.path("text").asString(""),
-                        now));
+                        now);
+                TenderResult saved = resultRepository.save(record);
                 stored++;
                 if (lots && !siblings.isEmpty()) {
                     // The row stored last week looked whole because it was alone. It is not.
                     resultRepository.markPartialByIkn(ikn);
                     partial++;
                 }
+                // After the partial correction, so a lot award is never announced with a discount
+                // the next line is about to withdraw.
+                announced += resultWatcher.announce(saved);
             } catch (RuntimeException exception) {
                 // One malformed result must not cost the rest of the bulletin.
                 log.warn("bulletin_result_skipped type={} ikn={} reason={}",
@@ -263,8 +272,8 @@ public class BulletinIngestService {
             }
         }
         if (stored > 0) {
-            log.info("bulletin_results_ingested type={} date={} new={} lots_corrected={}",
-                    bulletinType, bulletinDate, stored, partial);
+            log.info("bulletin_results_ingested type={} date={} new={} lots_corrected={} announced={}",
+                    bulletinType, bulletinDate, stored, partial, announced);
         }
     }
 
