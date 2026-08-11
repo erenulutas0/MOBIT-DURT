@@ -10,7 +10,7 @@ import { TenderBriefPanel } from "./components/TenderBriefPanel";
 import { TenderBulletinPanel } from "./components/TenderBulletinPanel";
 import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
-import mobitLogo from "@/imports/image.png";
+import mobitLogo from "@/imports/logo-mobit.png";
 import { MessagesTab } from "./MessagesTab";
 import { TabErrorBoundary } from "./components/TabErrorBoundary";
 import { HelpFeedbackOverlay } from "./components/HelpFeedbackOverlay";
@@ -122,15 +122,15 @@ import type { KnowledgeGraphData, KnowledgeGraphEdge, KnowledgeGraphNode } from 
 import {
   Users, ClipboardList, CheckSquare, MessageSquare,
   Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen,
-  Cpu, ChevronRight, Search, Building2, Bot,
+  ScanText, ChevronRight, Search, Building2,
   AlertTriangle, CheckCircle2, XCircle,
   Download, Eye, Link, Tag, Paperclip, Pencil,
-  Wifi, CalendarDays, GitBranch,
+  UserCheck, CalendarDays, GitBranch,
   Settings, ChevronLeft, X, Plus,
   Filter, Clock, Shield,
   HelpCircle, Home, User, LogOut, Lock, Mail,
   Flag, Menu, Command, ZoomIn, ZoomOut, LocateFixed, Share2,
-  Image as ImageIcon, Trash2, Loader2, RefreshCw, Sparkles, TrendingUp, Volume2,
+  Image as ImageIcon, Trash2, Loader2, RefreshCw, ListChecks, TrendingUp, Volume2,
   FileSearch, ShieldCheck, Megaphone,
 } from "lucide-react";
 
@@ -906,7 +906,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
             className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-primary" />
+                <ListChecks className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-foreground">Mobit-Asistan</p>
@@ -1955,7 +1955,7 @@ function ERPTab({
                 color: overdueTasks.length > 0 ? "text-red-400" : undefined },
             ]} />
             <KPIRow items={[
-              { label: "Çevrimiçi",      value: onlineUserCount, icon: Wifi, onClick: () => navTo("employees") },
+              { label: "Çevrimiçi",      value: onlineUserCount, icon: UserCheck, onClick: () => navTo("employees") },
               { label: "Yardım Mesajı",  value: (overview?.help_messages || []).length, icon: HelpCircle,
                 color: (overview?.help_messages || []).length > 0 ? "text-amber-400" : undefined },
               { label: "Bildirim",       value: unreadNotifications, icon: Bell },
@@ -1965,7 +1965,7 @@ function ERPTab({
         {!isAdmin && overview && (
           <KPIRow items={[
             { label: "Aktif",      value: activeTasks.length, icon: ClipboardList },
-            { label: "Çevrimiçi",  value: onlineUserCount, icon: Wifi, onClick: () => navTo("employees") },
+            { label: "Çevrimiçi",  value: onlineUserCount, icon: UserCheck, onClick: () => navTo("employees") },
             { label: "Bildirim",   value: unreadNotifications, icon: Bell },
           ]} />
         )}
@@ -3967,7 +3967,7 @@ function TenderTab({
     >
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-xl bg-teal-500/15 flex items-center justify-center shrink-0">
-          <FileText className="w-5 h-5 text-teal-400" />
+          <FileText className="w-5 h-5 text-primary" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
@@ -4010,7 +4010,7 @@ function TenderTab({
             <div className="flex items-center gap-2.5">
               {node.type === "folder"
                 ? <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
-                : <FileText className="w-4 h-4 text-teal-400 shrink-0" />}
+                : <FileText className="w-4 h-4 text-primary shrink-0" />}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">{node.name}</p>
                 <p className="text-[10px] text-muted-foreground truncate">
@@ -4051,7 +4051,7 @@ function TenderTab({
         {!error && !loading && (<>
         <KPIRow items={[
           { label: "Şirket Kaydı",  value: tenders.length, color: "text-foreground" },
-          { label: "Toplam Belge",  value: documents.length, color: "text-teal-400" },
+          { label: "Toplam Belge",  value: documents.length },
           { label: "Bugün Alınan",  value: todayDocumentCount },
         ]} />
         <KPIRow items={[
@@ -4164,7 +4164,7 @@ function TenderTab({
           </button>
           <button onClick={() => navTo("ai-extraction")}
             className="py-3.5 bg-card border border-border rounded-xl text-sm font-semibold text-foreground flex items-center justify-center gap-2">
-            <Cpu className="w-4 h-4 text-primary" /> AI Çıkarımı
+            <ScanText className="w-4 h-4 text-primary" /> AI Çıkarımı
           </button>
         </div>
         <div className="h-4" />
@@ -4473,7 +4473,7 @@ function TenderTab({
             className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-slate-500 outline-none"
           />
         </div>
-        <BookOpen className="w-5 h-5 text-teal-400 shrink-0" />
+        <BookOpen className="w-5 h-5 text-primary shrink-0" />
       </div>
       <div className="flex-1 px-4 py-4">
         <TenderLoadingOrError />
@@ -4481,12 +4481,12 @@ function TenderTab({
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
               style={{ background: "rgba(20,184,166,0.1)" }}>
-              <BookOpen className="w-6 h-6 text-teal-400" />
+              <BookOpen className="w-6 h-6 text-primary" />
             </div>
             <p className="text-sm font-semibold text-slate-300 mb-1">Vault Boş</p>
             <p className="text-xs text-slate-500 mb-4">Bilgi notları, belgeler yüklendikçe otomatik oluşturulacak.</p>
             <button onClick={refreshTender}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-teal-400 border"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-primary border"
               style={{ borderColor: "rgba(20,184,166,0.3)", background: "rgba(20,184,166,0.08)" }}>
               Yenile
             </button>
@@ -4498,7 +4498,7 @@ function TenderTab({
             {filteredVaultNotes.map(note => (
               <Card key={note.path} className="p-4">
                 <div className="flex items-start gap-3">
-                  <BookOpen className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
+                  <BookOpen className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground truncate">{note.name}</p>
                     <p className="text-xs text-muted-foreground mt-1 truncate">{note.path}</p>
@@ -4509,7 +4509,7 @@ function TenderTab({
                     {note.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {note.tags.slice(0, 4).map(tag => (
-                          <span key={tag} className="px-2 py-0.5 rounded-full bg-teal-500/10 text-[10px] text-teal-300">
+                          <span key={tag} className="px-2 py-0.5 rounded-full bg-teal-500/10 text-[10px] text-primary">
                             #{tag}
                           </span>
                         ))}
@@ -4540,13 +4540,13 @@ function TenderTab({
       <div className="flex-1 px-4 py-4 space-y-4">
         <div className="rounded-xl p-4 flex items-start gap-3"
           style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}>
-          <Cpu className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+          <ScanText className="w-4 h-4 text-primary mt-0.5 shrink-0" />
           <p className="text-xs" style={{ color: "rgba(196,181,253,0.8)" }}>
             Planlanan AI özellikleri önizlemesi. Çıkarım yapabilmek için önce bir belge seçin.
           </p>
         </div>
         <EmptyState
-          icon={Cpu}
+          icon={ScanText}
           title="Belge seçilmedi"
           desc="AI çıkarımı yapmak için önce belgeler listesinden bir belge seçin."
           action="Belgelere Git"
@@ -4557,7 +4557,7 @@ function TenderTab({
           {user.role === "admin" && <Card className="p-4 space-y-3">
             <textarea rows={3} placeholder="Örn: Teknik garantinin kapsamı nedir?" className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none" />
             <button className="w-full py-3 bg-primary/50 rounded-xl text-sm font-bold text-white/60 flex items-center justify-center gap-2 cursor-not-allowed">
-              <Cpu className="w-4 h-4" /> Belge Seçilmedi
+              <ScanText className="w-4 h-4" /> Belge Seçilmedi
             </button>
           </Card>}
         </div>
