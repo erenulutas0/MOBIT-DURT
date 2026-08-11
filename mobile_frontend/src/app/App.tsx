@@ -9,6 +9,7 @@ import { TenantServerSheet } from "./components/TenantServerSheet";
 import { TenderBriefPanel } from "./components/TenderBriefPanel";
 import { TenderBulletinPanel } from "./components/TenderBulletinPanel";
 import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
+import { TodayPanel } from "./components/TodayPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/logo-mobit.png";
 import { MessagesTab } from "./MessagesTab";
@@ -896,11 +897,23 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
       <div className="flex-1 px-4 py-5 space-y-5">
         {appUpdate && <AppUpdateBanner update={appUpdate} />}
 
+        {/* What today holds, before what the application can do. The six cards below describe
+            features — useful on the first morning, and a brochure on every one after it. */}
+        <TodayPanel
+          isAdmin={isAdmin}
+          userId={user.id}
+          onOpenBulletin={() => setShowBulletin(true)}
+          onOpenCredentials={() => setShowCredentials(true)}
+          onOpenTasks={() => setTab("erp")}
+        />
+
         {/* One card language for every entry: flat surface, neutral border, the single brand
             accent on the icon. No gradients and no per-feature colours — when every feature
             arrives in its own hue the palette stops meaning anything, and the product reads as
             a demo rather than a tool. Hierarchy comes from order, not decoration. */}
-        <div className="space-y-3">
+        <div>
+          <SectionHeader title="Araçlar" />
+          <div className="space-y-3">
           {/* Mobit-Asistan — the personal briefing entry point */}
           <button onClick={() => setShowAssistant(true)}
             className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
@@ -1016,6 +1029,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
               </div>
             </button>
           )}
+          </div>
         </div>
 
         {/* System status — admin only */}
