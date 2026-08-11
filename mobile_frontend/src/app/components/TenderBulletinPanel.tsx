@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Building2, CalendarClock, Check, ClipboardList, Loader2, MapPin, Megaphone, Package,
   RefreshCw, X,
@@ -6,7 +6,7 @@ import {
 
 import {
   getTenderCategories, getTenderNoticeDetail, getTenderNotices, getTenderProfile,
-  openTenderTask, refreshTenderBulletin, saveTenderProfile,
+  openTenderTask, refreshTenderBulletin, saveTenderProfile, tenderProfileIsSet as profileIsSet,
   type TenderCategoryCount, type TenderNotice, type TenderWatchProfile,
 } from "../api";
 
@@ -43,7 +43,16 @@ function remaining(tenderAt: string | null): { text: string; urgent: boolean } |
   return { text: `${hours} saat kaldı`, urgent: true };
 }
 
-export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }) {
+export function TenderBulletinPanel({ isAdmin, autoEditProfile = false, onClose }: {
+  isAdmin: boolean;
+  /**
+   * Open the profile form as soon as the profile is known, for the setup checklist on the home
+   * screen. Landing on the bulletin and then hunting for a small grey button is how a two-tap
+   * setup step turns into a support call.
+   */
+  autoEditProfile?: boolean;
+  onClose: () => void;
+}) {
   const [notices, setNotices] = useState<TenderNotice[]>([]);
   const [categories, setCategories] = useState<TenderCategoryCount[]>([]);
   const [category, setCategory] = useState<string | null>(null);
@@ -85,6 +94,16 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
   }, [province, category, bulletinType, mineOnly]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    // Once, on arrival. Every filter change reloads the profile, and re-opening the form each time
+    // would trap somebody who closed it. Only an admin can save it anyway.
+    if (autoEditProfile && isAdmin && profile && !autoOpened.current) {
+      autoOpened.current = true;
+      setEditingProfile(true);
+    }
+  }, [autoEditProfile, isAdmin, profile]);
 
   const refresh = useCallback(async () => {
     if (refreshing) return;
@@ -306,11 +325,6 @@ export function TenderBulletinPanel({ isAdmin, onClose }: { isAdmin: boolean; on
       )}
     </div>
   );
-}
-
-/** True once somebody has actually narrowed something; an untouched profile watches everything. */
-function profileIsSet(profile: TenderWatchProfile) {
-  return profile.categories.length > 0 || profile.provinces.length > 0;
 }
 
 /**

@@ -1062,6 +1062,29 @@ export type DocumentAnswer = {
  * clause can be opened and checked while a paraphrase cannot, and an answer with legal weight has to
  * be checkable.
  */
+export type DocumentIndexStatus = {
+  /** False when the embedding service is unreachable: nothing is searchable, whatever is stored. */
+  ready: boolean;
+  model: string | null;
+  indexed_documents: number;
+  pending_documents: number;
+  /** Uploaded but not yet read — a stall one step before pending, not the same thing. */
+  awaiting_text: number;
+};
+
+/**
+ * How much of the archive can actually be searched.
+ *
+ * <p>Without it "hiçbir şey bulamadım" covers three different situations — the answer is not in the
+ * documents, the documents were never uploaded, or the search service is down — and only the first
+ * one is worth rephrasing a question over. Admin only, like the archive it reports on.
+ */
+export async function getDocumentIndexStatus(): Promise<DocumentIndexStatus> {
+  const response = await apiFetch("/erp/assistant/documents/status");
+  if (!response.ok) throw new Error(await errorText(response, "Belge dizini durumu alınamadı."));
+  return response.json();
+}
+
 export async function askDocuments(question: string): Promise<DocumentAnswer> {
   const response = await apiFetch("/erp/assistant/documents/ask", {
     method: "POST",
@@ -1165,6 +1188,17 @@ export type TenderWatchProfile = {
   updated_by: string | null;
   updated_at: string | null;
 };
+
+/**
+ * True once somebody has actually narrowed something; an untouched profile watches everything.
+ *
+ * <p>Lives beside the type because more than one screen has to agree on it: the bulletin decides
+ * whether to say "bize uygun (12)" by this rule, and the setup checklist decides whether the first
+ * step is done by it. Two copies of the rule would eventually disagree.
+ */
+export function tenderProfileIsSet(profile: TenderWatchProfile): boolean {
+  return profile.categories.length > 0 || profile.provinces.length > 0;
+}
 
 /** What the company watches for. Empty lists mean the whole bulletin. */
 export async function getTenderProfile(): Promise<TenderWatchProfile> {

@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   getTenderProfile: vi.fn(),
   saveTenderProfile: vi.fn(),
   openTenderTask: vi.fn(),
+  // Not a stub: the panel and the setup checklist have to agree on what "profile is set" means,
+  // so the real rule travels with the type. Faking it here would let them drift.
+  tenderProfileIsSet: (profile: { categories: string[]; provinces: string[] }) =>
+    profile.categories.length > 0 || profile.provinces.length > 0,
 }));
 vi.mock("../api", () => mocks);
 
@@ -50,7 +54,7 @@ describe("TenderBulletinPanel", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(NOW);
-    for (const mock of Object.values(mocks)) mock.mockReset();
+    for (const mock of Object.values(mocks)) if (vi.isMockFunction(mock)) mock.mockReset();
     mocks.getTenderNotices.mockResolvedValue([]);
     mocks.getTenderCategories.mockResolvedValue([]);
     mocks.getTenderProfile.mockResolvedValue(profile());
@@ -164,6 +168,22 @@ describe("TenderBulletinPanel", () => {
 
     render(<TenderBulletinPanel isAdmin onClose={vi.fn()} />);
     expect(await screen.findByText("Profil belirle")).toBeInTheDocument();
+  });
+
+  it("kurulumdan gelindiğinde doğrudan profil formunu açar", async () => {
+    render(<TenderBulletinPanel isAdmin autoEditProfile onClose={vi.fn()} />);
+
+    // The setup step promises "set your profile"; landing on the bulletin and leaving the user to
+    // hunt for a small grey button is how a two-tap step turns into a support call.
+    expect(await screen.findByText("İhale profili")).toBeInTheDocument();
+  });
+
+  it("profili olmayan çalışanı forma sokmaz", async () => {
+    render(<TenderBulletinPanel isAdmin={false} autoEditProfile onClose={vi.fn()} />);
+
+    await screen.findByText("Kamu İhale Bülteni");
+    // Only an admin can save it; opening a form somebody cannot submit is worse than not offering it.
+    expect(screen.queryByText("İhale profili")).not.toBeInTheDocument();
   });
 
   it("profil kaydedilince liste yeniden yüklenir", async () => {

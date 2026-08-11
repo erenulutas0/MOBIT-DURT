@@ -2559,9 +2559,16 @@ function MessagesTab({
   useEffect(() => {
     if (!roomOpenRequest) return;
     const openRoomFromNotification = async () => {
+      const { groupId } = roomOpenRequest;
+      if (groupId === null) {
+        // Nothing to open — somebody arrived here to create their first çalışma alanı, so land
+        // them on the list that has the button rather than on the mixed inbox.
+        setActiveTab("rooms");
+        return;
+      }
       setActiveTab("all");
       setRoomView(roomOpenRequest.view);
-      await openGroup(roomOpenRequest.groupId);
+      await openGroup(groupId);
       setRoomView(roomOpenRequest.view);
     };
     void openRoomFromNotification().catch(exception => {

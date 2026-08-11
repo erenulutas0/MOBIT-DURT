@@ -7,7 +7,8 @@ type AuthUser = { id: number | null; name: string; email: string; role: Role; de
 // messageId opens the thread containing that message; userId/userName instead opens (or starts)
 // the person's thread directly — used by "Mesaj At" on profile sheets.
 type DirectMessageOpenRequest = { messageId: number; nonce: number; userId?: number; userName?: string };
-type RoomOpenRequest = { groupId: number; view: "chat" | "documents"; nonce: number };
+/** A null groupId means "show the Alanlar list", for somebody who has no room to open yet. */
+type RoomOpenRequest = { groupId: number | null; view: "chat" | "documents"; nonce: number };
 
 /** Muted-tone identity palette; a stable hash keeps each person's color consistent. */
 const AVATAR_TONES = [

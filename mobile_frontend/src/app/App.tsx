@@ -9,6 +9,7 @@ import { TenantServerSheet } from "./components/TenantServerSheet";
 import { TenderBriefPanel } from "./components/TenderBriefPanel";
 import { TenderBulletinPanel } from "./components/TenderBulletinPanel";
 import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
+import { SetupPanel } from "./components/SetupPanel";
 import { TodayPanel } from "./components/TodayPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
 import mobitLogo from "@/imports/logo-mobit.png";
@@ -123,7 +124,7 @@ import type { KnowledgeGraphData, KnowledgeGraphEdge, KnowledgeGraphNode } from 
 import {
   Users, ClipboardList, CheckSquare, MessageSquare,
   Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen,
-  ScanText, ChevronRight, Search, Building2,
+  ChevronRight, Search, Building2,
   AlertTriangle, CheckCircle2, XCircle,
   Download, Eye, Link, Tag, Paperclip, Pencil,
   UserCheck, CalendarDays, GitBranch,
@@ -144,8 +145,8 @@ type ERPScreen =
   | "account-requests" | "notifications" | "performance";
 type TenderScreen =
   | "dashboard" | "documents" | "document-detail"
-  | "document-groups" | "folder-tree" | "upload"
-  | "obsidian" | "tender-detail" | "ai-extraction";
+  | "document-groups" | "folder-tree"
+  | "obsidian" | "tender-detail";
 type ERPOpenRequest = { kind: "task"; taskId: number; nonce: number } | { kind: "account-requests"; nonce: number } | { kind: "notifications"; nonce: number };
 type NotificationNavigationTarget =
   | { kind: "direct"; messageId: number }
@@ -840,6 +841,8 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
   const [showDocumentSearch, setShowDocumentSearch] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
   const [showBulletin, setShowBulletin] = useState(false);
+  /** The bulletin opened from the setup checklist lands on the profile form, not the list. */
+  const [bulletinAtProfile, setBulletinAtProfile] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
   // null = probe in flight; the status card must reflect reality, not wishful constants
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
@@ -896,6 +899,18 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
 
       <div className="flex-1 px-4 py-5 space-y-5">
         {appUpdate && <AppUpdateBanner update={appUpdate} />}
+
+        {/* Above today's numbers, and only until the three steps are done. On a company's first
+            morning those numbers are all technically correct and all meaningless — four hundred
+            unfiltered tenders, nothing overdue yet, no paperwork to expire — and the useful thing
+            to say is what to do about it. It removes itself once there is nothing left to say. */}
+        {isAdmin && (
+          <SetupPanel
+            onOpenProfile={() => { setBulletinAtProfile(true); setShowBulletin(true); }}
+            onOpenCredentials={() => setShowCredentials(true)}
+            onOpenArchive={() => setTab("tender")}
+          />
+        )}
 
         {/* What today holds, before what the application can do. The six cards below describe
             features — useful on the first morning, and a brochure on every one after it. */}
@@ -1115,7 +1130,10 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
       )}
 
       {showDocumentSearch && (
-        <DocumentSearchPanel onClose={() => setShowDocumentSearch(false)} />
+        <DocumentSearchPanel
+          onClose={() => setShowDocumentSearch(false)}
+          onOpenArchive={() => setTab("tender")}
+        />
       )}
 
       {showCredentials && (
@@ -1123,7 +1141,11 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
       )}
 
       {showBulletin && (
-        <TenderBulletinPanel isAdmin={isAdmin} onClose={() => setShowBulletin(false)} />
+        <TenderBulletinPanel
+          isAdmin={isAdmin}
+          autoEditProfile={bulletinAtProfile}
+          onClose={() => { setShowBulletin(false); setBulletinAtProfile(false); }}
+        />
       )}
     </div>
   );
@@ -3819,7 +3841,8 @@ function TenderTab({
   onOpenRoom,
 }: {
   user: AuthUser;
-  onOpenRoom: (groupId: number, view: "chat" | "documents") => void;
+  /** A null groupId asks for the Alanlar list itself — for somebody with no room to open yet. */
+  onOpenRoom: (groupId: number | null, view: "chat" | "documents") => void;
 }) {
   const [screen, setScreen] = useState<TenderScreen>("dashboard");
   const [briefTenderId, setBriefTenderId] = useState<string | null>(null);
@@ -4160,9 +4183,10 @@ function TenderTab({
             <EmptyState
               icon={FileText}
               title="Henüz belge yok"
-              desc="App içi odalardan veya manuel yükleme ile belge geldiğinde burada görünecek."
-              action="Yenile"
-              onAction={refreshTender}
+              desc="Şartname, sözleşme ve eklerinizi bir doküman odasına yükleyin; buraya düşer ve içlerinde arama yapabilirsiniz."
+              // "Yenile" was the offer here, on a screen whose emptiness refreshing cannot change.
+              action="Belge Yükle"
+              onAction={() => navTo("document-groups")}
             />
           ) : (
             <div className="space-y-3">
@@ -4171,16 +4195,13 @@ function TenderTab({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => navTo("upload")}
-            className="py-3.5 bg-primary rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2">
-            <Upload className="w-4 h-4" /> Belge Yükle
-          </button>
-          <button onClick={() => navTo("ai-extraction")}
-            className="py-3.5 bg-card border border-border rounded-xl text-sm font-semibold text-foreground flex items-center justify-center gap-2">
-            <ScanText className="w-4 h-4 text-primary" /> AI Çıkarımı
-          </button>
-        </div>
+        {/* One button, and it goes where uploading actually works. A document belongs to a
+            tender, a year and a company, and a doküman odası is what carries those; a standalone
+            upload form would have to ask for all of it again and did not. */}
+        <button onClick={() => navTo("document-groups")}
+          className="w-full py-3.5 bg-primary rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2">
+          <Upload className="w-4 h-4" /> Belge Yükle
+        </button>
         <div className="h-4" />
       </div>
     </div>
@@ -4209,10 +4230,13 @@ function TenderTab({
         {filteredDocuments.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title="Belge bulunamadı"
-            desc={documentQuery ? "Arama kriterine uygun belge yok." : "Yüklenen belgeler burada listelenecek."}
-            action="Yenile"
-            onAction={refreshTender}
+            title={documentQuery ? "Belge bulunamadı" : "Henüz belge yok"}
+            desc={documentQuery
+              ? "Arama kriterine uygun belge yok."
+              : "Şartname, sözleşme ve eklerinizi bir doküman odasına yükleyin; buraya düşer."}
+            // A fruitless search wants to be run again; an empty archive wants a document in it.
+            action={documentQuery ? "Yenile" : "Belge Yükle"}
+            onAction={documentQuery ? refreshTender : () => navTo("document-groups")}
           />
         ) : (
           filteredDocuments.map(document => <DocumentCard key={document.id} document={document} />)
@@ -4358,10 +4382,12 @@ function TenderTab({
         {documentGroups.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="Doküman grubu yok"
-            desc="Mesajlar > Alanlar bölümünde oluşturulan şirket içi çalışma alanları burada görünecek."
-            action="Yenile"
-            onAction={refreshTender}
+            title="Doküman odanız yok"
+            desc="Her ihale için bir çalışma alanı açın: şartnameler, ekler ve yazışmalar orada toplanır."
+            // The step after this one is "create your first area", and it lives in another tab.
+            // Telling somebody where it is and then offering "Yenile" leaves them to walk there.
+            action="Alan Oluştur"
+            onAction={() => onOpenRoom(null, "documents")}
           />
         ) : (
           documentGroups
@@ -4439,35 +4465,9 @@ function TenderTab({
     </div>
   );
 
-  if (screen === "upload") return (
-    <div className="flex flex-col min-h-full">
-      <TopBar title="Belge Yükle" onBack={back} />
-      <div className="flex-1 px-4 py-4 space-y-4">
-        <button className="w-full border-2 border-dashed border-border rounded-2xl p-10 flex flex-col items-center gap-3 active:border-primary transition-colors">
-          <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-            <Upload className="w-6 h-6 text-muted-foreground" />
-          </div>
-          <p className="text-sm font-semibold text-foreground">Dosya seçin</p>
-          <p className="text-xs text-muted-foreground text-center">PDF, DOCX, XLSX · Maks. 50 MB</p>
-        </button>
-        <Card className="p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-foreground">Sınıflandırma Bilgileri</h3>
-          {["Dahili Şube *", "Şirket *", "Workflow ID", "Notlar"].map((label, i) => (
-            <div key={i}>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">{label}</label>
-              <div className="bg-muted rounded-xl px-3 py-3">
-                <input placeholder={label.replace(" *", "") + "..."} className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-full" />
-              </div>
-            </div>
-          ))}
-        </Card>
-        <button className="w-full py-4 bg-primary rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2">
-          <Upload className="w-4 h-4" /> Yükle ve Sınıflandır
-        </button>
-        <div className="h-4" />
-      </div>
-    </div>
-  );
+  // The old "Belge Yükle" screen lived here: a file picker with no handler, four unbound inputs
+  // and a submit button that did nothing. Uploading really happens inside a doküman odası, which
+  // is where the button now goes — a form that silently discards a şartname is worse than no form.
 
   if (screen === "obsidian") return (
     <div className="flex flex-col min-h-full" style={{ background: "#0A0A12" }}>
@@ -4548,37 +4548,9 @@ function TenderTab({
     </div>
   );
 
-  if (screen === "ai-extraction") return (
-    <div className="flex flex-col min-h-full">
-      <TopBar title="AI Çıkarımı" onBack={back} />
-      <div className="flex-1 px-4 py-4 space-y-4">
-        <div className="rounded-xl p-4 flex items-start gap-3"
-          style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}>
-          <ScanText className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-          <p className="text-xs" style={{ color: "rgba(196,181,253,0.8)" }}>
-            Planlanan AI özellikleri önizlemesi. Çıkarım yapabilmek için önce bir belge seçin.
-          </p>
-        </div>
-        <EmptyState
-          icon={ScanText}
-          title="Belge seçilmedi"
-          desc="AI çıkarımı yapmak için önce belgeler listesinden bir belge seçin."
-          action="Belgelere Git"
-          onAction={() => navTo("documents")}
-        />
-        <div>
-          <SectionHeader title="Belgeye Soru Sor" />
-          {user.role === "admin" && <Card className="p-4 space-y-3">
-            <textarea rows={3} placeholder="Örn: Teknik garantinin kapsamı nedir?" className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none" />
-            <button className="w-full py-3 bg-primary/50 rounded-xl text-sm font-bold text-white/60 flex items-center justify-center gap-2 cursor-not-allowed">
-              <ScanText className="w-4 h-4" /> Belge Seçilmedi
-            </button>
-          </Card>}
-        </div>
-        <div className="h-4" />
-      </div>
-    </div>
-  );
+  // "AI Çıkarımı" stood here and described itself as a preview of planned features: a disabled
+  // button under a textarea nobody's question ever left. Asking documents questions is real now
+  // and lives on the home screen as "Belgelere Sor"; a preview of it was only in the way.
 
   return null;
 }
@@ -5208,7 +5180,7 @@ export default function App() {
     setTab("messages");
   };
 
-  const openDocumentRoomFromNotification = (groupId: number, view: "chat" | "documents") => {
+  const openDocumentRoomFromNotification = (groupId: number | null, view: "chat" | "documents") => {
     setRoomOpenRequest({ groupId, view, nonce: Date.now() });
     setTab("messages");
   };

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileSearch, FileText, Loader2, Search, X } from "lucide-react";
+import { ArrowLeft, FileSearch, FileText, FolderOpen, Loader2, Search, X } from "lucide-react";
 
-import { askDocuments, type DocumentPassage } from "../api";
+import {
+  askDocuments, getDocumentIndexStatus,
+  type DocumentIndexStatus, type DocumentPassage,
+} from "../api";
 
 /**
  * "Belgelere Sor" — asks the company's own documents a question and shows the clauses that answer
@@ -23,20 +26,69 @@ const EXAMPLES = [
 
 type Result = {
   question: string;
+  ready: boolean;
   message: string;
   passages: DocumentPassage[];
 };
 
-export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
+/**
+ * What to say instead of the example questions when there is nothing to ask.
+ *
+ * <p>Four suggestions over an empty corpus is the worst version of this screen: every one of them
+ * comes back "bulamadım", and the reasonable conclusion is that the feature does not work. Naming
+ * the actual state costs one request and saves that impression.
+ */
+function corpusNotice(status: DocumentIndexStatus):
+    { title: string; detail: string; canUpload: boolean } | null {
+  if (!status.ready) {
+    return {
+      title: "Belge arama şu anda hazırlanıyor",
+      detail: "Arama servisi hazır olmadığı için sorular şimdilik yanıtlanamıyor. Kısa süre sonra tekrar deneyin.",
+      // Uploading more would not help; the files already there cannot be read either.
+      canUpload: false,
+    };
+  }
+  if (status.indexed_documents > 0) return null;
+  if (status.pending_documents > 0 || status.awaiting_text > 0) {
+    const waiting = status.pending_documents + status.awaiting_text;
+    return {
+      title: `${waiting} belge sıraya alındı`,
+      detail: "Yüklenen belgeler okunup dizine ekleniyor. Birkaç dakika içinde aranabilir olacak.",
+      canUpload: false,
+    };
+  }
+  return {
+    title: "Arşivde aranacak belge yok",
+    detail: "Şartname, sözleşme ve eklerinizi yükledikten sonra içeriklerinde arama yapabilirsiniz.",
+    canUpload: true,
+  };
+}
+
+export function DocumentSearchPanel({ onClose, onOpenArchive }: {
+  onClose: () => void;
+  /** Where documents actually get uploaded, so the empty state can offer the fix it names. */
+  onOpenArchive?: () => void;
+}) {
   const [draft, setDraft] = useState("");
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState<DocumentIndexStatus | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // The screen exists to be typed into; opening the keyboard saves a tap every time.
     inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // A failed probe leaves the screen exactly as it was before this existed — examples and a
+    // search box. Refusing to show the feature because a status call hiccuped would be worse.
+    void getDocumentIndexStatus()
+      .then(value => { if (!cancelled) setStatus(value); })
+      .catch(() => { if (!cancelled) setStatus(null); });
+    return () => { cancelled = true; };
   }, []);
 
   const ask = useCallback(async (override?: string) => {
@@ -47,7 +99,7 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
     setError("");
     try {
       const answer = await askDocuments(question);
-      setResult({ question, message: answer.message, passages: answer.passages });
+      setResult({ question, ready: answer.ready, message: answer.message, passages: answer.passages });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Belgelerde arama yapılamadı.");
       setResult(null);
@@ -55,6 +107,8 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
       setSearching(false);
     }
   }, [draft, searching]);
+
+  const notice = status ? corpusNotice(status) : null;
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
@@ -115,10 +169,32 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {!result && !error && !searching && (
+        {!result && !error && !searching && notice && (
+          <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-6 text-center space-y-1.5">
+            <FolderOpen className="w-6 h-6 text-muted-foreground mx-auto" />
+            <p className="text-sm text-foreground">{notice.title}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{notice.detail}</p>
+            {notice.canUpload && onOpenArchive && (
+              // An empty state that names the fix and then makes you go and find it is half a
+              // screen. Only offered when uploading is actually what is missing.
+              <button
+                onClick={() => { onClose(); onOpenArchive(); }}
+                className="mt-3 h-9 px-4 rounded-lg bg-primary/10 text-primary text-sm active:scale-95"
+              >
+                Belge yükle
+              </button>
+            )}
+          </div>
+        )}
+
+        {!result && !error && !searching && !notice && (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground px-1">
-              Sorunuzu gündelik dille yazabilirsiniz; belgedeki kelimeleri bilmeniz gerekmez.
+              {status
+                // The scope of the search, stated before it runs: "not in your documents" means
+                // something different over eleven files than over four hundred.
+                ? `${status.indexed_documents} belge içinde aranıyor. Sorunuzu gündelik dille yazabilirsiniz; belgedeki kelimeleri bilmeniz gerekmez.`
+                : "Sorunuzu gündelik dille yazabilirsiniz; belgedeki kelimeleri bilmeniz gerekmez."}
             </p>
             {EXAMPLES.map(example => (
               <button
@@ -152,8 +228,11 @@ export function DocumentSearchPanel({ onClose }: { onClose: () => void }) {
                 <FileText className="w-6 h-6 text-muted-foreground mx-auto" />
                 <p className="text-sm text-foreground">{result.message}</p>
                 <p className="text-xs text-muted-foreground">
-                  Soruyu başka türlü sormayı deneyebilir ya da ilgili belgenin yüklendiğinden emin
-                  olabilirsiniz.
+                  {result.ready
+                    ? "Soruyu başka türlü sormayı deneyebilir ya da ilgili belgenin yüklendiğinden emin olabilirsiniz."
+                    // Rephrasing cannot help when nothing is searchable, and telling somebody to
+                    // try harder at a broken feature is how they stop trusting the answers.
+                    : "Arama servisi hazır olmadığı için sorunuz yanıtlanamadı; soruyu değiştirmek işe yaramaz."}
                 </p>
               </div>
             )}
