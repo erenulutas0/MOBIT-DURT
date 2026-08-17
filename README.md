@@ -1,408 +1,235 @@
-# Tender Knowledge Hub
+# Mobit Dürt
 
-Tender Knowledge Hub is evolving into DocsBot Ops, a two-module company operations platform. Tender Hub ingests tender-related media from Telegram Bot API. ERP-TAKIP manages people, tasks, deadlines, task documents, and manager visibility.
+**Kamu ihalelerine giren şirketler için operasyon platformu.**
 
-For the broader product workflow and future phases, see [PURPOSE.md](PURPOSE.md), [ARCHITECTURE.md](ARCHITECTURE.md), [STACK.md](STACK.md), and [TODO.md](TODO.md).
+Her iş günü Kamu İhale Bülteni'nde dört yüze yakın ilan yayımlanır ve bir şirket bunların
+belki ikisine girer. Geri kalanı gürültüdür. Bu platform o gürültüyü şirketin kendi iş
+koluna ve iline göre süzer, girilmeye değer olanı bir hazırlık görevine dönüştürür,
+sonucu yayımlandığında da işi kimin ne bedelle aldığını söyler.
 
-Production operations are documented in
-[PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) and
-[MONITORING_PLAN.md](MONITORING_PLAN.md).
+Gerçek bir şirkette, gerçek veriyle çalışıyor: bülten her sabah 09:30'da kendiliğinden
+çekiliyor, günde yaklaşık 300 ilan ve 1.400 sözleşme ayrıştırılıyor.
 
-## Backend Migration Status
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/home.png" alt="Ana ekran"></td>
+    <td width="33%"><img src="docs/screenshots/bulletin.png" alt="Kamu İhale Bülteni"></td>
+    <td width="33%"><img src="docs/screenshots/results.png" alt="Sonuçlanan ihaleler"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Bugün ne var</sub></td>
+    <td align="center"><sub>Açık ihaleler</sub></td>
+    <td align="center"><sub>Sonuçlar ve kırım oranı</sub></td>
+  </tr>
+</table>
 
-The active backend is Java 21 and Spring Boot. Python runtime is disabled and must not be started. Features that have not yet been migrated remain temporarily unavailable.
+---
 
-The authoritative plan is [JAVA_MIGRATION_ROADMAP.md](JAVA_MIGRATION_ROADMAP.md), and route ownership is tracked in [MIGRATION_ENDPOINT_MATRIX.md](MIGRATION_ENDPOINT_MATRIX.md).
+## Ne yapıyor
 
-## Repo Map — What Is Live, What Is Legacy
+### Bülten, size uygun olana indirgenmiş
 
-Live code (changes go here):
+EKAP'ın dört günlük bülteni (mal, yapım, hizmet, danışmanlık) her sabah indiriliyor,
+PDF'ten ayrıştırılıyor ve on bir iş koluna ayrılıyor. Şirket bir kez "biz elektrik işi
+yaparız, Konya ve çevresinde" der; her sabah kendisine uyan ilanları görür ve bir bildirim
+alır.
 
-- `java-backend/` — the active Spring Boot backend. All API traffic is served from here.
-- `frontend/` — the live React web dashboard. The 16 pages are currently defined inline in
-  `frontend/src/app/App.tsx`; **`frontend/src/app/components/` is orphaned dead code** that
-  nothing imports — do not extend it without consciously re-adopting it.
-- `mobile_frontend/` — the live Capacitor 7 + React mobile app (Android; no iOS platform
-  directory exists yet).
-- `vault/` — generated Obsidian notes; `data/` — stored tender documents; `scripts/` — dev
-  and deployment helpers; `docs/` — operational documentation.
+Kategori eşleştirmesi kelime başına sabitlenmiş: `"et alım"` ifadesi *"Hizmet Alımı"*
+içinde eşleşip 45 canlı ihaleyi gıda diye dosyalamıştı. Kök çözüm, başka bir anahtar
+kelime yaması değil, `(?<!\p{L})` ile kelime sınırına demirlemek oldu.
 
-Legacy / frozen (do not build on these):
+İptal ilanları saklanıyor ama asla girilecek iş gibi gösterilmiyor — iptal olmuş bir
+ihaleyi teklif verilecek gibi göstermek, boş ekrandan kötüdür.
 
-- `backend/` — the archived Python FastAPI backend. The runtime is disabled and the code is
-  retained only until the planned Phase 8 cleanup. Never start it.
-- `contracts/` — the frozen legacy FastAPI OpenAPI contract, kept as a migration baseline.
-  The living API spec is served by the Java backend at `/v3/api-docs` (Swagger UI in dev).
-- `figma_frontend/` — an orphaned design export; not wired into any build.
-- `TODO_PREMOTERM.md` — pre-migration backlog, not yet reconciled; prefer `TODO.md`.
+### Sonuçlar: iş kaça verildi
 
-## MVP Scope
+İlan, idarenin ne istediğini söyler. Sonuç ilanı işin **kaça verildiğini** söyler ve asıl
+fiyat kararı bu ikisinin arasında verilir: idarenin kendi yaklaşık maliyeti ile sözleşme
+bedeli. Aradaki fark — kırım oranı — bir günde yüzde birden yüzde altmışa kadar gidiyor ve
+ilana bakarak hangisi olduğu anlaşılmıyor.
 
-- Telegram Bot API polling ingestion.
-- Document/image/video/audio media messages are processed.
-- Text-only messages are ignored.
-- Raw Telegram sender identifiers are never stored; the service stores a salted SHA256 hash.
-- Full chat history and AI Q&A are intentionally out of scope for this MVP.
-- Bot tokens and webhook secrets must not be logged.
+Kırım **yalnız dürüstçe hesaplanabildiği yerde** yazılıyor. Kısımlara bölünmüş ihalede
+yaklaşık maliyet bütün ihaleyi, sözleşme bedeli tek kısmı kapsar: on bir kalemlik bir ilaç
+ihalesinin ilk kısmı 1,6 milyonluk tahmine karşı 25 bin liraya verilmiştir — bu %98
+tasarruf değil, aritmetik kurgudur. Böyle bir sayı insanlara, sayının gerçek olduğu
+günlerde de güvenmemeyi öğretir. O yüzden orada rakam yerine sebebi yazıyor.
 
-## Setup
+Karta dokununca ilan basıldığı hâliyle açılıyor; karttaki rakamlar o metinden ayrıştırıldı
+ve teklifini buna göre fiyatlayacak insanın bir ayrıştırıcının sözüne güvenmesi gerekmiyor.
 
-Install/select JDK 21 LTS before running Maven:
+<br clear="right">
 
-```powershell
-winget install --id EclipseAdoptium.Temurin.21.JDK --source winget
-.\scripts\use-java-21.ps1
-java -version
+### Belgelere Sor
+
+<img src="docs/screenshots/ask-documents.png" width="300" align="right" alt="Belgelere Sor">
+
+Şirketin kendi şartname, sözleşme ve eklerinde anlam tabanlı arama. Soru gündelik dille
+yazılır; belgedeki kelimeleri bilmek gerekmez.
+
+Cevap **belgenin kendi metnidir**, üretilmiş bir özet değil — geldiği dosya adıyla
+birlikte. Bir şartname için bu bir eksiklik değil, ürünün kendisidir: alıntılanan madde
+açılıp kontrol edilebilir, teklif kararı veya gecikme cezası gibi hukuki ağırlığı olan bir
+cevabın kontrol edilebilir olması gerekir. Ayrıca dosyada olmayan bir kuralı uyduramaz —
+insanların bu tür özelliklerden haklı olarak korktuğu şey tam olarak budur.
+
+Gömme modeli (`multilingual-e5-base`) kendi sunucumuzda çalışıyor; belge metni hiçbir
+zaman dışarı çıkmıyor.
+
+<br clear="right">
+
+### İlandan göreve, görevden sonuca
+
+<img src="docs/screenshots/tender-task.png" alt="İhaleden açılmış hazırlık görevi">
+
+Bir ilanı okumak işin yarısı. İhale salı günü 11:30'da kapanıyorsa yeterlik belgelerini
+toplamak, fiyatlamak ve teminat mektubunu almak günler alır — ve bunun birinin panosunda
+başlaması gerekir, birinin aklında değil. Tek dokunuşla açılan hazırlık görevinin teslim
+tarihi ihale saatinin kendisidir, böylece mevcut gecikme eskalasyonu ihaleye doğru geri
+saymaya kendiliğinden başlar.
+
+Haftalar sonra sonuç yayımlandığında, o görevi hazırlayanlara bildirim gider:
+*"Takip ettiğiniz ihale sonuçlandı — X firması 54,5 milyona aldı, %33,8 kırım."*
+Yalnız görev açılmış ihaleler duyurulur; ekrandan geçen üç yüz ilanın hepsini bildirmek
+bülteni ikinci kez göndermek olurdu.
+
+### Operasyon
+
+<img src="docs/screenshots/operations.png" width="300" align="right" alt="Operasyon Yönetimi">
+
+Görev atama, alt görevler ve bağımlılıklar, teslim tarihi takibi, gecikme eskalasyon
+merdiveni, tamamlama talebi ve yönetici onayı, standart ara/nihai rapor formatı,
+performans özeti.
+
+Yanında: şirket içi mesajlaşma ve doküman odaları, belge önizleme (PDF/DOCX/XLSX), bildirim
+merkezi, sesli asistan (kendi sunucumuzda Piper TTS), ve **şirket belgeleri takibi** — imza
+sirküleri, oda kayıt belgesi, borcu yoktur yazısı. Her idare bunları ister, hepsinin süresi
+dolar, ve kimse teklif hazırlanana kadar fark etmez.
+
+<br clear="right">
+
+---
+
+## Nasıl çalışıyor
+
+```
+                    ┌─────────────────────────────┐
+   EKAP bülteni ───▶│  Python yardımcı servis     │  poppler ile PDF → metin
+   (4 PDF/gün)      │  FastAPI + sentence-transf. │  ilan + sonuç ayrıştırma
+                    │                             │  gömme vektörleri (e5-base)
+                    └──────────────┬──────────────┘
+                                   │  iç ağ, dışarı kapalı
+                    ┌──────────────▼──────────────┐
+   Android  ───────▶│  Spring Boot 4.1 / Java 21  │◀─── React web paneli
+   (Capacitor)      │  JWT, roller, Flyway (59)   │
+                    └──────────────┬──────────────┘
+                                   │
+                             PostgreSQL 17
 ```
 
-```powershell
-cd tender-knowledge-hub
-Copy-Item .env.example .env
-cd java-backend
-.\mvnw.cmd test
-```
-
-Edit `.env` and set:
-
-- `DOCSBOT_PRODUCTION=false` locally, `true` only for a production deployment
-- `TELEGRAM_BOT_TOKEN`
-- `ERP_ADMIN_USERNAME`
-- `ERP_ADMIN_PASSWORD`
-- `DOCSBOT_JWT_SECRET`
-- `PHONE_HASH_SALT`
-
-## Run Locally
-
-Start PostgreSQL, apply Flyway migrations, build Java, and start the backend:
-
-```powershell
-cd tender-knowledge-hub
-.\scripts\start-java-dev.ps1
-```
-
-The Java service is available at [http://127.0.0.1:8080](http://127.0.0.1:8080). The isolated development database listens only on `127.0.0.1:5433`.
-
-To import the archived SQLite Tender/Telegram data into PostgreSQL:
-
-```powershell
-.\scripts\import-legacy-sqlite.ps1
-```
-
-The importer is idempotent and records every run in `legacy_import_runs`. It imports
-documents, tenders, Telegram chat bindings/setups, and the tender organization catalog.
-Legacy ERP users and tasks are intentionally excluded because Java owns the active ERP
-identity and workflow model. Keep a database backup before running the import against a
-non-development environment. Before importing, Java upgrades older SQLite archive schemas
-in place by adding missing nullable columns and optional Telegram/catalog tables.
-
-Active Java endpoints:
-
-- `GET /health`
-- `POST /erp/auth/admin-login`
-- `POST /erp/auth/login`
-- `POST /erp/account-requests`
-- `GET /erp/account-requests` (`ADMIN`)
-- `POST /erp/account-requests/{request_id}/approve` (`ADMIN`)
-- `POST /erp/account-requests/{request_id}/reject` (`ADMIN`)
-- `GET /erp/overview`
-- `GET/POST /erp/users` (`POST` is `ADMIN`)
-- `DELETE /erp/users/{user_id}` (`ADMIN`)
-- `POST /erp/users/{user_id}/presence`
-- `GET/POST /erp/teams` (`POST` is `ADMIN`)
-- `POST/DELETE /erp/teams/{team_id}/members/{user_id}` (`ADMIN`)
-- `GET/POST /erp/tasks` (`POST` is `ADMIN`)
-- `GET/PATCH /erp/tasks/{task_id}` (`PATCH` accepts a status transition for assignees, and
-  title/description/priority/deadline edits for `ADMIN`)
-- `GET/POST /erp/workflow-templates` (`ADMIN`)
-- `PATCH /erp/workflow-templates/{template_id}/active` (`ADMIN`)
-- `POST /erp/workflow-templates/{template_id}/run` (`ADMIN`)
-- `POST /erp/tasks/{task_id}/completion-request`
-- `POST /erp/tasks/{task_id}/approve-completion` (`ADMIN`)
-- `POST /erp/tasks/{task_id}/reject-completion` (`ADMIN`)
-- `POST /erp/tasks/{task_id}/comments`
-- `GET /erp/notifications`
-- `GET /erp/notifications/unread-count`
-- `GET /erp/notifications/stream`
-- `PATCH /erp/notifications/{notification_id}/read`
-- `PATCH /erp/notifications/read-all`
-- `GET/PATCH /erp/notification-preferences`
-- `GET/POST /erp/tasks/{task_id}/documents`
-- `GET /erp/task-documents/{document_id}/content`
-- `DELETE /erp/task-documents/{document_id}` (`ADMIN`)
-- `GET /documents` and `GET /documents/{document_id}` (`ADMIN`)
-- `GET /documents/favorites` and `PUT /documents/{document_id}/favorite` (`ADMIN`)
-- `GET /documents/recent` (`ADMIN`)
-- `POST/GET /documents/{document_id}/share-links` (`ADMIN`)
-- `DELETE /documents/share-links/{share_link_id}` (`ADMIN`)
-- `GET /shared/documents/{token}` (time-limited public document link)
-- `GET/POST /document-groups`
-- `GET/PATCH /document-groups/{group_id}`
-- `PATCH /document-groups/{group_id}/archive`
-- `POST /document-groups/{group_id}/members`
-- `DELETE /document-groups/{group_id}/members/{user_id}`
-- `GET/POST /document-groups/{group_id}/documents`
-- `GET /document-groups/{group_id}/documents/{group_document_id}/content`
-- `GET /tenders` and `GET /tenders/{tender_id}` (`ADMIN`)
-- `GET /dashboard/tree` (`ADMIN`)
-- `GET /dashboard/vault/notes` and `GET /dashboard/vault/note` (`ADMIN`)
-- `GET /dashboard/files/{document_id}` and `/view` (`ADMIN`)
-- `GET /dashboard/tree-file` (`ADMIN`)
-- `POST /dashboard/upload` (`ADMIN`)
-- `POST /erp/tasks/from-document/{document_id}` (`ADMIN`)
-
-Manual Tender upload is active on Java with MIME/extension/signature validation,
-SHA256 duplicate detection, date-based tender creation, local storage, PostgreSQL
-metadata, and Obsidian note generation. Telegram polling and secret-verified webhook
-ingestion are active on Java.
-
-Tender documents support per-account favorites and recent-access history. Share links
-use 256-bit random tokens, store only SHA-256 token hashes, expire after at most 30 days,
-can be revoked immediately, and write create/access/reject/revoke audit events.
+Gömme vektörleri `pgvector` yerine `BYTEA` içinde paketlenmiş `float32` olarak duruyor:
+üretimdeki `postgres:17-alpine` imajında pgvector yok ve canlı bir veritabanının imajını
+bir özellik uğruna değiştirmek, o özelliğin kendisinden büyük bir iş. Korpus bu ölçekte
+tam taramayla rahat dönüyor; darboğaza gelirse geçiş mekanik — kolon `vector(N)` olur,
+tarama indeks aramasına döner.
 
-Internal document groups provide app-native document rooms for company sharing without
-Telegram. Admins can see and manage every group; employees can see groups where they
-are members, upload files to those groups, and read only the group documents they are
-allowed to access. Uploaded group files reuse the same storage, metadata, and secure
-file-serving pipeline as Tender Hub documents.
+Bülten her müşteri için aynı kamuya açık belge olduğu için yardımcı servis onu bir kez
+indirip dört saat önbellekte tutuyor: on müşteri, aynı PDF'in kırk kez indirilmesi
+demek olmasın diye — hem bizim için yavaş hem de karşı tarafa saygısızlık.
 
-## Run Web Dashboard
+Ayrıştırmayı yardımcı serviste yapmanın sebebi poppler'ın orada olması. `pdftotext`
+**`-layout` ile** çalıştırılmak zorunda: ilanlar iki sütunlu bir tablo ve bu bayrak
+olmadan bütün etiketler bir blokta, bütün değerler başka blokta çıkıyor.
 
-The React dashboard contains both product areas:
+### Ölçerek çözülmüş üç tuzak
 
-- `ERP-TAKIP`
-- `Tender Hub`
+Bu üçü, kodun neden böyle yazıldığını en iyi anlatan yerler:
 
-```powershell
-cd tender-knowledge-hub\frontend
-npm install
-npm run dev -- --host 127.0.0.1 --port 5174
-```
+| Sorun | Kök neden | Çözüm |
+|---|---|---|
+| Pazarlık usulüyle yapılan 13 ihalenin yaklaşık maliyeti boş geliyordu | Bu ilanlar araya bir alan sokup maliyeti `d)`'den `e)`'ye itiyor | Alanlar harfle değil **etiketle** okunuyor |
+| Bütün pazarlık sonuçlarında tutar yutuluyordu | Tablo satırı sayfaya taşınca `pdftotext` arkasına ok bırakıyor: `87.231.881,17 TRY -->` | Tutar deseni satır sonuna sabitlenmiyor |
+| Bir İzmir demiryolu işi Van'a yazılıyordu | İl adları alt dize olarak eşleşiyor; bir sayfa Türkçe düzyazı yanlış il üretmeye yetiyor | İl **yalnız** işin yerinden ve idare adından okunuyor, kazananın adresinden asla — beşte biri boş kalıyor, ki bu dürüst cevap |
 
-Open [http://127.0.0.1:5174](http://127.0.0.1:5174).
+Ortak ders: **yanlış bir değer, eksik bir değerden kötüdür.** Yanlış ile yazılmış bir ihale,
+ilsiz olandan; uydurulmuş bir kırım oranı, hiç oran olmamasından kötüdür.
 
-ERP-TAKIP has a simple MVP login flow:
+---
 
-- Admin logs in with `ERP_ADMIN_USERNAME` and `ERP_ADMIN_PASSWORD`.
-- Employees can submit an account request from the home page.
-- Admin approves or rejects pending requests from the home page.
-- Approved employees can log in and see only their assigned tasks.
+## Teknoloji
 
-## Run Mobile Application
+| Katman | |
+|---|---|
+| Backend | Java 21, Spring Boot 4.1, Spring Security (JWT), Flyway |
+| Veritabanı | PostgreSQL 17 (gömme vektörleri `BYTEA`, pgvector'suz) |
+| Mobil | React + TypeScript, Capacitor 7 (Android), Tailwind, lucide-react |
+| Web | React + TypeScript + Vite |
+| Yardımcı servis | Python, FastAPI, sentence-transformers (`multilingual-e5-base`), poppler, Tesseract |
+| Sesli asistan | Piper TTS (kendi sunucumuzda) |
+| Bildirim | Firebase Cloud Messaging |
+| Dağıtım | Docker Compose, Caddy (otomatik TLS), GitHub Actions |
 
-The mobile frontend is built using Capacitor 7 and React 18, supporting Android and iOS builds.
+Yaklaşık ölçek: 238 Java sınıfı, 68 test sınıfı, 59 Flyway migrasyonu, 58 mobil modül.
+Testler: backend'de 321 test (163'ü birim testi, 158'i Testcontainers ile gerçek PostgreSQL
+üstünde entegrasyon), mobilde 158 test.
 
-To run the mobile dashboard locally:
+### Çalıştırma
 
-```powershell
-cd tender-knowledge-hub\mobile_frontend
-npm install
-npm run dev
-```
+Geliştirme kurulumu, ortam değişkenleri ve tüm API uçları:
+**[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**
 
-To sync changes with the native Android project and debug:
+Üretim işletimi: [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) ·
+[MONITORING_PLAN.md](MONITORING_PLAN.md) · [RESTORE.md](RESTORE.md)
 
-```powershell
-# Build and copy web assets to native project
-npm run android:sync
+Mimari ve karar kayıtları: [ARCHITECTURE.md](ARCHITECTURE.md) · [STACK.md](STACK.md)
 
-# Open Android Studio to build/debug the APK
-npm run android:open
-```
+---
 
-For the mobile application analysis, code refactoring roadmap, feature status, and recommended tests, see [MOBILE_ANALYSIS.md](MOBILE_ANALYSIS.md).
+## Durum
 
-## Run Telegram Bot
+Üretimde, tek bir şirkette çalışıyor. Çok kiracılı (multi-tenant) hâle getirme,
+onboarding akışı ve yeterlik kontrol listesi üzerinde çalışılıyor.
 
-Telegram is the only messaging ingestion channel. Do not start the archived Python bot.
+Depodaki `backend/` (arşivlenmiş Python FastAPI), `contracts/` ve `figma_frontend/`
+dizinleri geçmişten kalma ve dondurulmuş durumda — canlı kod `java-backend/`,
+`mobile_frontend/`, `frontend/` ve `embedding-service/` içinde.
 
-The intended Java workflow will continue to use the existing BotFather configuration:
-```text
-/setprivacy -> select bot -> Disable
-```
+Bu depo bir ürünün kaynak kodudur, kurulup çalıştırılmak üzere paketlenmiş bir açık
+kaynak projesi değildir. İnceleyip fikir edinmek serbesttir; ticari kullanım için
+iletişime geçin.
 
-The Java Telegram worker is active when `TELEGRAM_POLLING_ENABLED=true`. It currently
-ingests PDF, Word, Excel, and image documents. Video and audio ingestion remain disabled.
+---
 
-The recommended group setup flow is:
+<details>
+<summary><b>English summary</b></summary>
 
-```text
-/unit
-```
+**An operations platform for Turkish companies that bid on public tenders.**
 
-First select the internal company unit: Mobit, Stok Enerji, Depart, Area, or Mobiser. Then run:
+Around four hundred tenders are published in Turkey's official procurement bulletin every
+working day, and a given company can bid on maybe two of them. This platform filters that
+down to a company's own line of work and province, turns the ones worth bidding on into
+preparation tasks with the tender hour as their deadline, and — weeks later, when the
+result bulletin is published — tells the people who prepared the bid who won it and for
+how much.
 
-```text
-/company
-```
+Key pieces:
 
-The tender organization catalog is stored in PostgreSQL and displayed five organizations
-per page. Search organizations or let a Telegram group administrator add one with:
+- **Bulletin ingestion.** Four daily PDFs are downloaded, parsed with poppler, and sorted
+  into eleven trades. Word-boundary-anchored Turkish matching, after a substring match
+  filed 45 live tenders under the wrong category.
+- **Award results.** The buyer's own cost estimate beside the price the work was actually
+  let for. The discount is published *only* where it can be computed honestly — a tender
+  awarded in lots would otherwise read as a 98% saving, which is arithmetic fiction.
+- **Ask your documents.** Semantic search over the company's own specifications and
+  contracts, answering with the source clause and its filename rather than a generated
+  summary — for a legally binding document, that auditability is the product. The
+  embedding model runs on our own server; document text never leaves the host.
+- **Operations.** Task assignment, dependencies, deadline escalation, completion approval,
+  internal document rooms, and expiry tracking for the company's own paperwork.
 
-```text
-/company_search bedas
-/company_add Yeni Sirket Adi
-```
+Java 21 / Spring Boot 4.1, PostgreSQL 17, React + Capacitor 7 (Android), and a Python
+FastAPI sidecar for PDF extraction and embeddings — deployed with Docker Compose and Caddy
+behind GitHub Actions.
 
-After selecting the tender organization, the bot creates and binds a dated workspace such as `BEDAS-2026-20260606-001`. Until setup is complete, the bot refuses document ingestion.
+Source is public for review. Commercial use requires permission.
 
-When the bot is added during group creation or added to an existing group later, it introduces itself and immediately shows the company selector. Use `/help` at any time to display the workflow and available commands.
-
-Useful Telegram commands:
-
-```text
-/unit           Select the internal company unit
-/company        Select the tender organization and create a dated workspace
-/company_search Search the tender organization catalog
-/company_add    Add a new tender organization to the catalog
-/documents      List the latest 10 documents for the bound tender
-/stats          Show document type and processing status counts
-/tender_status  Show the tender currently bound to the group
-/security_info  Show the current Telegram group and user IDs
-/help           Show the usage guide
-```
-
-For production-style restrictions, run `/security_info` in the Telegram group and add
-the reported IDs to `.env`:
-
-```text
-TELEGRAM_ALLOWED_CHAT_IDS=-1001234567890,-1009876543210
-TELEGRAM_ADMIN_USER_IDS=123456789,987654321
-```
-
-When `TELEGRAM_ALLOWED_CHAT_IDS` is populated, updates from every other group are ignored
-before downloads or database writes. When `TELEGRAM_ADMIN_USER_IDS` is populated,
-`/company_add` requires both an allowed user ID and Telegram group administrator status.
-Empty lists preserve the development behavior and generate a startup warning.
-
-Polling progress is stored in PostgreSQL. A database lease prevents multiple Java
-instances from consuming the same bot concurrently. Failed updates are retried up to
-three times before the worker advances past a terminally failing update.
-
-### Telegram Runtime Modes
-
-Local development uses long polling:
-
-```text
-TELEGRAM_POLLING_ENABLED=true
-TELEGRAM_MODE=polling
-```
-
-Polling startup removes an existing Telegram webhook without dropping pending updates.
-
-For a public deployment, expose Java port `8080` through HTTPS and switch to webhook mode:
-
-```text
-TELEGRAM_POLLING_ENABLED=true
-TELEGRAM_MODE=webhook
-TELEGRAM_WEBHOOK_URL=https://YOUR-PUBLIC-HOST/webhook/telegram
-TELEGRAM_WEBHOOK_SECRET=replace-with-a-random-secret-of-at-least-16-characters
-```
-
-Webhook mode registers the URL with Telegram during Java startup. Requests are accepted
-only when `X-Telegram-Bot-Api-Secret-Token` matches the configured secret. The webhook
-URL must use HTTPS. Polling and webhook consumers cannot run simultaneously.
-
-## Expose Local Webhook for Testing
-
-With ngrok:
-
-```powershell
-ngrok http 8080
-```
-
-Use the HTTPS forwarding URL as `TELEGRAM_WEBHOOK_URL`:
-
-```text
-https://YOUR-NGROK-ID.ngrok-free.app/webhook/telegram
-```
-
-Cloudflare Tunnel, Tailscale Funnel, or localhost.run can be used similarly as long as Telegram can reach a public HTTPS URL.
-
-## Production Configuration Checklist
-
-Set `DOCSBOT_PRODUCTION=true` only after all production values are configured. In this
-mode the Java backend refuses to start with placeholder secrets or incomplete public
-integration settings.
-
-Required production values:
-
-- `ERP_ADMIN_PASSWORD`: non-default admin password with at least 12 characters
-- `DOCSBOT_JWT_SECRET`: random secret with at least 32 characters
-- `PHONE_HASH_SALT`: random salt with at least 16 characters
-- `TELEGRAM_BOT_TOKEN`: real BotFather token when Telegram is enabled
-- `TELEGRAM_ALLOWED_CHAT_IDS`: one or more group IDs from `/security_info`
-- `TELEGRAM_ADMIN_USER_IDS`: one or more admin user IDs from `/security_info`
-- `TELEGRAM_WEBHOOK_URL`: public HTTPS `/webhook/telegram` URL in webhook mode
-- `TELEGRAM_WEBHOOK_SECRET`: random secret with at least 16 characters in webhook mode
-- `DOCSBOT_WEB_PUSH_PUBLIC_KEY`, `DOCSBOT_WEB_PUSH_PRIVATE_KEY`, and
-  `DOCSBOT_WEB_PUSH_SUBJECT` when Web Push is enabled
-- `DOCSBOT_MOBILE_PUSH_ENABLED=true`, `DOCSBOT_FCM_PROJECT_ID`, and either
-  `DOCSBOT_FCM_SERVICE_ACCOUNT_JSON`, `DOCSBOT_FCM_SERVICE_ACCOUNT_PATH`, or
-  `DOCSBOT_FCM_ACCESS_TOKEN` when Android mobile push delivery is enabled
-- `DOCSBOT_APNS_TEAM_ID`, `DOCSBOT_APNS_KEY_ID`, `DOCSBOT_APNS_BUNDLE_ID`, and either
-  `DOCSBOT_APNS_PRIVATE_KEY` or `DOCSBOT_APNS_PRIVATE_KEY_PATH` when iOS mobile push
-  delivery is enabled. Use `DOCSBOT_APNS_ENVIRONMENT=production` for TestFlight/App Store builds.
-- `DOCSBOT_EMAIL_FROM`, `DOCSBOT_EMAIL_ADMIN_TO`, and `DOCSBOT_EMAIL_DRY_RUN=false`
-  when email fallback is enabled
-
-Production cleanup note: `sqlite-jdbc` is scoped to runtime only for the one-time legacy
-SQLite import utility. Remove it after the archived Python source and legacy SQLite import
-path are explicitly approved for cleanup.
-
-## Tests
-
-```powershell
-cd tender-knowledge-hub\java-backend
-.\mvnw.cmd test
-
-cd ..\frontend
-npm run build
-```
-
-The Java test suite covers authentication,
-approval, RBAC, user presence, task ownership, task editing, team membership, completion approval,
-message isolation, recurring workflow templates, notifications, unread/read-all state, notification preferences,
-authenticated SSE notification streaming, due-soon and overdue scheduling,
-task document security, document favorites/recent/share links, MIME/signature validation,
-Telegram parsing/API mocking, allowlists, polling retry/lease behavior,
-webhook secret verification and registration, replay-safe Telegram ingestion, storage,
-Obsidian generation, production configuration validation, SQLite legacy import helpers,
-PostgreSQL/Testcontainers migration checks, validation, and health.
-
-The frontend build also wires the notification badge/list to the authenticated SSE
-stream and keeps the existing periodic refresh as a fallback. Users can enable
-browser desktop notifications from the Notifications page; this works while the
-dashboard is open. Service-worker Web Push is available when production VAPID keys are
-configured and users enable browser push in their notification preferences.
-
-## Data Layout
-
-Classified files are stored under:
-
-```text
-data/originals/{year}/{internal_unit}/{organization}/{tender_id}/{safe_filename}
-```
-
-Document types such as `technical_spec` and `unknown` remain searchable metadata in SQLite and Obsidian; they do not create physical subfolders.
-
-Unclassified files are stored by received date under:
-
-```text
-data/originals/unclassified/{year}/{month}/{day}/{safe_filename}
-```
-
-Obsidian notes are written under the canonical layout:
-
-```text
-vault/ihaleler/{year}/{INTERNAL_UNIT}/{ORGANIZATION}/{tender_id}/
-```
-
-Unit and organization directory names are transliterated to ASCII upper-case
-(`BEDAŞ` → `BEDAS`) so Turkish spelling variants share one directory. Notes carry
-`tags:` frontmatter and `_index.md` files (root and per year) provide Dataview
-tables. To re-file a vault that predates this layout, run:
-
-```powershell
-node scripts/migrate-vault-layout.mjs           # dry run
-node scripts/migrate-vault-layout.mjs --apply   # backup + migrate
-```
+</details>
