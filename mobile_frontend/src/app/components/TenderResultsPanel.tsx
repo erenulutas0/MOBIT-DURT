@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Building2, Gavel, Loader2, MapPin, TrendingDown, Users, X } from "lucide-react";
+import {
+  Building2, Gavel, History, Loader2, MapPin, TrendingDown, Users, X,
+} from "lucide-react";
 
-import { getTenderResultDetail, getTenderResults, type TenderResult } from "../api";
+import {
+  getAuthorityProfile, getTenderResultDetail, getTenderResults,
+  type AuthorityProfile, type TenderResult,
+} from "../api";
 
 /**
  * "Sonuçlanan İhaleler" — who took the work, for how much, against how many bidders.
@@ -32,6 +37,72 @@ function shortDate(value: string | null): string | null {
   return parsed.toLocaleDateString("tr-TR", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/**
+ * How this idare has been letting work, shown above the announcement it was opened from.
+ *
+ * <p>"What did this tender go for" is a fact; "what does this buyer usually pay" is the question
+ * somebody actually has before pricing a bid. The sample size is printed beside the figure rather
+ * than behind it, and below three usable awards there is no figure at all — a middle drawn from
+ * two contracts is an anecdote, and dressing it up as a habit is the same failure as inventing a
+ * discount for a lot award.
+ */
+function AuthorityHistory({ profile }: { profile: AuthorityProfile }) {
+  const median = profile.median_discount === null ? null : Number(profile.median_discount);
+  const bidders = profile.average_bidders === null ? null : Number(profile.average_bidders);
+  const percent = (value: number) =>
+    `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
+
+  return (
+    <section className="px-4 py-3 border-b border-border bg-white/[0.02] space-y-2.5">
+      <div className="flex items-center gap-2">
+        <History className="w-3.5 h-3.5 text-primary shrink-0" />
+        <p className="text-xs font-semibold text-foreground">Bu idarenin geçmişi</p>
+      </div>
+
+      {median !== null ? (
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-lg font-semibold text-foreground tabular-nums">
+            {percent(median)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            ortanca kırım · {profile.sample_size} ihalede
+          </span>
+          {profile.lowest_discount !== null && profile.highest_discount !== null && (
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              ({percent(Number(profile.lowest_discount))} – {percent(Number(profile.highest_discount))})
+            </span>
+          )}
+        </div>
+      ) : (
+        // Naming the shortage instead of printing a dash: the reader can tell "we have not seen
+        // enough yet" from "this buyer gives nothing away", and those are opposite conclusions.
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {profile.sample_size === 0
+            ? "Bu idare için kırım hesaplanabilen sonuç yok."
+            : `Ortanca kırım için henüz yeterli veri yok — ${profile.sample_size} ihale. Sonuçlar her gün birikiyor.`}
+        </p>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">
+        Toplam {profile.total_awards} sözleşme
+        {bidders !== null && ` · ortalama ${bidders.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} teklif`}
+      </p>
+
+      {profile.top_winners.length > 0 && (
+        <div className="space-y-1 pt-0.5">
+          <p className="text-[11px] text-muted-foreground">En çok iş alanlar</p>
+          {profile.top_winners.slice(0, 3).map(entry => (
+            <p key={entry.winner} className="text-[11px] text-foreground leading-snug">
+              {entry.winner}
+              <span className="text-muted-foreground"> · {entry.awards} sözleşme</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function TenderResultsPanel({ mineOnly, province, category, bulletinType }: {
   /** Narrowed by the same watch profile as the announcements — it is the same company. */
   mineOnly: boolean;
@@ -43,6 +114,7 @@ export function TenderResultsPanel({ mineOnly, province, category, bulletinType 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [opened, setOpened] = useState<{ result: TenderResult; body: string } | null>(null);
+  const [profile, setProfile] = useState<AuthorityProfile | null>(null);
 
   const open = useCallback(async (result: TenderResult) => {
     try {
@@ -50,6 +122,17 @@ export function TenderResultsPanel({ mineOnly, province, category, bulletinType 
       setOpened({ result: detail.result, body: detail.body });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : "Sonuç ilanı açılamadı.");
+      return;
+    }
+    // Fetched after the sheet is already up and allowed to fail on its own: the printed
+    // announcement is what the tap asked for, and the buyer's history is a bonus on top of it.
+    setProfile(null);
+    if (result.authority) {
+      try {
+        setProfile(await getAuthorityProfile(result.authority));
+      } catch {
+        setProfile(null);
+      }
     }
   }, []);
 
@@ -207,12 +290,15 @@ export function TenderResultsPanel({ mineOnly, province, category, bulletinType 
                 <X className="w-5 h-5" />
               </button>
             </div>
-            {/* As printed, whitespace and all. The card's figures were read out of this text, and
-                somebody deciding what to bid is entitled to check them against the bulletin's own
-                words rather than take a parser's word for it. */}
-            <pre className="flex-1 overflow-auto px-4 py-3 text-[11px] text-foreground whitespace-pre-wrap font-sans leading-relaxed">
-              {opened.body}
-            </pre>
+            <div className="flex-1 overflow-auto">
+              {profile && <AuthorityHistory profile={profile} />}
+              {/* As printed, whitespace and all. The card's figures were read out of this text, and
+                  somebody deciding what to bid is entitled to check them against the bulletin's own
+                  words rather than take a parser's word for it. */}
+              <pre className="px-4 py-3 text-[11px] text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+                {opened.body}
+              </pre>
+            </div>
           </div>
         </div>
       )}

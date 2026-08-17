@@ -1235,6 +1235,32 @@ export async function getTenderResults(filters: {
   return response.json();
 }
 
+export type AuthorityProfile = {
+  authority: string;
+  total_awards: number;
+  /** How many of those awards a discount could honestly be computed from. */
+  sample_size: number;
+  /**
+   * Null below three usable awards — deliberately, not as a gap to paper over. Two contracts have
+   * a median too, and printing it as this buyer's habit would be a coin flip dressed as a figure.
+   */
+  median_discount: string | null;
+  lowest_discount: string | null;
+  highest_discount: string | null;
+  average_bidders: string | null;
+  top_winners: Array<{ winner: string; awards: number }>;
+  awards: TenderResult[];
+};
+
+/** How one idare has been letting work — the question behind "what should we bid". */
+export async function getAuthorityProfile(authority: string): Promise<AuthorityProfile> {
+  const response = await apiFetch(
+    `/erp/bulletin/authorities/profile?authority=${encodeURIComponent(authority)}`
+  );
+  if (!response.ok) throw new Error(await errorText(response, "İdare geçmişi alınamadı."));
+  return response.json();
+}
+
 /** One result as the bulletin printed it — the text the card's figures were read out of. */
 export async function getTenderResultDetail(
   resultId: number

@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TenderResult } from "../api";
 import { TenderResultsPanel } from "./TenderResultsPanel";
 
-const mocks = vi.hoisted(() => ({ getTenderResults: vi.fn(), getTenderResultDetail: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getTenderResults: vi.fn(), getTenderResultDetail: vi.fn(), getAuthorityProfile: vi.fn(),
+}));
 vi.mock("../api", () => mocks);
-const { getTenderResults, getTenderResultDetail } = mocks;
+const { getTenderResults, getTenderResultDetail, getAuthorityProfile } = mocks;
 
 function result(overrides: Partial<TenderResult> = {}): TenderResult {
   return {
@@ -52,6 +54,8 @@ describe("TenderResultsPanel", () => {
   beforeEach(() => {
     getTenderResults.mockReset();
     getTenderResultDetail.mockReset();
+    getAuthorityProfile.mockReset();
+    getAuthorityProfile.mockRejectedValue(new Error("idare geçmişi yok"));
     getTenderResults.mockResolvedValue([result()]);
   });
 
@@ -122,6 +126,58 @@ describe("TenderResultsPanel", () => {
     // is entitled to check them against the bulletin's own words.
     expect(await screen.findByText(/b\) Bedeli : 54.524.045,00 TRY/)).toBeInTheDocument();
     expect(getTenderResultDetail).toHaveBeenCalledWith(1);
+  });
+
+  it("idarenin ortanca kırımını örneklem sayısıyla birlikte gösterir", async () => {
+    const user = userEvent.setup();
+    getTenderResultDetail.mockResolvedValue({ result: result(), body: "İhale kayıt numarası : 2026/951756" });
+    getAuthorityProfile.mockResolvedValue({
+      authority: "TCDD 3. BÖLGE MÜDÜRLÜĞÜ",
+      total_awards: 34, sample_size: 21,
+      median_discount: "24.8", lowest_discount: "1.0", highest_discount: "57.6",
+      average_bidders: "8.8",
+      top_winners: [{ winner: "Sık Kazanan A.Ş.", awards: 4 }],
+      awards: [],
+    });
+    render(panel());
+
+    await user.click(await screen.findByText("Açık stok alanlarının yapılması işi"));
+
+    // The figure never travels without the count it was drawn from: a middle over 21 contracts
+    // and a middle over 2 are different claims, and only the reader can weigh which to lean on.
+    expect(await screen.findByText("%24,8")).toBeInTheDocument();
+    expect(screen.getByText(/21 ihalede/)).toBeInTheDocument();
+    expect(screen.getByText("Sık Kazanan A.Ş.", { exact: false })).toBeInTheDocument();
+  });
+
+  it("veri azken ortanca uydurmaz, eksikliği söyler", async () => {
+    const user = userEvent.setup();
+    getTenderResultDetail.mockResolvedValue({ result: result(), body: "gövde" });
+    getAuthorityProfile.mockResolvedValue({
+      authority: "Küçük İdare", total_awards: 2, sample_size: 2,
+      median_discount: null, lowest_discount: "6.0", highest_discount: "31.0",
+      average_bidders: "3.0", top_winners: [], awards: [],
+    });
+    render(panel());
+
+    await user.click(await screen.findByText("Açık stok alanlarının yapılması işi"));
+
+    // "We have not seen enough yet" and "this buyer gives nothing away" are opposite conclusions,
+    // and a dash would let a reader draw either.
+    expect(await screen.findByText(/henüz yeterli veri yok/)).toBeInTheDocument();
+  });
+
+  it("idare geçmişi alınamazsa ilan yine açılır", async () => {
+    const user = userEvent.setup();
+    getTenderResultDetail.mockResolvedValue({ result: result(), body: "MADDE 1 - GECİKME CEZASI" });
+    getAuthorityProfile.mockRejectedValue(new Error("kapalı"));
+    render(panel());
+
+    await user.click(await screen.findByText("Açık stok alanlarının yapılması işi"));
+
+    // The tap asked for the printed announcement; the buyer's history is a bonus on top of it.
+    expect(await screen.findByText(/MADDE 1 - GECİKME CEZASI/)).toBeInTheDocument();
+    expect(screen.queryByText("Bu idarenin geçmişi")).not.toBeInTheDocument();
   });
 
   it("çekilemezse hatayı söyler", async () => {

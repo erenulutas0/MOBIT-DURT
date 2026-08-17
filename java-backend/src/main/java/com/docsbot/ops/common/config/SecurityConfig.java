@@ -259,6 +259,7 @@ public class SecurityConfig {
                                 // what to bid are rarely the people with keys to the archive.
                                 "/erp/bulletin/results",
                                 "/erp/bulletin/results/*",
+                                "/erp/bulletin/authorities/profile",
                                 // Readable by everyone: what the company watches for is what the
                                 // screen filters by, and an employee has to be able to see why
                                 // their list is short.

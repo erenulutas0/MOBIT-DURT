@@ -50,6 +50,16 @@ public interface TenderResultRepository extends JpaRepository<TenderResult, Long
     @Query("update TenderResult result set result.partialAward = true where result.ikn = :ikn")
     int markPartialByIkn(@Param("ikn") String ikn);
 
+    /**
+     * Every award recorded for one idare, newest contract first.
+     *
+     * <p>Returned whole rather than aggregated in SQL because the discount is a domain decision,
+     * not an arithmetic one: which awards count towards an average is decided by
+     * {@code TenderResult#discountStatus()}, and a median computed in the query would quietly
+     * include the lot awards that method exists to keep out.
+     */
+    List<TenderResult> findByAuthorityOrderByContractDateDescIdDesc(String authority);
+
     /** Same retention window as the announcements, and for the same reason: it is a public file. */
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.transaction.annotation.Transactional

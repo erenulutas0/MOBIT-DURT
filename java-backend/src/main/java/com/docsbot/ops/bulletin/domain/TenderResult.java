@@ -166,26 +166,61 @@ public class TenderResult {
     }
 
     /**
+     * Above this, the figure is not a discount — it is a lot award nobody flagged.
+     *
+     * <p>Two independent reasons for the line, and they agree. In law, a bid at a tenth of the
+     * estimate triggers aşırı düşük teklif sorgulaması and is all but certain to be rejected, so a
+     * whole tender let 90% under simply does not happen. In the data, the genuine distribution has
+     * run out well before here: of 1,346 awards believed whole, the 98th percentile sits at 69.5%,
+     * exactly one lands between 75 and 90 — and twenty-two sit above 90, all of them tenders like
+     * "58 Kalem Muhtelif Motor Malzemeleri" where a 78-million estimate meets a 450-lira contract.
+     * The line is drawn through the empty band between two populations, not through the tail of
+     * one, which is why it costs no real discount.
+     */
+    private static final BigDecimal IMPLAUSIBLE_DISCOUNT = BigDecimal.valueOf(90);
+
+    /** Why a discount is or is not being published. */
+    public enum DiscountStatus {
+        COMPUTED,
+        /** The tender was awarded in lots, so the estimate and the amount describe different things. */
+        LOT_AWARD,
+        /** Believed whole, but priced like a single lot — see {@link #IMPLAUSIBLE_DISCOUNT}. */
+        SUSPECTED_LOT_AWARD,
+        /** A figure is missing, or the two are in different currencies. */
+        UNAVAILABLE,
+    }
+
+    public DiscountStatus discountStatus() {
+        if (partialAward) {
+            return DiscountStatus.LOT_AWARD;
+        }
+        if (estimatedCost == null || contractAmount == null || estimatedCost.signum() <= 0) {
+            return DiscountStatus.UNAVAILABLE;
+        }
+        if (estimatedCurrency != null && contractCurrency != null
+                && !estimatedCurrency.equals(contractCurrency)) {
+            // A lira contract against a euro estimate is not a ratio.
+            return DiscountStatus.UNAVAILABLE;
+        }
+        return rawDiscount().compareTo(IMPLAUSIBLE_DISCOUNT) > 0
+                ? DiscountStatus.SUSPECTED_LOT_AWARD
+                : DiscountStatus.COMPUTED;
+    }
+
+    /**
      * How far under the idare's estimate the work was let, as a percentage — or null when saying
      * would be a lie.
      *
      * <p>Withheld for a lot award, because the estimate covers the whole tender while the amount
      * covers one lot: an eleven-item drug tender whose first lot went for 25 thousand against a
      * 1.6 million estimate is not a 98% discount, and publishing it as one would teach people to
-     * ignore the number on the days it matters. Withheld too when either figure is missing or the
-     * currencies differ, since a lira contract against a euro estimate is not a ratio.
+     * ignore the number on the days it matters.
      */
     public BigDecimal discountPercent() {
-        if (partialAward || estimatedCost == null || contractAmount == null) {
-            return null;
-        }
-        if (estimatedCost.signum() <= 0) {
-            return null;
-        }
-        if (estimatedCurrency != null && contractCurrency != null
-                && !estimatedCurrency.equals(contractCurrency)) {
-            return null;
-        }
+        return discountStatus() == DiscountStatus.COMPUTED ? rawDiscount() : null;
+    }
+
+    private BigDecimal rawDiscount() {
         return BigDecimal.ONE
                 .subtract(contractAmount.divide(estimatedCost, 6, RoundingMode.HALF_UP))
                 .multiply(BigDecimal.valueOf(100))

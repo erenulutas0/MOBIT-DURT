@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.docsbot.ops.bulletin.domain.AuthorityProfile;
 import com.docsbot.ops.bulletin.domain.TenderCategory;
 import com.docsbot.ops.bulletin.domain.TenderNotice;
 import com.docsbot.ops.bulletin.domain.TenderResult;
@@ -215,6 +216,64 @@ public class BulletinController {
     }
 
     record ResultDetailResponse(ResultResponse result, String body) {
+    }
+
+    /**
+     * How one idare has been letting work: the middle discount, the spread, and who keeps winning.
+     *
+     * <p>"What did this tender go for" is a fact. "What does this buyer usually pay" is the
+     * question somebody actually has before pricing a bid, and it is not in any single
+     * announcement.
+     */
+    @GetMapping("/authorities/profile")
+    AuthorityProfileResponse authorityProfile(
+            JwtAuthenticationToken authentication,
+            @RequestParam(name = "authority") String authority
+    ) {
+        ErpPrincipal.from(authentication);
+        String name = blankToNull(authority);
+        if (name == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "İdare adı gerekli");
+        }
+        List<TenderResult> awards = resultRepository
+                .findByAuthorityOrderByContractDateDescIdDesc(name);
+        return AuthorityProfileResponse.from(AuthorityProfile.of(name, awards), awards);
+    }
+
+    record AuthorityProfileResponse(
+            String authority,
+            @JsonProperty("total_awards") int totalAwards,
+            /** How many awards the discount could honestly be computed from. */
+            @JsonProperty("sample_size") int sampleSize,
+            /**
+             * Null below three usable awards. Not zero and not a dash: the client has to be able to
+             * say "not enough data yet" rather than print a figure drawn from a coin flip.
+             */
+            @JsonProperty("median_discount") BigDecimal medianDiscount,
+            @JsonProperty("lowest_discount") BigDecimal lowestDiscount,
+            @JsonProperty("highest_discount") BigDecimal highestDiscount,
+            @JsonProperty("average_bidders") BigDecimal averageBidders,
+            @JsonProperty("top_winners") List<WinnerResponse> topWinners,
+            /** The awards themselves, so a reader with two data points can look at both. */
+            List<ResultResponse> awards
+    ) {
+        static AuthorityProfileResponse from(AuthorityProfile profile, List<TenderResult> awards) {
+            return new AuthorityProfileResponse(
+                    profile.authority(),
+                    profile.totalAwards(),
+                    profile.sampleSize(),
+                    profile.medianDiscount(),
+                    profile.lowestDiscount(),
+                    profile.highestDiscount(),
+                    profile.averageBidders(),
+                    profile.topWinners().stream()
+                            .map(winner -> new WinnerResponse(winner.winner(), winner.awards()))
+                            .toList(),
+                    awards.stream().limit(20).map(ResultResponse::from).toList());
+        }
+    }
+
+    record WinnerResponse(String winner, int awards) {
     }
 
     record ResultResponse(
