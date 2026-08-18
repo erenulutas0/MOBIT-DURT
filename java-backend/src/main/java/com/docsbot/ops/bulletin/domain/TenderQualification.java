@@ -93,7 +93,7 @@ public record TenderQualification(
         if (!SECTION.matcher(text).find()) {
             return absent();
         }
-        String similar = group(SIMILAR_WORK, text);
+        String similar = similarWork(text);
         return new TenderQualification(
                 true,
                 intGroup(EXPERIENCE_RATIO, text),
@@ -106,6 +106,18 @@ public record TenderQualification(
                 ECONOMIC_WAIVED.matcher(text).find(),
                 similar == null ? null : similar.trim(),
                 BID_BOND.matcher(text).find());
+    }
+
+    /**
+     * The definition with its own clause number trimmed off the front.
+     *
+     * <p>Some announcements print the heading twice, so the pattern can land on the first "4.4.1."
+     * and carry the second one into the text — which then reads "4.4.1. Kamu veya Özel Sektörde…"
+     * on a card that already says what it is.
+     */
+    private static String similarWork(String text) {
+        String captured = group(SIMILAR_WORK, text);
+        return captured == null ? null : captured.replaceFirst("^\\s*4\\.4\\.\\d\\.\\s*", "");
     }
 
     private static TenderQualification absent() {

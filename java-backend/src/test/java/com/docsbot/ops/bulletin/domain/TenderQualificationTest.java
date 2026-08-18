@@ -79,6 +79,9 @@ class TenderQualificationTest {
         // two contracts that an idare can and does reject. Guessing it would send somebody off to
         // spend a week preparing a bid on our opinion.
         assertThat(qualification.similarWork()).isNotBlank();
+        // Without its own clause number: the card already says what the line is, and some
+        // announcements repeat the heading so the pattern can drag a second "4.4.1." along.
+        assertThat(qualification.similarWork()).doesNotStartWith("4.4.");
     }
 
     @Test
