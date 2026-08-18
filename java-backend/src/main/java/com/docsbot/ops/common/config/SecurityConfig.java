@@ -260,6 +260,8 @@ public class SecurityConfig {
                                 "/erp/bulletin/results",
                                 "/erp/bulletin/results/*",
                                 "/erp/bulletin/authorities/profile",
+                                "/erp/bulletin/notices/*/qualification",
+                                "/erp/bulletin/company-qualification",
                                 // Readable by everyone: what the company watches for is what the
                                 // screen filters by, and an employee has to be able to see why
                                 // their list is short.
@@ -273,6 +275,8 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         // Deciding it is another matter: this changes what every employee sees and
                         // what the morning notification says.
+                        .requestMatchers(HttpMethod.PUT, "/erp/bulletin/company-qualification")
+                        .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/erp/bulletin/profile")
                         .hasRole("ADMIN")
                         .requestMatchers(

@@ -9,6 +9,7 @@ import {
   openTenderTask, refreshTenderBulletin, saveTenderProfile, tenderProfileIsSet as profileIsSet,
   type TenderCategoryCount, type TenderNotice, type TenderWatchProfile,
 } from "../api";
+import { QualificationPanel } from "./QualificationPanel";
 import { TenderResultsPanel } from "./TenderResultsPanel";
 
 /**
@@ -602,6 +603,12 @@ function NoticeSheet({ notice, body, isAdmin, onClose }: {
               value={notice.quantity} />
           )}
         </div>
+        {/* Above the printed text, because "can we even bid on this" is asked before anybody
+            reads forty lines of it — and the answer is arithmetic the reader currently does on
+            paper the night before the deadline. */}
+        <p className="text-xs text-muted-foreground px-1">Yeterlik kontrolü</p>
+        <QualificationPanel noticeId={notice.id} />
+
         <p className="text-xs text-muted-foreground px-1">İlan metni</p>
         <pre className="rounded-xl bg-black/30 border border-white/10 px-3 py-3 text-[12px] leading-relaxed text-foreground whitespace-pre-wrap font-sans">
           {body}

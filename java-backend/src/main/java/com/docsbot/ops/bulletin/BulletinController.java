@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.docsbot.ops.bulletin.domain.AuthorityProfile;
+import com.docsbot.ops.bulletin.domain.CompanyQualification;
+import com.docsbot.ops.bulletin.domain.QualificationCheck;
 import com.docsbot.ops.bulletin.domain.TenderCategory;
 import com.docsbot.ops.bulletin.domain.TenderNotice;
 import com.docsbot.ops.bulletin.domain.TenderResult;
@@ -46,15 +48,18 @@ public class BulletinController {
     private final BulletinIngestService ingestService;
     private final TenderWatchService watchService;
     private final BulletinTaskService taskService;
+    private final QualificationService qualificationService;
 
     public BulletinController(TenderNoticeRepository repository, TenderResultRepository resultRepository,
                               BulletinIngestService ingestService,
-                              TenderWatchService watchService, BulletinTaskService taskService) {
+                              TenderWatchService watchService, BulletinTaskService taskService,
+                              QualificationService qualificationService) {
         this.repository = repository;
         this.resultRepository = resultRepository;
         this.ingestService = ingestService;
         this.watchService = watchService;
         this.taskService = taskService;
+        this.qualificationService = qualificationService;
     }
 
     @GetMapping("/notices")
@@ -330,6 +335,117 @@ public class BulletinController {
                     result.getWinnerProvince(),
                     result.discountPercent(),
                     result.isPartialAward());
+        }
+    }
+
+
+    /**
+     * "Bu ihaleye girebilir miyiz?" — the announcement's bars beside what the company can prove.
+     *
+     * <p>Every bar in an announcement is a ratio of the bid, so the amount is the input. Without
+     * one the answer is the ratios themselves rather than a verdict, which is still worth reading.
+     */
+    @GetMapping("/notices/{id}/qualification")
+    QualificationResponse qualification(
+            JwtAuthenticationToken authentication,
+            @PathVariable long id,
+            @RequestParam(name = "bid", required = false) BigDecimal bid
+    ) {
+        ErpPrincipal.from(authentication);
+        TenderNotice notice = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "İlan bulunamadı"));
+        QualificationCheck check = qualificationService.check(notice, bid);
+        return new QualificationResponse(
+                check.qualificationPublished(),
+                check.bidAmount(),
+                check.items().stream()
+                        .map(item -> new QualificationItemResponse(
+                                item.key(), item.label(), item.status().name(),
+                                item.required(), item.available(), item.note()))
+                        .toList());
+    }
+
+    record QualificationResponse(
+            /** False when the announcement carries no qualification section — mal alımı, mostly. */
+            @JsonProperty("qualification_published") boolean qualificationPublished,
+            @JsonProperty("bid_amount") BigDecimal bidAmount,
+            List<QualificationItemResponse> items
+    ) {
+    }
+
+    record QualificationItemResponse(
+            String key,
+            String label,
+            /**
+             * MET | SHORT | NOT_REQUIRED | UNKNOWN | INFORMATION. UNKNOWN and SHORT are kept apart
+             * on purpose: "we do not know your turnover" is not "you do not qualify", and a client
+             * that painted both red would talk companies out of tenders they could have won.
+             */
+            String status,
+            BigDecimal required,
+            BigDecimal available,
+            String note
+    ) {
+    }
+
+    /** The company's own yeterlik figures. Readable by all; only an admin sets them. */
+    @GetMapping("/company-qualification")
+    CompanyQualificationResponse companyQualification(JwtAuthenticationToken authentication) {
+        ErpPrincipal.from(authentication);
+        return CompanyQualificationResponse.from(qualificationService.company());
+    }
+
+    @PutMapping("/company-qualification")
+    CompanyQualificationResponse saveCompanyQualification(
+            JwtAuthenticationToken authentication,
+            @RequestBody CompanyQualificationRequest request
+    ) {
+        ErpPrincipal principal = ErpPrincipal.from(authentication);
+        return CompanyQualificationResponse.from(qualificationService.save(
+                request.experienceAmount(), request.experienceDate(), request.experienceSubject(),
+                request.turnoverLastYear(), request.turnoverPreviousYear(), request.sectorTurnover(),
+                request.currentRatio(), request.equityRatio(), request.bankDebtRatio(),
+                request.bankReferenceLimit(), principal.displayName()));
+    }
+
+    record CompanyQualificationRequest(
+            @JsonProperty("experience_amount") BigDecimal experienceAmount,
+            @JsonProperty("experience_date") LocalDate experienceDate,
+            @JsonProperty("experience_subject") String experienceSubject,
+            @JsonProperty("turnover_last_year") BigDecimal turnoverLastYear,
+            @JsonProperty("turnover_previous_year") BigDecimal turnoverPreviousYear,
+            @JsonProperty("sector_turnover") BigDecimal sectorTurnover,
+            @JsonProperty("current_ratio") BigDecimal currentRatio,
+            @JsonProperty("equity_ratio") BigDecimal equityRatio,
+            @JsonProperty("bank_debt_ratio") BigDecimal bankDebtRatio,
+            @JsonProperty("bank_reference_limit") BigDecimal bankReferenceLimit
+    ) {
+    }
+
+    record CompanyQualificationResponse(
+            @JsonProperty("experience_amount") BigDecimal experienceAmount,
+            @JsonProperty("experience_date") LocalDate experienceDate,
+            @JsonProperty("experience_subject") String experienceSubject,
+            @JsonProperty("turnover_last_year") BigDecimal turnoverLastYear,
+            @JsonProperty("turnover_previous_year") BigDecimal turnoverPreviousYear,
+            @JsonProperty("sector_turnover") BigDecimal sectorTurnover,
+            @JsonProperty("current_ratio") BigDecimal currentRatio,
+            @JsonProperty("equity_ratio") BigDecimal equityRatio,
+            @JsonProperty("bank_debt_ratio") BigDecimal bankDebtRatio,
+            @JsonProperty("bank_reference_limit") BigDecimal bankReferenceLimit,
+            @JsonProperty("updated_by") String updatedBy,
+            @JsonProperty("updated_at") Instant updatedAt
+    ) {
+        static CompanyQualificationResponse from(CompanyQualification q) {
+            if (q == null) {
+                return new CompanyQualificationResponse(null, null, null, null, null, null,
+                        null, null, null, null, null, null);
+            }
+            return new CompanyQualificationResponse(
+                    q.getExperienceAmount(), q.getExperienceDate(), q.getExperienceSubject(),
+                    q.getTurnoverLastYear(), q.getTurnoverPreviousYear(), q.getSectorTurnover(),
+                    q.getCurrentRatio(), q.getEquityRatio(), q.getBankDebtRatio(),
+                    q.getBankReferenceLimit(), q.getUpdatedBy(), q.getUpdatedAt());
         }
     }
 

@@ -1270,6 +1270,78 @@ export async function getTenderResultDetail(
   return response.json();
 }
 
+export type QualificationItem = {
+  key: string;
+  label: string;
+  /**
+   * MET | SHORT | NOT_REQUIRED | UNKNOWN | INFORMATION.
+   *
+   * <p>UNKNOWN and SHORT are separate for a reason worth keeping: "we do not know your turnover"
+   * is not "you do not qualify", and painting both red would talk a company out of a tender it
+   * could have won.
+   */
+  status: "MET" | "SHORT" | "NOT_REQUIRED" | "UNKNOWN" | "INFORMATION";
+  required: string | null;
+  available: string | null;
+  note: string | null;
+};
+
+export type QualificationCheck = {
+  qualification_published: boolean;
+  bid_amount: string | null;
+  items: QualificationItem[];
+};
+
+/**
+ * "Bu ihaleye girebilir miyiz?" — the announcement's bars beside what the company can prove.
+ *
+ * <p>Every bar is a ratio of the bid, so the amount is the input. Without one the answer is the
+ * ratios themselves rather than a verdict, which is still worth reading before naming a price.
+ */
+export async function getQualification(
+  noticeId: number,
+  bid?: number | null
+): Promise<QualificationCheck> {
+  const query = bid ? `?bid=${encodeURIComponent(String(bid))}` : "";
+  const response = await apiFetch(`/erp/bulletin/notices/${noticeId}/qualification${query}`);
+  if (!response.ok) throw new Error(await errorText(response, "Yeterlik kontrolü yapılamadı."));
+  return response.json();
+}
+
+export type CompanyQualification = {
+  experience_amount: string | null;
+  experience_date: string | null;
+  experience_subject: string | null;
+  turnover_last_year: string | null;
+  turnover_previous_year: string | null;
+  sector_turnover: string | null;
+  current_ratio: string | null;
+  equity_ratio: string | null;
+  bank_debt_ratio: string | null;
+  bank_reference_limit: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+};
+
+/** The company's own yeterlik figures — entered once instead of remembered by whoever bids. */
+export async function getCompanyQualification(): Promise<CompanyQualification> {
+  const response = await apiFetch("/erp/bulletin/company-qualification");
+  if (!response.ok) throw new Error(await errorText(response, "Yeterlik bilgileri alınamadı."));
+  return response.json();
+}
+
+export async function saveCompanyQualification(
+  payload: Partial<CompanyQualification>
+): Promise<CompanyQualification> {
+  const response = await apiFetch("/erp/bulletin/company-qualification", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Yeterlik bilgileri kaydedilemedi."));
+  return response.json();
+}
+
 export type TenderWatchProfile = {
   categories: string[];
   provinces: string[];
