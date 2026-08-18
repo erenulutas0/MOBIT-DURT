@@ -189,15 +189,17 @@ public class BulletinController {
         if (blankToNull(ikn) != null) {
             return resultRepository.findByIkn(ikn.trim()).stream().map(ResultResponse::from).toList();
         }
+        int size = Math.max(1, Math.min(limit, 200));
+        // Asked for with room to spare when the watch profile still has to narrow it: the profile
+        // filters in Java, so a page sized exactly to the screen would come back short.
+        int fetch = mineOnly ? Math.min(size * 4, 400) : size;
         List<TenderResult> recent = resultRepository.findRecent(
-                blankToNull(province), blankToNull(category), blankToNull(bulletinType));
+                blankToNull(province), blankToNull(category), blankToNull(bulletinType),
+                org.springframework.data.domain.PageRequest.of(0, fetch));
         if (mineOnly) {
             recent = watchService.matchingResults(recent, watchService.profile());
         }
-        return recent.stream()
-                .limit(Math.max(1, Math.min(limit, 200)))
-                .map(ResultResponse::from)
-                .toList();
+        return recent.stream().limit(size).map(ResultResponse::from).toList();
     }
 
     /**

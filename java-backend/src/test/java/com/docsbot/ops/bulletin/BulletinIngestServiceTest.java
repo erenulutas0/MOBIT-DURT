@@ -284,8 +284,7 @@ class BulletinIngestServiceTest {
 
     @Test
     void aSecondContractUnderOneIknMarksTheWholeTenderPartial() {
-        when(resultRepository.findByIkn("2026/951756"))
-                .thenReturn(List.of(mock(TenderResult.class)));
+        when(resultRepository.existsByIkn("2026/951756")).thenReturn(true);
         response = results("BULTEN_07082026_YAPIM.pdf", RESULT_SECOND_LOT);
 
         service(true).ingest("yapim");

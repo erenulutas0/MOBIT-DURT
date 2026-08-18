@@ -3,6 +3,7 @@ package com.docsbot.ops.bulletin.infrastructure;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,14 +15,29 @@ public interface TenderResultRepository extends JpaRepository<TenderResult, Long
     boolean existsByIknAndBulletinDateAndBulletinTypeAndAwardKey(
             String ikn, LocalDate bulletinDate, String bulletinType, String awardKey);
 
-    /** Every contract already recorded under one İKN — how a lot award is recognised. */
+    /** Every contract already recorded under one İKN, for the screen that asks about one tender. */
     List<TenderResult> findByIkn(String ikn);
+
+    /**
+     * Whether this tender has already produced a contract — how a lot award is recognised.
+     *
+     * <p>A count rather than the rows, because the ingest asks this once per result and the answer
+     * it needs is a yes or a no. Fetching the rows meant a fifty-lot tender loading forty-nine
+     * announcement bodies fifty times over, which is quadratic in something the bulletin is free
+     * to make large.
+     */
+    boolean existsByIkn(String ikn);
 
     /**
      * Recent results, newest first, optionally narrowed to a province and a line of work.
      *
      * <p>Ordered by the contract date rather than the bulletin's: a result published today may have
      * been signed weeks ago, and "what has just been let" is the question this screen answers.
+     *
+     * <p>The page size is applied here and not by the caller. Trimming a list in Java after the
+     * database has handed over every row costs nothing less: each row carries the announcement as
+     * printed, the table already holds 12 MB of that text and grows by around 1,400 contracts a
+     * day, and a connection stays occupied for the whole of it. The screen shows fifty.
      */
     @Query("select result from TenderResult result "
             + "where (:province is null or result.province = :province) "
@@ -31,7 +47,8 @@ public interface TenderResultRepository extends JpaRepository<TenderResult, Long
     List<TenderResult> findRecent(
             @Param("province") String province,
             @Param("category") String category,
-            @Param("bulletinType") String bulletinType);
+            @Param("bulletinType") String bulletinType,
+            Pageable page);
 
     /**
      * Marks every contract under an İKN as a lot award.

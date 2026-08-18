@@ -229,9 +229,9 @@ public class BulletinIngestService {
                 // The announcement itself carries a "Sözleşmeye Esas Kısımlarının" line; and a
                 // second contract turning up under the same İKN — today's bulletin or one from
                 // last month — proves it whatever the announcement said.
-                List<TenderResult> siblings = resultRepository.findByIkn(ikn);
+                boolean hasSibling = resultRepository.existsByIkn(ikn);
                 boolean lots = result.path("text").asString("").contains(PARTIAL_AWARD_MARKER)
-                        || !siblings.isEmpty();
+                        || hasSibling;
                 TenderResult record = new TenderResult(
                         ikn,
                         bulletinType,
@@ -257,7 +257,7 @@ public class BulletinIngestService {
                         now);
                 TenderResult saved = resultRepository.save(record);
                 stored++;
-                if (lots && !siblings.isEmpty()) {
+                if (lots && hasSibling) {
                     // The row stored last week looked whole because it was alone. It is not.
                     resultRepository.markPartialByIkn(ikn);
                     partial++;
