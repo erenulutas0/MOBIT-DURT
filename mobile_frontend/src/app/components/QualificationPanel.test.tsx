@@ -5,8 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QualificationCheck } from "../api";
 import { QualificationPanel } from "./QualificationPanel";
 
-const getQualification = vi.hoisted(() => vi.fn());
-vi.mock("../api", () => ({ getQualification }));
+const mocks = vi.hoisted(() => ({
+  getQualification: vi.fn(), getCompanyQualification: vi.fn(), saveCompanyQualification: vi.fn(),
+}));
+vi.mock("../api", () => mocks);
+const { getQualification, getCompanyQualification } = mocks;
 
 function check(overrides: Partial<QualificationCheck> = {}): QualificationCheck {
   return {
@@ -29,7 +32,8 @@ function check(overrides: Partial<QualificationCheck> = {}): QualificationCheck 
 
 describe("QualificationPanel", () => {
   beforeEach(() => {
-    getQualification.mockReset();
+    for (const mock of Object.values(mocks)) mock.mockReset();
+    getCompanyQualification.mockResolvedValue({});
     getQualification.mockResolvedValue(check());
   });
 
@@ -89,6 +93,29 @@ describe("QualificationPanel", () => {
     render(<QualificationPanel noticeId={7} />);
 
     expect(await screen.findByText(/Şartların hepsi teklif bedeline oranlıdır/)).toBeInTheDocument();
+  });
+
+  it("eksik bilgi varken girme yolunu orada sunar", async () => {
+    const user = userEvent.setup();
+    getQualification.mockResolvedValue(check({
+      items: [{
+        key: "turnover", label: "Toplam ciro", status: "UNKNOWN",
+        required: "250000.00", available: null, note: "Son yıl cironuz kayıtlı değil.",
+      }],
+    }));
+    render(<QualificationPanel noticeId={7} />);
+
+    // The line that names the gap is the moment somebody is willing to go and close it; filing the
+    // form under settings would mean they never do.
+    await user.click(await screen.findByText("Yeterlik bilgilerimi gir"));
+    expect(await screen.findByText("Yeterlik bilgileriniz")).toBeInTheDocument();
+  });
+
+  it("her şey biliniyorsa form yolunu göstermez", async () => {
+    render(<QualificationPanel noticeId={7} />);
+
+    await screen.findByText("İş deneyimi");
+    expect(screen.queryByText("Yeterlik bilgilerimi gir")).not.toBeInTheDocument();
   });
 
   it("kontrol yapılamazsa hatayı söyler", async () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Check, HelpCircle, Info, Loader2, Minus, ShieldQuestion } from "lucide-react";
 
 import { getQualification, type QualificationCheck, type QualificationItem } from "../api";
+import { CompanyQualificationSheet } from "./CompanyQualificationSheet";
 
 /**
  * "Bu ihaleye girebilir miyiz?" — what the announcement demands, beside what the company can prove.
@@ -39,6 +40,7 @@ export function QualificationPanel({ noticeId }: { noticeId: number }) {
   const [check, setCheck] = useState<QualificationCheck | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async (amount: number | null) => {
     setLoading(true);
@@ -148,9 +150,27 @@ export function QualificationPanel({ noticeId }: { noticeId: number }) {
         })}
       </div>
 
+      {check.items.some(item => item.status === "UNKNOWN") && (
+        // Offered where the gap is noticed rather than filed under settings: the line that says
+        // "cironuz kayıtlı değil" is the moment somebody is willing to go and enter it.
+        <button
+          onClick={() => setEditing(true)}
+          className="w-full h-10 rounded-xl bg-white/[0.04] border border-white/10 text-sm text-foreground active:scale-95"
+        >
+          Yeterlik bilgilerimi gir
+        </button>
+      )}
+
       <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
         Bu liste ilanın kendi metninden okunur ve karar vermez; yeterliği idare değerlendirir.
       </p>
+
+      {editing && (
+        <CompanyQualificationSheet
+          onClose={() => setEditing(false)}
+          onSaved={() => void load(check.bid_amount ? Number(check.bid_amount) : null)}
+        />
+      )}
     </section>
   );
 }
