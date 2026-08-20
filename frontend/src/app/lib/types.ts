@@ -29,6 +29,9 @@ export type Page =
   | "tender-detail"
   | "ai-extraction"
   | "tender-bulletin"
+  | "tender-results"
+  | "bid-memory"
+  | "company-briefing"
   | "feedback";
 
 export type LiveData = {

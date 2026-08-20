@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, ClipboardList, CheckSquare, MessageSquare, Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen, Cpu, TrendingUp, Package, PanelLeftClose, PanelLeftOpen, Settings, BarChart2, Zap, Megaphone } from "lucide-react";
+import { LayoutDashboard, Users, ClipboardList, CheckSquare, MessageSquare, Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen, Cpu, TrendingUp, Package, PanelLeftClose, PanelLeftOpen, Settings, BarChart2, Zap, Megaphone, Gavel, Swords } from "lucide-react";
 import {
   ERPSession,
 } from "../api";
@@ -22,6 +22,7 @@ export const navItems = [
       { label: "Şirket Geneli", icon: Megaphone, page: "company-chat" as Page },
       { label: "Bildirimler", icon: Bell, page: "notifications" as Page, badge: 7 },
       { label: "Hesap Talepleri", icon: UserPlus, page: "account-requests" as Page, badge: 2 },
+      { label: "Şirket Özeti", icon: TrendingUp, page: "company-briefing" as Page },
       { label: "Dönütler & Duyuru", icon: Zap, page: "feedback" as Page },
     ],
   },
@@ -30,6 +31,8 @@ export const navItems = [
     items: [
       { label: "Dashboard", icon: TrendingUp, page: "tender-dashboard" as Page },
       { label: "Kamu İhale Bülteni", icon: Megaphone, page: "tender-bulletin" as Page },
+      { label: "Sonuçlanan İhaleler", icon: Gavel, page: "tender-results" as Page },
+      { label: "Tekliflerimiz", icon: Swords, page: "bid-memory" as Page },
       { label: "Telegram Grupları", icon: Send, page: "telegram-groups" as Page },
       { label: "Belgeler", icon: FileText, page: "documents" as Page },
       { label: "Klasör Ağacı", icon: FolderOpen, page: "folder-tree" as Page },

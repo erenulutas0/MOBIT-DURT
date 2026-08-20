@@ -1321,3 +1321,170 @@ export function displayStatus(status: string): "classified" | "processing" | "un
   if (status === "received") return "processing";
   return "unclassified";
 }
+
+// ── İhale sonuçları, teklif hafızası ve rakipler ─────────────────────────────
+// The half of the bulletin the web panel never had. An owner sits in front of this screen rather
+// than a phone, and these are the three things they open it for: what work went for, what we
+// offered, and who keeps taking it.
+
+export type TenderResult = {
+  id: number;
+  ikn: string;
+  title: string | null;
+  authority: string | null;
+  province: string | null;
+  category: string;
+  category_label: string;
+  bulletin_type: string;
+  work_place: string | null;
+  procedure: string | null;
+  tender_date: string | null;
+  contract_date: string | null;
+  estimated_cost: string | null;
+  contract_amount: string | null;
+  currency: string | null;
+  bid_count: number | null;
+  valid_bid_count: number | null;
+  winner: string | null;
+  winner_province: string | null;
+  /**
+   * How far under the estimate the work was let. Null means the server refused to say — a lot
+   * award, a missing figure — and null is not zero: a tender let at the estimate is a real 0%.
+   */
+  discount_percent: string | null;
+  partial_award: boolean;
+};
+
+export async function getTenderResults(filters: {
+  province?: string | null;
+  category?: string | null;
+  type?: string | null;
+  mine?: boolean;
+  limit?: number;
+} = {}): Promise<TenderResult[]> {
+  const query = new URLSearchParams();
+  if (filters.province) query.set("province", filters.province);
+  if (filters.category) query.set("category", filters.category);
+  if (filters.type) query.set("type", filters.type);
+  if (filters.mine) query.set("mine", "true");
+  query.set("limit", String(filters.limit ?? 100));
+  const response = await apiFetch(`/api/erp/bulletin/results?${query}`);
+  if (!response.ok) throw new Error("İhale sonuçları alınamadı.");
+  return response.json();
+}
+
+export type AuthorityProfile = {
+  authority: string;
+  total_awards: number;
+  sample_size: number;
+  /** Null below three usable awards: two contracts have a middle, but not a habit. */
+  median_discount: string | null;
+  lowest_discount: string | null;
+  highest_discount: string | null;
+  average_bidders: string | null;
+  top_winners: Array<{ winner: string; awards: number }>;
+};
+
+export async function getAuthorityProfile(authority: string): Promise<AuthorityProfile> {
+  const response = await apiFetch(
+    `/api/erp/bulletin/authorities/profile?authority=${encodeURIComponent(authority)}`
+  );
+  if (!response.ok) throw new Error("İdare geçmişi alınamadı.");
+  return response.json();
+}
+
+export type BidOutcomeRow = {
+  id: number;
+  ikn: string;
+  title: string | null;
+  authority: string | null;
+  province: string | null;
+  bid_amount: string;
+  bid_at: string;
+  status: "PENDING" | "WON" | "LOST" | "UNCLEAR";
+  winning_amount: string | null;
+  winner: string | null;
+  gap_percent: string | null;
+  note: string | null;
+};
+
+export type BidMemory = {
+  total_bids: number;
+  won: number;
+  lost: number;
+  pending: number;
+  unclear: number;
+  median_gap_percent: string | null;
+  smallest_gap_percent: string | null;
+  rivals: Array<{ rival: string; beat_us: number; median_gap_percent: string | null }>;
+  authorities: Array<{
+    authority: string; bids: number; won: number; median_gap_percent: string | null;
+  }>;
+  outcomes: BidOutcomeRow[];
+};
+
+export async function getBidMemory(): Promise<BidMemory> {
+  const response = await apiFetch("/api/erp/bulletin/bids");
+  if (!response.ok) throw new Error("Teklif geçmişi alınamadı.");
+  return response.json();
+}
+
+export type BossBriefing = {
+  period_start: string | null;
+  bids_this_month: number;
+  won_this_month: number;
+  won_amount_this_month: string;
+  won_amount_from_our_own_figure: number;
+  awaiting_result: number;
+  awaiting_amount: string;
+  pending_approval: number;
+  overdue_tasks: number;
+  due_this_week: number;
+  lapsed_credentials: number;
+  expiring_credentials: number;
+  upcoming: Array<{
+    notice_id: number; ikn: string; title: string | null; authority: string | null;
+    tender_at_text: string | null; tender_at: string | null; task_id: number | null;
+  }>;
+};
+
+export async function getBossBriefing(): Promise<BossBriefing> {
+  const response = await apiFetch("/api/erp/bulletin/briefing");
+  if (!response.ok) throw new Error("Şirket özeti alınamadı.");
+  return response.json();
+}
+
+export type RivalMatch = { winner: string; contracts: number };
+
+export type RivalProfile = {
+  winner: string;
+  contracts: number;
+  total_amount: string;
+  currency: string;
+  distinct_authorities: number;
+  median_discount: string | null;
+  /** How many of our own bids this firm has taken — the line no public record can produce. */
+  beat_us: number;
+  authorities: Array<{ name: string; contracts: number }>;
+  provinces: Array<{ name: string; contracts: number }>;
+  recent: Array<{
+    id: number | null; ikn: string; title: string | null; authority: string | null;
+    province: string | null; amount: string | null; contract_date: string | null;
+    discount_percent: string | null;
+  }>;
+};
+
+export async function searchRivals(term: string): Promise<RivalMatch[]> {
+  const response = await apiFetch(`/api/erp/bulletin/rivals?q=${encodeURIComponent(term)}`);
+  if (!response.ok) throw new Error("Firma araması yapılamadı.");
+  return response.json();
+}
+
+export async function getRivalProfile(winner: string): Promise<RivalProfile> {
+  const response = await apiFetch(
+    `/api/erp/bulletin/rivals/profile?winner=${encodeURIComponent(winner)}`
+  );
+  if (!response.ok) throw new Error("Firma bilgisi alınamadı.");
+  return response.json();
+}
+
