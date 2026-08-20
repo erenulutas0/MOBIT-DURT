@@ -2091,7 +2091,28 @@ async function tryLogin(
   }
 }
 
+/**
+ * The refresh in flight, shared by everyone who asks while it is running.
+ *
+ * <p>Without this the app logs itself out. Opening a screen fires a handful of requests at once;
+ * when the access token has expired they all come back 401 and all call refresh with the same
+ * stored token. The first rotates it and the rest arrive holding one the server has just revoked —
+ * which is exactly what a stolen token looks like, so the server revokes every session for the
+ * account and the user is thrown back to the login screen having done nothing wrong.
+ *
+ * <p>It cost the pool too: each of those replays opened a second transaction for the revocation
+ * sweep, so ten parallel screens drained twenty connections and everything else waited thirty
+ * seconds for one.
+ */
+let refreshInFlight: Promise<BackendAuthUser | null> | null = null;
+
 async function refreshSession(): Promise<BackendAuthUser | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = rotateSession().finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
+}
+
+async function rotateSession(): Promise<BackendAuthUser | null> {
   const session = await loadStoredUserAsync();
   if (!session?.refreshToken) return null;
 

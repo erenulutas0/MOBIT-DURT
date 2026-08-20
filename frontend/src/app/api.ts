@@ -309,7 +309,23 @@ function persistSession(session: ERPSession): void {
   window.localStorage.setItem(SESSION_STORAGE_KEYS[0], JSON.stringify(session));
 }
 
+/**
+ * The refresh in flight, shared by everyone who asks while it is running.
+ *
+ * <p>A page fires several requests at once; with an expired access token they all come back 401 and
+ * all call refresh with the same stored token. The first rotates it and the rest arrive holding one
+ * the server has just revoked — indistinguishable from a stolen token, so the server revokes every
+ * session for the account and the user is thrown back to the login screen having done nothing wrong.
+ */
+let refreshInFlight: Promise<ERPSession | null> | null = null;
+
 async function refreshSession(): Promise<ERPSession | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = rotateSession().finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
+}
+
+async function rotateSession(): Promise<ERPSession | null> {
   const session = storedSession();
   if (!session?.refresh_token) return null;
   const response = await fetch("/api/erp/auth/refresh", {
