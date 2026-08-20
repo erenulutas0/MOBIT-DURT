@@ -20,6 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.docsbot.ops.bulletin.domain.AuthorityProfile;
+import com.docsbot.ops.bulletin.domain.BidMemory;
+import com.docsbot.ops.bulletin.domain.BidOutcome;
+import com.docsbot.ops.bulletin.domain.TenderBid;
 import com.docsbot.ops.bulletin.domain.CompanyQualification;
 import com.docsbot.ops.bulletin.domain.QualificationCheck;
 import com.docsbot.ops.bulletin.domain.TenderCategory;
@@ -49,17 +52,20 @@ public class BulletinController {
     private final TenderWatchService watchService;
     private final BulletinTaskService taskService;
     private final QualificationService qualificationService;
+    private final BidMemoryService bidMemoryService;
 
     public BulletinController(TenderNoticeRepository repository, TenderResultRepository resultRepository,
                               BulletinIngestService ingestService,
                               TenderWatchService watchService, BulletinTaskService taskService,
-                              QualificationService qualificationService) {
+                              QualificationService qualificationService,
+                              BidMemoryService bidMemoryService) {
         this.repository = repository;
         this.resultRepository = resultRepository;
         this.ingestService = ingestService;
         this.watchService = watchService;
         this.taskService = taskService;
         this.qualificationService = qualificationService;
+        this.bidMemoryService = bidMemoryService;
     }
 
     @GetMapping("/notices")
@@ -446,6 +452,150 @@ public class BulletinController {
                     q.getTurnoverLastYear(), q.getTurnoverPreviousYear(), q.getSectorTurnover(),
                     q.getCurrentRatio(), q.getEquityRatio(), q.getBankDebtRatio(),
                     q.getBankReferenceLimit(), q.getUpdatedBy(), q.getUpdatedAt());
+        }
+    }
+
+
+    /**
+     * Records what the company offered for one tender.
+     *
+     * <p>The figure no competing service can hold: every platform reads the same public bulletin
+     * and can say what a job went for, but only the software a company bids through knows what it
+     * offered. Kept beside the published result it stops being a statistic and becomes a lesson.
+     */
+    @PostMapping("/notices/{id}/bid")
+    BidResponse recordBid(
+            JwtAuthenticationToken authentication,
+            @PathVariable long id,
+            @RequestBody BidRequest request
+    ) {
+        ErpPrincipal principal = ErpPrincipal.from(authentication);
+        if (request.amount() == null || request.amount().signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Teklif tutarı gerekli");
+        }
+        try {
+            TenderBid bid = bidMemoryService.record(id, request.amount(), request.bidAt(),
+                    request.note(), request.outcome(), principal.displayName());
+            return BidResponse.from(bid);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage());
+        }
+    }
+
+    /** The bid already recorded for one tender, so the screen can show it instead of an empty box. */
+    @GetMapping("/notices/{id}/bid")
+    BidResponse bidForNotice(JwtAuthenticationToken authentication, @PathVariable long id) {
+        ErpPrincipal.from(authentication);
+        TenderNotice notice = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "İlan bulunamadı"));
+        return BidResponse.from(bidMemoryService.find(notice.getIkn()));
+    }
+
+    record BidRequest(
+            BigDecimal amount,
+            @JsonProperty("bid_at") LocalDate bidAt,
+            String note,
+            /** WON | LOST | UNCLEAR when somebody who was in the room corrects the arithmetic. */
+            String outcome
+    ) {
+    }
+
+    record BidResponse(
+            Long id,
+            String ikn,
+            BigDecimal amount,
+            @JsonProperty("bid_at") LocalDate bidAt,
+            String note,
+            String outcome,
+            @JsonProperty("recorded_by") String recordedBy
+    ) {
+        static BidResponse from(TenderBid bid) {
+            if (bid == null) {
+                return new BidResponse(null, null, null, null, null, null, null);
+            }
+            return new BidResponse(bid.getId(), bid.getIkn(), bid.getAmount(), bid.getBidAt(),
+                    bid.getNote(), bid.getOutcomeOverride(), bid.getRecordedBy());
+        }
+    }
+
+    /**
+     * "Neden kaybediyoruz?" — every bid this company has made, with what the bulletin later said.
+     *
+     * <p>Nothing here comes from the public record alone. It is the company's own figures joined to
+     * the public ones, which is why no competitor can produce this screen.
+     */
+    @GetMapping("/bids")
+    BidMemoryResponse bids(JwtAuthenticationToken authentication) {
+        ErpPrincipal.from(authentication);
+        List<BidOutcome> outcomes = bidMemoryService.outcomes();
+        BidMemory memory = BidMemory.of(outcomes);
+        return new BidMemoryResponse(
+                memory.totalBids(), memory.won(), memory.lost(), memory.pending(), memory.unclear(),
+                memory.medianGapPercent(), memory.smallestGapPercent(),
+                memory.rivals().stream()
+                        .map(rival -> new RivalResponse(
+                                rival.rival(), rival.beatUs(), rival.medianGapPercent()))
+                        .toList(),
+                memory.authorities().stream()
+                        .map(record -> new AuthorityRecordResponse(
+                                record.authority(), record.bids(), record.won(),
+                                record.medianGapPercent()))
+                        .toList(),
+                outcomes.stream().map(OutcomeResponse::from).toList());
+    }
+
+    record BidMemoryResponse(
+            @JsonProperty("total_bids") int totalBids,
+            int won,
+            int lost,
+            int pending,
+            int unclear,
+            /** Null below three comparable losses: two is an anecdote, not a habit. */
+            @JsonProperty("median_gap_percent") BigDecimal medianGapPercent,
+            @JsonProperty("smallest_gap_percent") BigDecimal smallestGapPercent,
+            List<RivalResponse> rivals,
+            List<AuthorityRecordResponse> authorities,
+            List<OutcomeResponse> outcomes
+    ) {
+    }
+
+    record RivalResponse(
+            String rival,
+            @JsonProperty("beat_us") int beatUs,
+            @JsonProperty("median_gap_percent") BigDecimal medianGapPercent
+    ) {
+    }
+
+    record AuthorityRecordResponse(
+            String authority,
+            int bids,
+            int won,
+            @JsonProperty("median_gap_percent") BigDecimal medianGapPercent
+    ) {
+    }
+
+    record OutcomeResponse(
+            Long id,
+            String ikn,
+            String title,
+            String authority,
+            String province,
+            @JsonProperty("bid_amount") BigDecimal bidAmount,
+            @JsonProperty("bid_at") LocalDate bidAt,
+            /** PENDING | WON | LOST | UNCLEAR — worked out from the result, not stored. */
+            String status,
+            @JsonProperty("winning_amount") BigDecimal winningAmount,
+            String winner,
+            @JsonProperty("gap_percent") BigDecimal gapPercent,
+            String note
+    ) {
+        static OutcomeResponse from(BidOutcome outcome) {
+            TenderBid bid = outcome.bid();
+            return new OutcomeResponse(
+                    bid.getId(), bid.getIkn(), bid.getTitle(), bid.getAuthority(), bid.getProvince(),
+                    bid.getAmount(), bid.getBidAt(), outcome.status().name(),
+                    outcome.winningAmount(), outcome.winner(), outcome.gapPercent(),
+                    outcome.note());
         }
     }
 

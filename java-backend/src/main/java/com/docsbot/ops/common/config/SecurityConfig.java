@@ -262,11 +262,17 @@ public class SecurityConfig {
                                 "/erp/bulletin/authorities/profile",
                                 "/erp/bulletin/notices/*/qualification",
                                 "/erp/bulletin/company-qualification",
+                                // The company's own bids and what became of them. Readable by
+                                // everyone who bids; recording one is an admin act.
+                                "/erp/bulletin/bids",
+                                "/erp/bulletin/notices/*/bid",
                                 // Readable by everyone: what the company watches for is what the
                                 // screen filters by, and an employee has to be able to see why
                                 // their list is short.
                                 "/erp/bulletin/profile")
                         .authenticated()
+                        .requestMatchers(HttpMethod.POST, "/erp/bulletin/notices/*/bid")
+                        .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/erp/bulletin/refresh")
                         .hasRole("ADMIN")
                         // Opening a tender's preparation task is task creation, and task creation

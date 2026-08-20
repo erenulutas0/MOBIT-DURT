@@ -9,6 +9,7 @@ import { TenantServerSheet } from "./components/TenantServerSheet";
 import { TenderBriefPanel } from "./components/TenderBriefPanel";
 import { TenderBulletinPanel } from "./components/TenderBulletinPanel";
 import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
+import { BidMemoryPanel } from "./components/BidMemoryPanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { TodayPanel } from "./components/TodayPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
@@ -124,7 +125,7 @@ import type { KnowledgeGraphData, KnowledgeGraphEdge, KnowledgeGraphNode } from 
 import {
   Users, ClipboardList, CheckSquare, MessageSquare,
   Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen,
-  ChevronRight, Search, Building2,
+  ChevronRight, Search, Building2, Swords,
   AlertTriangle, CheckCircle2, XCircle,
   Download, Eye, Link, Tag, Paperclip, Pencil,
   UserCheck, CalendarDays, GitBranch,
@@ -841,6 +842,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
   const [showDocumentSearch, setShowDocumentSearch] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
   const [showBulletin, setShowBulletin] = useState(false);
+  const [showBids, setShowBids] = useState(false);
   /** The bulletin opened from the setup checklist lands on the profile form, not the list. */
   const [bulletinAtProfile, setBulletinAtProfile] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
@@ -983,6 +985,28 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
                 <p className="text-sm font-semibold text-foreground">Belgelere Sor</p>
                 <p className="text-xs text-muted-foreground">
                   Şartname ve sözleşmelerde arayın: "Gecikirsem ne kadar ceza öderim?"
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </button>
+          )}
+
+          {/* Tekliflerimiz — what we offered and what became of it. Its own entry rather than a
+              corner of the bulletin: the bulletin is about what is out there, and this is the only
+              screen in the product that is about us. It is also the one no competing service can
+              build, because our own bid never leaves the company. */}
+          {isAdmin && (
+          <button onClick={() => setShowBids(true)}
+            className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Swords className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">Tekliflerimiz</p>
+                <p className="text-xs text-muted-foreground">
+                  Ne teklif ettik, ne oldu, kime kaç farkla kaybettik
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -1139,6 +1163,8 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
       {showCredentials && (
         <CompanyCredentialsPanel onClose={() => setShowCredentials(false)} />
       )}
+
+      {showBids && <BidMemoryPanel onClose={() => setShowBids(false)} />}
 
       {showBulletin && (
         <TenderBulletinPanel

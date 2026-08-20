@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Check, HelpCircle, Info, Loader2, Minus, ShieldQuestion } from "lucide-react";
 
-import { getQualification, type QualificationCheck, type QualificationItem } from "../api";
+import {
+  getBidForNotice, getQualification, recordBid,
+  type QualificationCheck, type QualificationItem,
+} from "../api";
 import { CompanyQualificationSheet } from "./CompanyQualificationSheet";
 
 /**
@@ -41,6 +44,9 @@ export function QualificationPanel({ noticeId }: { noticeId: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  /** What we already recorded for this tender, so the button says the truth. */
+  const [recorded, setRecorded] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async (amount: number | null) => {
     setLoading(true);
@@ -56,6 +62,28 @@ export function QualificationPanel({ noticeId }: { noticeId: number }) {
   }, [noticeId]);
 
   useEffect(() => { void load(null); }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Its own fetch and its own failure: the checklist is what the tap asked for, and whether a
+    // bid was already recorded is a detail on top of it.
+    void getBidForNotice(noticeId)
+      .then(bid => { if (!cancelled) setRecorded(bid.amount); })
+      .catch(() => { if (!cancelled) setRecorded(null); });
+    return () => { cancelled = true; };
+  }, [noticeId]);
+
+  const keepBid = async (amount: string) => {
+    setSaving(true);
+    try {
+      const saved = await recordBid(noticeId, { amount: Number(amount) });
+      setRecorded(saved.amount);
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Teklif kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -149,6 +177,27 @@ export function QualificationPanel({ noticeId }: { noticeId: number }) {
           );
         })}
       </div>
+
+      {check.bid_amount && (
+        // Offered where the number already is. Recording it turns the public result, weeks from
+        // now, into a private lesson — the one thing a bulletin service cannot do for you.
+        <button
+          onClick={() => void keepBid(check.bid_amount as string)}
+          disabled={saving || recorded === check.bid_amount}
+          className="w-full h-10 rounded-xl bg-primary/10 text-primary text-sm active:scale-95 disabled:opacity-50"
+        >
+          {recorded === check.bid_amount
+            ? "Teklif kaydedildi"
+            : saving ? "Kaydediliyor…" : "Bu tutarla teklif verdik"}
+        </button>
+      )}
+
+      {recorded && recorded !== check.bid_amount && (
+        <p className="text-[11px] text-muted-foreground px-0.5">
+          Bu ihale için kayıtlı teklifiniz:{" "}
+          {Number(recorded).toLocaleString("tr-TR", { maximumFractionDigits: 0 })} TRY
+        </p>
+      )}
 
       {check.items.some(item => item.status === "UNKNOWN") && (
         // Offered where the gap is noticed rather than filed under settings: the line that says

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   // The notice sheet carries the qualification checklist; without this the sheet renders its
   // own error state and these tests would be passing against a screen nobody ships.
   getQualification: vi.fn(),
+  getBidForNotice: vi.fn(), recordBid: vi.fn(),
   // Not a stub: the panel and the setup checklist have to agree on what "profile is set" means,
   // so the real rule travels with the type. Faking it here would let them drift.
   tenderProfileIsSet: (profile: { categories: string[]; provinces: string[] }) =>
@@ -58,6 +59,7 @@ describe("TenderBulletinPanel", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(NOW);
     for (const mock of Object.values(mocks)) if (vi.isMockFunction(mock)) mock.mockReset();
+    mocks.getBidForNotice.mockResolvedValue({ amount: null });
     mocks.getQualification.mockResolvedValue(
       { qualification_published: false, bid_amount: null, items: [] });
     mocks.getTenderNotices.mockResolvedValue([]);

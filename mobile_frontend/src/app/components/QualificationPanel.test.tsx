@@ -7,6 +7,7 @@ import { QualificationPanel } from "./QualificationPanel";
 
 const mocks = vi.hoisted(() => ({
   getQualification: vi.fn(), getCompanyQualification: vi.fn(), saveCompanyQualification: vi.fn(),
+  getBidForNotice: vi.fn(), recordBid: vi.fn(),
 }));
 vi.mock("../api", () => mocks);
 const { getQualification, getCompanyQualification } = mocks;
@@ -34,6 +35,7 @@ describe("QualificationPanel", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     getCompanyQualification.mockResolvedValue({});
+    mocks.getBidForNotice.mockResolvedValue({ amount: null });
     getQualification.mockResolvedValue(check());
   });
 

@@ -1342,6 +1342,83 @@ export async function saveCompanyQualification(
   return response.json();
 }
 
+export type TenderBid = {
+  id: number | null;
+  ikn: string | null;
+  amount: string | null;
+  bid_at: string | null;
+  note: string | null;
+  outcome: string | null;
+  recorded_by: string | null;
+};
+
+export type BidOutcomeRow = {
+  id: number;
+  ikn: string;
+  title: string | null;
+  authority: string | null;
+  province: string | null;
+  bid_amount: string;
+  bid_at: string;
+  /** PENDING | WON | LOST | UNCLEAR — worked out from the published result, never stored. */
+  status: "PENDING" | "WON" | "LOST" | "UNCLEAR";
+  winning_amount: string | null;
+  winner: string | null;
+  /** How far over the winner this bid came, when the two are comparable. */
+  gap_percent: string | null;
+  note: string | null;
+};
+
+export type BidMemory = {
+  total_bids: number;
+  won: number;
+  lost: number;
+  pending: number;
+  unclear: number;
+  /** Null below three comparable losses: two is an anecdote, not a habit. */
+  median_gap_percent: string | null;
+  smallest_gap_percent: string | null;
+  rivals: Array<{ rival: string; beat_us: number; median_gap_percent: string | null }>;
+  authorities: Array<{
+    authority: string; bids: number; won: number; median_gap_percent: string | null;
+  }>;
+  outcomes: BidOutcomeRow[];
+};
+
+/** What this company offered for one tender — the figure no competing service can hold. */
+export async function getBidForNotice(noticeId: number): Promise<TenderBid> {
+  const response = await apiFetch(`/erp/bulletin/notices/${noticeId}/bid`);
+  if (!response.ok) throw new Error(await errorText(response, "Teklif kaydı alınamadı."));
+  return response.json();
+}
+
+export async function recordBid(noticeId: number, payload: {
+  amount: number;
+  bid_at?: string | null;
+  note?: string | null;
+  outcome?: string | null;
+}): Promise<TenderBid> {
+  const response = await apiFetch(`/erp/bulletin/notices/${noticeId}/bid`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await errorText(response, "Teklif kaydedilemedi."));
+  return response.json();
+}
+
+/**
+ * "Neden kaybediyoruz?" — every bid this company has made, joined to what the bulletin said.
+ *
+ * <p>Nothing here comes from the public record alone. It is the company's own figures beside the
+ * public ones, which is why no competitor can produce this screen.
+ */
+export async function getBidMemory(): Promise<BidMemory> {
+  const response = await apiFetch("/erp/bulletin/bids");
+  if (!response.ok) throw new Error(await errorText(response, "Teklif geçmişi alınamadı."));
+  return response.json();
+}
+
 export type TenderWatchProfile = {
   categories: string[];
   provinces: string[];

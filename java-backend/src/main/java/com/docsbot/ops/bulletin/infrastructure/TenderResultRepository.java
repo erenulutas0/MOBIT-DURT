@@ -18,6 +18,9 @@ public interface TenderResultRepository extends JpaRepository<TenderResult, Long
     /** Every contract already recorded under one İKN, for the screen that asks about one tender. */
     List<TenderResult> findByIkn(String ikn);
 
+    /** The same, for a whole page of bids at once — one query instead of one per bid. */
+    List<TenderResult> findByIknIn(java.util.Collection<String> ikns);
+
     /**
      * Whether this tender has already produced a contract — how a lot award is recognised.
      *
