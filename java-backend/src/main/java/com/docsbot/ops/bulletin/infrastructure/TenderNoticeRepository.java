@@ -63,6 +63,18 @@ public interface TenderNoticeRepository extends JpaRepository<TenderNotice, Long
     List<Long> findTaskIdsByIkn(@Param("ikn") String ikn);
 
     /**
+     * The tenders this company is actually preparing for, soonest hour first.
+     *
+     * <p>A task is what separates the two a company is working on from the three hundred that
+     * scrolled past its screen this morning — so the owner's briefing lists these and nothing else.
+     */
+    @Query("select notice from TenderNotice notice "
+            + "where notice.taskId is not null and notice.tenderAt is not null "
+            + "  and notice.tenderAt >= :now "
+            + "order by notice.tenderAt asc")
+    List<TenderNotice> findInPreparation(@Param("now") Instant now);
+
+    /**
      * Drops announcements from bulletins older than the cutoff.
      *
      * <p>Around three hundred announcements a day arrive with the whole printed text attached,

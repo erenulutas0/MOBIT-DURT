@@ -265,6 +265,7 @@ public class SecurityConfig {
                                 // The company's own bids and what became of them. Readable by
                                 // everyone who bids; recording one is an admin act.
                                 "/erp/bulletin/bids",
+                                "/erp/bulletin/briefing",
                                 "/erp/bulletin/notices/*/bid",
                                 // Readable by everyone: what the company watches for is what the
                                 // screen filters by, and an employee has to be able to see why

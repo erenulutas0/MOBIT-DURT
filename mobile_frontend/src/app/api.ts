@@ -1342,6 +1342,37 @@ export async function saveCompanyQualification(
   return response.json();
 }
 
+export type BossBriefing = {
+  period_start: string | null;
+  bids_this_month: number;
+  won_this_month: number;
+  won_amount_this_month: string;
+  /**
+   * How many of the month's wins are counted at our own bid because no price has been published
+   * yet. Shown on the screen: a total that quietly mixed an intention with a signed contract is a
+   * number nobody could defend in a meeting.
+   */
+  won_amount_from_our_own_figure: number;
+  awaiting_result: number;
+  awaiting_amount: string;
+  pending_approval: number;
+  overdue_tasks: number;
+  due_this_week: number;
+  lapsed_credentials: number;
+  expiring_credentials: number;
+  upcoming: Array<{
+    notice_id: number; ikn: string; title: string | null; authority: string | null;
+    tender_at_text: string | null; tender_at: string | null; task_id: number | null;
+  }>;
+};
+
+/** The owner's own screen: what is stopped because of them, and where the money stands. */
+export async function getBossBriefing(): Promise<BossBriefing> {
+  const response = await apiFetch("/erp/bulletin/briefing");
+  if (!response.ok) throw new Error(await errorText(response, "Şirket özeti alınamadı."));
+  return response.json();
+}
+
 export type TenderBid = {
   id: number | null;
   ikn: string | null;

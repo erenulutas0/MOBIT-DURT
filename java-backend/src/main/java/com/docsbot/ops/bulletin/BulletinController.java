@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.docsbot.ops.bulletin.domain.AuthorityProfile;
 import com.docsbot.ops.bulletin.domain.BidMemory;
+import com.docsbot.ops.bulletin.domain.BossBriefing;
 import com.docsbot.ops.bulletin.domain.BidOutcome;
 import com.docsbot.ops.bulletin.domain.TenderBid;
 import com.docsbot.ops.bulletin.domain.CompanyQualification;
@@ -53,12 +54,14 @@ public class BulletinController {
     private final BulletinTaskService taskService;
     private final QualificationService qualificationService;
     private final BidMemoryService bidMemoryService;
+    private final BossBriefingService bossBriefingService;
 
     public BulletinController(TenderNoticeRepository repository, TenderResultRepository resultRepository,
                               BulletinIngestService ingestService,
                               TenderWatchService watchService, BulletinTaskService taskService,
                               QualificationService qualificationService,
-                              BidMemoryService bidMemoryService) {
+                              BidMemoryService bidMemoryService,
+                              BossBriefingService bossBriefingService) {
         this.repository = repository;
         this.resultRepository = resultRepository;
         this.ingestService = ingestService;
@@ -66,6 +69,7 @@ public class BulletinController {
         this.taskService = taskService;
         this.qualificationService = qualificationService;
         this.bidMemoryService = bidMemoryService;
+        this.bossBriefingService = bossBriefingService;
     }
 
     @GetMapping("/notices")
@@ -597,6 +601,70 @@ public class BulletinController {
                     outcome.winningAmount(), outcome.winner(), outcome.gapPercent(),
                     outcome.note());
         }
+    }
+
+
+    /**
+     * The owner's own screen: what is waiting on them, and where the money stands.
+     *
+     * <p>The home screen answers "what do I have to deal with today" and is shaped for whoever does
+     * the work. An owner asks two other questions and gets neither from a task list.
+     */
+    @GetMapping("/briefing")
+    BriefingResponse briefing(JwtAuthenticationToken authentication) {
+        ErpPrincipal.from(authentication);
+        BossBriefing briefing = bossBriefingService.briefing();
+        return new BriefingResponse(
+                briefing.periodStart(),
+                briefing.bidsThisMonth(),
+                briefing.wonThisMonth(),
+                briefing.wonAmountThisMonth(),
+                briefing.wonAmountFromOurOwnFigure(),
+                briefing.awaitingResult(),
+                briefing.awaitingAmount(),
+                briefing.pendingApproval(),
+                briefing.overdueTasks(),
+                briefing.dueThisWeek(),
+                briefing.lapsedCredentials(),
+                briefing.expiringCredentials(),
+                briefing.upcoming().stream()
+                        .map(item -> new UpcomingResponse(
+                                item.noticeId(), item.ikn(), item.title(), item.authority(),
+                                item.tenderAtText(), item.tenderAt(), item.taskId()))
+                        .toList());
+    }
+
+    record BriefingResponse(
+            @JsonProperty("period_start") LocalDate periodStart,
+            @JsonProperty("bids_this_month") int bidsThisMonth,
+            @JsonProperty("won_this_month") int wonThisMonth,
+            @JsonProperty("won_amount_this_month") BigDecimal wonAmountThisMonth,
+            /**
+             * How many of the month's wins are counted at the company's own bid because no price
+             * has been published yet. Carried so a total never passes an intention off as a signed
+             * number.
+             */
+            @JsonProperty("won_amount_from_our_own_figure") int wonAmountFromOurOwnFigure,
+            @JsonProperty("awaiting_result") int awaitingResult,
+            @JsonProperty("awaiting_amount") BigDecimal awaitingAmount,
+            @JsonProperty("pending_approval") int pendingApproval,
+            @JsonProperty("overdue_tasks") int overdueTasks,
+            @JsonProperty("due_this_week") int dueThisWeek,
+            @JsonProperty("lapsed_credentials") int lapsedCredentials,
+            @JsonProperty("expiring_credentials") int expiringCredentials,
+            List<UpcomingResponse> upcoming
+    ) {
+    }
+
+    record UpcomingResponse(
+            @JsonProperty("notice_id") long noticeId,
+            String ikn,
+            String title,
+            String authority,
+            @JsonProperty("tender_at_text") String tenderAtText,
+            @JsonProperty("tender_at") Instant tenderAt,
+            @JsonProperty("task_id") Long taskId
+    ) {
     }
 
     private static String blankToNull(String value) {
