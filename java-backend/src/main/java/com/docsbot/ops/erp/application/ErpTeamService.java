@@ -69,6 +69,28 @@ class ErpTeamService {
         }
     }
 
+    /**
+     * Names who may hand out work inside a team, or clears the post.
+     *
+     * <p>Admin only, and deliberately: deciding who may assign is not itself something a lead may
+     * decide, or the boundary would be one anybody inside it could widen. Null takes the team back
+     * to its old behaviour, where only an admin assigns.
+     */
+    @Transactional
+    void setTeamLead(ErpPrincipal principal, long teamId, Long userId) {
+        ErpValidation.requireAdmin(principal);
+        ErpTeam team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new ErpExceptions.NotFound("Ekip bulunamadı"));
+        if (userId != null && !teamMemberRepository.existsByTeamIdAndUserId(teamId, userId)) {
+            // A lead who is not in the team would be a boundary drawn around somebody standing
+            // outside it.
+            throw new ErpExceptions.BadRequest("Ekip lideri o ekibin üyesi olmalı");
+        }
+        team.assignLead(userId);
+        activityRecorder.record(principal, "TEAM_LEAD_SET", "TEAM", String.valueOf(teamId), null,
+                userId == null ? "lead=none" : "lead=" + userId);
+    }
+
     @Transactional
     void addTeamMember(ErpPrincipal principal, long teamId, long userId) {
         ErpValidation.requireAdmin(principal);

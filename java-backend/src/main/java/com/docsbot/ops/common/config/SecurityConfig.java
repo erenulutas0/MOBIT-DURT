@@ -105,6 +105,17 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/erp/tasks")
                         .hasRole("ADMIN")
+                        // Naming who may assign is not itself something a lead may decide.
+                        .requestMatchers(HttpMethod.PUT, "/erp/teams/*/lead")
+                        .hasRole("ADMIN")
+                        // A team lead opening a job for their own crew. Left merely authenticated
+                        // on purpose: what makes this safe is not the caller's role but whether
+                        // they lead this particular team and whether the people named are in it,
+                        // and only the service can see that. POST /erp/tasks stays admin-only.
+                        .requestMatchers(HttpMethod.POST, "/erp/teams/*/tasks")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.GET, "/erp/teams/led-by-me")
+                        .authenticated()
                         .requestMatchers(
                                 "/erp/workflow-templates",
                                 "/erp/workflow-templates/**")

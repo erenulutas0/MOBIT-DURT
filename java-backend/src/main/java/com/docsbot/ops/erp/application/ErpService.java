@@ -99,6 +99,10 @@ public class ErpService {
         return teamService.createTeam(principal, name);
     }
 
+    public void setTeamLead(ErpPrincipal principal, long teamId, Long userId) {
+        teamService.setTeamLead(principal, teamId, userId);
+    }
+
     public void addTeamMember(ErpPrincipal principal, long teamId, long userId) {
         teamService.addTeamMember(principal, teamId, userId);
     }

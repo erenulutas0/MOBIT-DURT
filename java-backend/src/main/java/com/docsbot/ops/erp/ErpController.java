@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -53,6 +54,7 @@ public class ErpController {
     private final ErpActivityService activityService;
     private final AppUpdateService appUpdateService;
     private final MessageMediaStorage mediaStorage;
+    private final com.docsbot.ops.erp.application.TeamLeadService teamLeadService;
 
     public ErpController(
             ErpService erpService,
@@ -60,7 +62,8 @@ public class ErpController {
             ErpAnalyticsService analyticsService,
             ErpActivityService activityService,
             AppUpdateService appUpdateService,
-            MessageMediaStorage mediaStorage
+            MessageMediaStorage mediaStorage,
+            com.docsbot.ops.erp.application.TeamLeadService teamLeadService
     ) {
         this.erpService = erpService;
         this.notificationService = notificationService;
@@ -68,6 +71,7 @@ public class ErpController {
         this.activityService = activityService;
         this.appUpdateService = appUpdateService;
         this.mediaStorage = mediaStorage;
+        this.teamLeadService = teamLeadService;
     }
 
     @GetMapping("/overview")
@@ -275,6 +279,70 @@ public class ErpController {
             @PathVariable long userId
     ) {
         erpService.removeTeamMember(ErpPrincipal.from(authentication), teamId, userId);
+    }
+
+    /**
+     * Names the one member of a team allowed to hand out work inside it, or clears the post.
+     *
+     * <p>Admin only: deciding who may assign is not itself something a lead may decide, or the
+     * boundary would be one anybody inside it could widen.
+     */
+    @PutMapping("/teams/{teamId}/lead")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void setTeamLead(
+            JwtAuthenticationToken authentication,
+            @PathVariable long teamId,
+            @RequestBody(required = false) TeamLeadRequest request
+    ) {
+        erpService.setTeamLead(ErpPrincipal.from(authentication), teamId,
+                request == null ? null : request.userId());
+    }
+
+    record TeamLeadRequest(@com.fasterxml.jackson.annotation.JsonProperty("user_id") Long userId) {
+    }
+
+    /** The teams the caller leads — what the app needs to know whether to offer them the form. */
+    @GetMapping("/teams/led-by-me")
+    List<ErpDtos.TeamResponse> teamsILead(JwtAuthenticationToken authentication) {
+        return teamLeadService.ledBy(ErpPrincipal.from(authentication)).stream()
+                .map(ErpDtos.TeamResponse::from)
+                .toList();
+    }
+
+    /**
+     * Opens a task inside one team, for the person who runs it.
+     *
+     * <p>Its own door rather than a relaxation of POST /erp/tasks: that route stays admin-only and
+     * untouched, and what makes this one safe is checked in the service, because the question is
+     * not what role the caller holds but whether they lead this particular team and whether the
+     * people being named are in it.
+     */
+    @PostMapping("/teams/{teamId}/tasks")
+    ErpDtos.TaskResponse createTeamTask(
+            JwtAuthenticationToken authentication,
+            @PathVariable long teamId,
+            @Valid @RequestBody CreateTeamTaskRequest request
+    ) {
+        return ErpDtos.TaskResponse.from(teamLeadService.createTeamTask(
+                ErpPrincipal.from(authentication),
+                teamId,
+                request.title(),
+                request.description(),
+                request.assigneeUserIds() == null ? List.of() : request.assigneeUserIds(),
+                request.priority(),
+                request.deadlineAt()));
+    }
+
+    record CreateTeamTaskRequest(
+            @jakarta.validation.constraints.NotBlank String title,
+            String description,
+            /** Empty means the whole team, which is the common case for a crew job. */
+            @com.fasterxml.jackson.annotation.JsonProperty("assignee_user_ids")
+            List<Long> assigneeUserIds,
+            String priority,
+            @com.fasterxml.jackson.annotation.JsonProperty("deadline_at")
+            java.time.Instant deadlineAt
+    ) {
     }
 
     @GetMapping("/tasks")
