@@ -11,6 +11,7 @@ import { TenderBulletinPanel } from "./components/TenderBulletinPanel";
 import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
 import { BidMemoryPanel } from "./components/BidMemoryPanel";
 import { BossBriefingPanel } from "./components/BossBriefingPanel";
+import { RivalPanel } from "./components/RivalPanel";
 import { SetupPanel } from "./components/SetupPanel";
 import { TodayPanel } from "./components/TodayPanel";
 import { AuthFeedback, AuthModeToggle } from "./components/AuthPanels";
@@ -126,7 +127,7 @@ import type { KnowledgeGraphData, KnowledgeGraphEdge, KnowledgeGraphNode } from 
 import {
   Users, ClipboardList, CheckSquare, MessageSquare,
   Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen,
-  ChevronRight, Search, Building2, Swords, TrendingUp,
+  ChevronRight, Search, Building2, Swords, TrendingUp, Users,
   AlertTriangle, CheckCircle2, XCircle,
   Download, Eye, Link, Tag, Paperclip, Pencil,
   UserCheck, CalendarDays, GitBranch,
@@ -845,6 +846,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
   const [showBulletin, setShowBulletin] = useState(false);
   const [showBids, setShowBids] = useState(false);
   const [showBriefing, setShowBriefing] = useState(false);
+  const [showRivals, setShowRivals] = useState(false);
   /** The bulletin opened from the setup checklist lands on the profile form, not the list. */
   const [bulletinAtProfile, setBulletinAtProfile] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
@@ -1037,6 +1039,26 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
           </button>
           )}
 
+          {/* Firma Takibi — who we keep meeting across the table. Public results, read the other
+              way round: the bulletin lists tenders, this lists the firms that win them. */}
+          {isAdmin && (
+          <button onClick={() => setShowRivals(true)}
+            className="w-full bg-card border border-border rounded-xl p-4 text-left active:scale-[0.98] transition-transform">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Users className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">Firma Takibi</p>
+                <p className="text-xs text-muted-foreground">
+                  Rakip hangi işleri alıyor, hangi idareden, ne kırımla
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </button>
+          )}
+
           {/* Şirket Belgelerim — the company's own expiring paperwork. Its own entry because the
               question "is our imza sirküleri still valid" is asked days before a bid, not while
               browsing an archive. */}
@@ -1188,6 +1210,8 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
       )}
 
       {showBids && <BidMemoryPanel onClose={() => setShowBids(false)} />}
+
+      {showRivals && <RivalPanel onClose={() => setShowRivals(false)} />}
 
       {showBriefing && (
         <BossBriefingPanel

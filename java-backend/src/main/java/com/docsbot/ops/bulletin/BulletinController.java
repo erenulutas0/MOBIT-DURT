@@ -26,6 +26,7 @@ import com.docsbot.ops.bulletin.domain.BidOutcome;
 import com.docsbot.ops.bulletin.domain.TenderBid;
 import com.docsbot.ops.bulletin.domain.CompanyQualification;
 import com.docsbot.ops.bulletin.domain.QualificationCheck;
+import com.docsbot.ops.bulletin.domain.RivalProfile;
 import com.docsbot.ops.bulletin.domain.TenderCategory;
 import com.docsbot.ops.bulletin.domain.TenderNotice;
 import com.docsbot.ops.bulletin.domain.TenderResult;
@@ -55,13 +56,15 @@ public class BulletinController {
     private final QualificationService qualificationService;
     private final BidMemoryService bidMemoryService;
     private final BossBriefingService bossBriefingService;
+    private final RivalService rivalService;
 
     public BulletinController(TenderNoticeRepository repository, TenderResultRepository resultRepository,
                               BulletinIngestService ingestService,
                               TenderWatchService watchService, BulletinTaskService taskService,
                               QualificationService qualificationService,
                               BidMemoryService bidMemoryService,
-                              BossBriefingService bossBriefingService) {
+                              BossBriefingService bossBriefingService,
+                              RivalService rivalService) {
         this.repository = repository;
         this.resultRepository = resultRepository;
         this.ingestService = ingestService;
@@ -70,6 +73,7 @@ public class BulletinController {
         this.qualificationService = qualificationService;
         this.bidMemoryService = bidMemoryService;
         this.bossBriefingService = bossBriefingService;
+        this.rivalService = rivalService;
     }
 
     @GetMapping("/notices")
@@ -664,6 +668,93 @@ public class BulletinController {
             @JsonProperty("tender_at_text") String tenderAtText,
             @JsonProperty("tender_at") Instant tenderAt,
             @JsonProperty("task_id") Long taskId
+    ) {
+    }
+
+
+    /**
+     * Firms matching a search term, busiest first — the box you type a competitor's name into.
+     */
+    @GetMapping("/rivals")
+    List<RivalMatch> rivals(
+            JwtAuthenticationToken authentication,
+            @RequestParam(name = "q", required = false) String term
+    ) {
+        ErpPrincipal.from(authentication);
+        return rivalService.search(term).stream()
+                .map(row -> new RivalMatch((String) row[0], ((Number) row[1]).intValue()))
+                .toList();
+    }
+
+    record RivalMatch(String winner, int contracts) {
+    }
+
+    /**
+     * One firm's record: what it takes, from whom, at what discount — and how often it has taken
+     * work this company bid for.
+     *
+     * <p>The mirror of the idare profile. That one answers "what does this buyer pay"; this one
+     * answers "who am I bidding against, and how do they price".
+     */
+    @GetMapping("/rivals/profile")
+    RivalProfileResponse rivalProfile(
+            JwtAuthenticationToken authentication,
+            @RequestParam(name = "winner") String winner
+    ) {
+        ErpPrincipal.from(authentication);
+        String name = blankToNull(winner);
+        if (name == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Firma adı gerekli");
+        }
+        RivalProfile profile = rivalService.profile(name);
+        return new RivalProfileResponse(
+                profile.winner(),
+                profile.contracts(),
+                profile.totalAmount(),
+                profile.currency(),
+                profile.distinctAuthorities(),
+                profile.medianDiscount(),
+                profile.beatUs(),
+                profile.authorities().stream()
+                        .map(count -> new NameCount(count.name(), count.contracts())).toList(),
+                profile.provinces().stream()
+                        .map(count -> new NameCount(count.name(), count.contracts())).toList(),
+                profile.recent().stream()
+                        .map(contract -> new RivalContractResponse(
+                                contract.id(), contract.ikn(), contract.title(),
+                                contract.authority(), contract.province(), contract.amount(),
+                                contract.contractDate(), contract.discountPercent()))
+                        .toList());
+    }
+
+    record RivalProfileResponse(
+            String winner,
+            int contracts,
+            @JsonProperty("total_amount") BigDecimal totalAmount,
+            String currency,
+            @JsonProperty("distinct_authorities") int distinctAuthorities,
+            /** Null below three usable contracts: two is an anecdote, not a pricing habit. */
+            @JsonProperty("median_discount") BigDecimal medianDiscount,
+            /** How many of this company's own bids this firm has taken. */
+            @JsonProperty("beat_us") int beatUs,
+            List<NameCount> authorities,
+            List<NameCount> provinces,
+            List<RivalContractResponse> recent
+    ) {
+    }
+
+    record NameCount(String name, int contracts) {
+    }
+
+    record RivalContractResponse(
+            Long id,
+            String ikn,
+            String title,
+            String authority,
+            String province,
+            BigDecimal amount,
+            @JsonProperty("contract_date") LocalDate contractDate,
+            @JsonProperty("discount_percent") BigDecimal discountPercent
     ) {
     }
 

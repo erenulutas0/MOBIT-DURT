@@ -1342,6 +1342,46 @@ export async function saveCompanyQualification(
   return response.json();
 }
 
+export type RivalMatch = { winner: string; contracts: number };
+
+export type RivalProfile = {
+  winner: string;
+  contracts: number;
+  total_amount: string;
+  currency: string;
+  distinct_authorities: number;
+  /** Null below three usable contracts: two is an anecdote, not a pricing habit. */
+  median_discount: string | null;
+  /**
+   * How many of our own bids this firm has taken. The bulletin says who won; only our bid memory
+   * says who won against us, which is why no competing service can show this line.
+   */
+  beat_us: number;
+  authorities: Array<{ name: string; contracts: number }>;
+  provinces: Array<{ name: string; contracts: number }>;
+  recent: Array<{
+    id: number | null; ikn: string; title: string | null; authority: string | null;
+    province: string | null; amount: string | null; contract_date: string | null;
+    discount_percent: string | null;
+  }>;
+};
+
+/** Firms whose name matches, busiest first. */
+export async function searchRivals(term: string): Promise<RivalMatch[]> {
+  const response = await apiFetch(`/erp/bulletin/rivals?q=${encodeURIComponent(term)}`);
+  if (!response.ok) throw new Error(await errorText(response, "Firma araması yapılamadı."));
+  return response.json();
+}
+
+/** One firm's record: what it takes, from whom, at what discount. */
+export async function getRivalProfile(winner: string): Promise<RivalProfile> {
+  const response = await apiFetch(
+    `/erp/bulletin/rivals/profile?winner=${encodeURIComponent(winner)}`
+  );
+  if (!response.ok) throw new Error(await errorText(response, "Firma bilgisi alınamadı."));
+  return response.json();
+}
+
 export type BossBriefing = {
   period_start: string | null;
   bids_this_month: number;

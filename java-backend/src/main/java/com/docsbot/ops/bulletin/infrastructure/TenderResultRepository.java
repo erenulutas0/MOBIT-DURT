@@ -80,6 +80,20 @@ public interface TenderResultRepository extends JpaRepository<TenderResult, Long
      */
     List<TenderResult> findByAuthorityOrderByContractDateDescIdDesc(String authority);
 
+    /**
+     * Firms whose name contains the search term, the busiest first.
+     *
+     * <p>Counted in SQL rather than by loading the contracts: there are three thousand firms in the
+     * results and a search box must not pull a megabyte of announcement text to draw ten rows.
+     */
+    @Query("select result.winner, count(result) from TenderResult result "
+            + "where result.winner is not null and lower(result.winner) like lower(concat('%', :term, '%')) "
+            + "group by result.winner order by count(result) desc, result.winner asc")
+    List<Object[]> searchWinners(@Param("term") String term, Pageable page);
+
+    /** Every contract one firm has taken, newest first — the rows a firm profile is built from. */
+    List<TenderResult> findByWinnerOrderByContractDateDescIdDesc(String winner);
+
     /** Same retention window as the announcements, and for the same reason: it is a public file. */
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.transaction.annotation.Transactional
