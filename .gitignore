@@ -25,3 +25,6 @@ data/originals/*
 vault/ihaleler/*
 !vault/ihaleler/.gitkeep
 vault_backup_*/
+
+# Dahili karar notu; bu depo herkese açık olduğu için bilerek sürüm kontrolü dışında tutuluyor.
+docs/REGULASYON-VE-ACIK-RISKLER.md
