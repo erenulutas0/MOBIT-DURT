@@ -179,6 +179,20 @@ jobs:
           ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
             'chmod +x /opt/docsbot/update-tenants.sh && /opt/docsbot/update-tenants.sh'
 
+      # Cron runs /opt/docsbot/scripts/backup.sh nightly, and nothing was keeping that copy in step
+      # with the repo — which is how it went on backing up one database and two directories long
+      # after provision-tenant.sh started giving every customer their own. Same lesson as the
+      # sidecar and update-tenants.sh: a script that lives only on the server drifts, and the drift
+      # is invisible until the night you need the backup.
+      - name: Update the backup script
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            'mkdir -p /opt/docsbot/scripts'
+          scp -i ~/.ssh/deploy_key scripts/backup.sh \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/docsbot/scripts/backup.sh
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            'chmod +x /opt/docsbot/scripts/backup.sh && bash -n /opt/docsbot/scripts/backup.sh'
+
       - name: Clean up SSH key
         if: always()
         run: rm -f ~/.ssh/deploy_key
