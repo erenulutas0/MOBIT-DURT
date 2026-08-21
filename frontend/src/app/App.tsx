@@ -29,6 +29,7 @@ const TenderBulletinPage = lazy(() => import("./pages/TenderBulletinPage").then(
 const TenderResultsPage = lazy(() => import("./pages/TenderResultsPage").then((m) => ({ default: m.TenderResultsPage })));
 const BidMemoryPage = lazy(() => import("./pages/BidMemoryPage").then((m) => ({ default: m.BidMemoryPage })));
 const CompanyBriefingPage = lazy(() => import("./pages/CompanyBriefingPage").then((m) => ({ default: m.CompanyBriefingPage })));
+const CompanyQualificationPage = lazy(() => import("./pages/CompanyQualificationPage").then((m) => ({ default: m.CompanyQualificationPage })));
 const FeedbackPage = lazy(() => import("./pages/FeedbackPage").then((m) => ({ default: m.FeedbackPage })));
 
 function PageFallback() {
@@ -123,6 +124,7 @@ export default function App() {
           {page === "tender-results" && isAdmin(session) && <TenderResultsPage />}
           {page === "bid-memory" && isAdmin(session) && <BidMemoryPage />}
           {page === "company-briefing" && isAdmin(session) && <CompanyBriefingPage />}
+          {page === "company-qualification" && isAdmin(session) && <CompanyQualificationPage />}
           {page === "feedback" && isAdmin(session) && <FeedbackPage />}
           </Suspense>
         </main>

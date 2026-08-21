@@ -9,6 +9,7 @@ import { TenantServerSheet } from "./components/TenantServerSheet";
 import { TenderBriefPanel } from "./components/TenderBriefPanel";
 import { TenderBulletinPanel } from "./components/TenderBulletinPanel";
 import { CompanyCredentialsPanel } from "./components/CompanyCredentialsPanel";
+import { CompanyQualificationSheet } from "./components/CompanyQualificationSheet";
 import { BidMemoryPanel } from "./components/BidMemoryPanel";
 import { BossBriefingPanel } from "./components/BossBriefingPanel";
 import { RivalPanel } from "./components/RivalPanel";
@@ -847,6 +848,9 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
   const [showBids, setShowBids] = useState(false);
   const [showBriefing, setShowBriefing] = useState(false);
   const [showRivals, setShowRivals] = useState(false);
+  const [showQualification, setShowQualification] = useState(false);
+  /** Bumped on save so the setup checklist re-probes instead of still asking for what was entered. */
+  const [setupRevision, setSetupRevision] = useState(0);
   /** The bulletin opened from the setup checklist lands on the profile form, not the list. */
   const [bulletinAtProfile, setBulletinAtProfile] = useState(false);
   const [appUpdate, setAppUpdate] = useState<MobileAppUpdateInfo | null>(null);
@@ -912,7 +916,9 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
             to say is what to do about it. It removes itself once there is nothing left to say. */}
         {isAdmin && (
           <SetupPanel
+            key={setupRevision}
             onOpenProfile={() => { setBulletinAtProfile(true); setShowBulletin(true); }}
+            onOpenQualification={() => setShowQualification(true)}
             onOpenCredentials={() => setShowCredentials(true)}
             onOpenArchive={() => setTab("tender")}
           />
@@ -1207,6 +1213,15 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
 
       {showCredentials && (
         <CompanyCredentialsPanel onClose={() => setShowCredentials(false)} />
+      )}
+
+      {/* Reachable from the setup checklist as well as from inside a tender: a company should be
+          able to say what it can prove without first having to find a tender to prove it for. */}
+      {showQualification && (
+        <CompanyQualificationSheet
+          onClose={() => setShowQualification(false)}
+          onSaved={() => setSetupRevision(revision => revision + 1)}
+        />
       )}
 
       {showBids && <BidMemoryPanel onClose={() => setShowBids(false)} />}

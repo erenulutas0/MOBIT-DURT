@@ -1,23 +1,28 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronRight, FolderUp, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import {
+  Check, ChevronRight, FolderUp, ShieldCheck, SlidersHorizontal, Trophy,
+} from "lucide-react";
 
 import {
-  getCompanyCredentials, getTenderDocumentsPage, getTenderProfile, tenderProfileIsSet,
+  companyQualificationIsSet, getCompanyCredentials, getCompanyQualification,
+  getTenderDocumentsPage, getTenderProfile, tenderProfileIsSet,
 } from "../api";
 
 /**
- * "Kurulum" — the three things a new company has to do before any of this works for them.
+ * "Kurulum" — the four things a new company has to do before any of this works for them.
  *
  * <p>On the first morning the product is technically complete and practically empty: the bulletin
  * shows all four hundred of today's announcements because nothing has been narrowed, the expiry
- * warnings warn about nothing, and "Belgelere Sor" has no documents to answer from. Everything
- * looks like it is working, which is worse than looking broken — there is nothing to fix.
+ * warnings warn about nothing, the yeterlik checklist answers "bilinmiyor" on every line because
+ * it has no figures to compare against, and "Belgelere Sor" has no documents to answer from.
+ * Everything looks like it is working, which is worse than looking broken — there is nothing to
+ * fix.
  *
  * <p>So the home screen names the three steps and gets out of the way. State is read from the
  * server every time rather than stored in a flag: a company that deletes its documents is back to
  * an empty archive whatever a "seen the tour" bit says, and the panel has to be able to say so.
  *
- * <p>Admin-only, because all three are admin actions. An employee cannot set the tender profile or
+ * <p>Admin-only, because all four are admin actions. An employee cannot set the tender profile or
  * add company paperwork, and a checklist you have no way to complete is just a reproach.
  */
 
@@ -31,12 +36,16 @@ type Step = {
   onPress: () => void;
 };
 
-export function SetupPanel({ onOpenProfile, onOpenCredentials, onOpenArchive }: {
+export function SetupPanel({
+  onOpenProfile, onOpenQualification, onOpenCredentials, onOpenArchive,
+}: {
   onOpenProfile: () => void;
+  onOpenQualification: () => void;
   onOpenCredentials: () => void;
   onOpenArchive: () => void;
 }) {
   const [profileSet, setProfileSet] = useState<boolean | null>(null);
+  const [qualificationSet, setQualificationSet] = useState<boolean | null>(null);
   const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
   const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
 
@@ -47,13 +56,18 @@ export function SetupPanel({ onOpenProfile, onOpenCredentials, onOpenArchive }: 
       fail: () => { if (!cancelled) apply(null); },
     });
 
-    // Three separate probes so one endpoint being down costs its own line and nothing else. The
-    // first two repeat what TodayPanel asks for; that is two cheap GETs against a single-row
-    // profile and a short list, and worth more than the coupling that sharing them would cost.
+    // Separate probes so one endpoint being down costs its own line and nothing else. Two of them
+    // repeat what TodayPanel asks for; that is a pair of cheap GETs against a single-row profile
+    // and a short list, and worth more than the coupling that sharing them would cost.
     const profile = set(setProfileSet);
     void getTenderProfile()
       .then(value => profile.ok(tenderProfileIsSet(value)))
       .catch(profile.fail);
+
+    const qualification = set(setQualificationSet);
+    void getCompanyQualification()
+      .then(value => qualification.ok(companyQualificationIsSet(value)))
+      .catch(qualification.fail);
 
     const credentials = set(setHasCredentials);
     void getCompanyCredentials()
@@ -77,6 +91,19 @@ export function SetupPanel({ onOpenProfile, onOpenCredentials, onOpenArchive }: 
       hint: "Hangi işler, hangi iller — bülten ve sabah bildirimi buna göre süzülür",
       icon: SlidersHorizontal,
       onPress: onOpenProfile,
+    },
+    {
+      // Second, because once the right tenders are on screen the next question every one of them
+      // raises is whether the company can bid at all — and until these figures exist the yeterlik
+      // checklist can only answer "bilinmiyor", which reads as a broken feature rather than a
+      // missing input. Buried until now behind a tender's own qualification section, which meant
+      // finding a tender before you could say anything about yourself.
+      key: "qualification",
+      done: qualificationSet,
+      label: "Yeterlik bilgilerinizi girin",
+      hint: "Ciro, iş deneyimi, banka referansı — her ihalede girebilir misiniz, söyleyelim",
+      icon: Trophy,
+      onPress: onOpenQualification,
     },
     {
       key: "credentials",

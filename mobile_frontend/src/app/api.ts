@@ -1323,6 +1323,22 @@ export type CompanyQualification = {
   updated_at: string | null;
 };
 
+/**
+ * Whether the company has told us anything at all about what it can prove.
+ *
+ * <p>Any one figure counts. A company that has entered its turnover and nothing else still gets a
+ * real answer on every tender whose only bar is turnover, and calling that "not set up" would send
+ * it back to a form it has already filled in as far as it can. The record itself always exists —
+ * it is a single row created empty — so its presence says nothing and the figures have to be read.
+ */
+export function companyQualificationIsSet(value: CompanyQualification): boolean {
+  return [
+    value.experience_amount, value.turnover_last_year, value.turnover_previous_year,
+    value.sector_turnover, value.current_ratio, value.equity_ratio,
+    value.bank_debt_ratio, value.bank_reference_limit,
+  ].some(figure => figure !== null && figure !== "");
+}
+
 /** The company's own yeterlik figures — entered once instead of remembered by whoever bids. */
 export async function getCompanyQualification(): Promise<CompanyQualification> {
   const response = await apiFetch("/erp/bulletin/company-qualification");

@@ -682,6 +682,11 @@ export type TenderWatchProfile = {
   updated_at: string | null;
 };
 
+/** Whether the company has narrowed the bulletin at all. Empty on both counts means it has not. */
+export function tenderProfileIsSet(profile: TenderWatchProfile): boolean {
+  return profile.categories.length > 0 || profile.provinces.length > 0;
+}
+
 /** What the company watches for. Empty lists mean the whole bulletin. */
 export async function getTenderProfile(): Promise<TenderWatchProfile> {
   const response = await apiFetch("/api/erp/bulletin/profile");
@@ -1407,6 +1412,62 @@ export type BidOutcomeRow = {
   gap_percent: string | null;
   note: string | null;
 };
+
+/**
+ * What the company can prove about itself when an idare asks.
+ *
+ * <p>Every figure is nullable and a missing one means "not entered" rather than zero. The yeterlik
+ * checklist has to be able to say "bilinmiyor" instead of "you do not qualify", because the second
+ * is a claim and a wrong one sends a company away from a tender it could have won.
+ */
+export type CompanyQualification = {
+  experience_amount: string | null;
+  experience_date: string | null;
+  experience_subject: string | null;
+  turnover_last_year: string | null;
+  turnover_previous_year: string | null;
+  sector_turnover: string | null;
+  current_ratio: string | null;
+  equity_ratio: string | null;
+  bank_debt_ratio: string | null;
+  bank_reference_limit: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+};
+
+/**
+ * Whether the company has told us anything at all about what it can prove.
+ *
+ * <p>Any one figure counts. A company that has entered its turnover and nothing else still gets a
+ * real answer on every tender whose only bar is turnover, and calling that "not set up" would send
+ * it back to a form it has already filled in as far as it can. The record itself always exists —
+ * it is a single row created empty — so its presence says nothing and the figures have to be read.
+ */
+export function companyQualificationIsSet(value: CompanyQualification): boolean {
+  return [
+    value.experience_amount, value.turnover_last_year, value.turnover_previous_year,
+    value.sector_turnover, value.current_ratio, value.equity_ratio,
+    value.bank_debt_ratio, value.bank_reference_limit,
+  ].some(figure => figure !== null && figure !== "");
+}
+
+export async function getCompanyQualification(): Promise<CompanyQualification> {
+  const response = await apiFetch("/api/erp/bulletin/company-qualification");
+  if (!response.ok) throw new Error("Yeterlik bilgileri alınamadı.");
+  return response.json();
+}
+
+export async function saveCompanyQualification(
+  payload: Partial<CompanyQualification>
+): Promise<CompanyQualification> {
+  const response = await apiFetch("/api/erp/bulletin/company-qualification", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("Yeterlik bilgileri kaydedilemedi.");
+  return response.json();
+}
 
 export type BidMemory = {
   total_bids: number;
