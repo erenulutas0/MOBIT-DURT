@@ -76,4 +76,21 @@ describe("MessageActionSheets", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Delete for/i)).not.toBeInTheDocument();
   });
+
+  it("başkasının mesajında herkesten silmeyi hiç önermez", async () => {
+    // Sunucu artik bunu 403 ile reddediyor; her zaman basarisiz olan bir secenek sunmak,
+    // hic sunmamaktan kotudur.
+    render(
+      <DeleteActionSheet
+        title="Teklifimiz 8.250.000"
+        onClose={vi.fn()}
+        onDeleteForMe={vi.fn()}
+        onDeleteForEveryone={vi.fn()}
+        canDeleteForEveryone={false}
+      />
+    );
+
+    expect(screen.queryByText("Herkesten Sil")).not.toBeInTheDocument();
+    expect(screen.getByText("Benden Sil")).toBeInTheDocument();
+  });
 });

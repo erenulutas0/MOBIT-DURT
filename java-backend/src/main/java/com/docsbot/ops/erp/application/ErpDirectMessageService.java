@@ -248,6 +248,15 @@ class ErpDirectMessageService {
                     null);
             return;
         }
+        // Deleting for everyone is the sender's to do, not the reader's. visibleTo() above answers
+        // "may this person see it", which is true for both sides of a conversation, and it was the
+        // only check standing between a recipient and the permanent removal of somebody else's
+        // message — the row and, after commit, the media file with it. The room-chat sibling
+        // (DocumentGroupService) has always drawn this line; this is the same line.
+        String senderKey = actorKey(message.getSenderType(), message.getSenderUserId());
+        if (!principal.admin() && !senderKey.equals(actorKey(principal))) {
+            throw new ErpExceptions.Forbidden("Yalnızca gönderen bu mesajı herkesten silebilir");
+        }
         String mediaData = message.getMediaData();
         messageRepository.delete(message);
         publishDirectMessageDeletedEvents(message);

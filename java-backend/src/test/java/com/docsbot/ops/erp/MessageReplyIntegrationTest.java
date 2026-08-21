@@ -21,6 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -121,6 +122,36 @@ class MessageReplyIntegrationTest {
                                 """.formatted(adminReplyId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reply_to_message_id").value(adminReplyId));
+    }
+
+    @Test
+    void onlyTheSenderMayDeleteADirectMessageForEveryone() throws Exception {
+        // Before this was guarded, the single check on the delete path was visibleTo(), which is
+        // true for both sides of a conversation — so a recipient could permanently remove the
+        // sender's own message and, after commit, the media file with it.
+        String adminToken = loginAdmin();
+        Employee alice = createApprovedEmployee(adminToken, "Alice Sil", "alice.sil@example.com");
+        Employee bob = createApprovedEmployee(adminToken, "Bob Sil", "bob.sil@example.com");
+
+        long messageId = sendDirectText(alice.token(), bob.id(), "Teklifimiz 8.250.000", null);
+
+        // The recipient may not delete what he did not write.
+        mockMvc.perform(delete("/erp/messages/" + messageId + "?scope=everyone")
+                        .header("Authorization", bearer(bob.token())))
+                .andExpect(status().isForbidden());
+        assertThat(directMessageRepository.findById(messageId)).isPresent();
+
+        // Hiding it for himself is still his to do, and leaves the row where it is.
+        mockMvc.perform(delete("/erp/messages/" + messageId + "?scope=me")
+                        .header("Authorization", bearer(bob.token())))
+                .andExpect(status().isNoContent());
+        assertThat(directMessageRepository.findById(messageId)).isPresent();
+
+        // The sender may.
+        mockMvc.perform(delete("/erp/messages/" + messageId + "?scope=everyone")
+                        .header("Authorization", bearer(alice.token())))
+                .andExpect(status().isNoContent());
+        assertThat(directMessageRepository.findById(messageId)).isEmpty();
     }
 
     @Test

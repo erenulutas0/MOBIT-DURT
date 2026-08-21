@@ -5,11 +5,14 @@ export function DeleteActionSheet({
   onClose,
   onDeleteForMe,
   onDeleteForEveryone,
+  canDeleteForEveryone = true,
 }: {
   title: string;
   onClose: () => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
+  /** Only the author may remove a message from the other side's history; the server enforces it. */
+  canDeleteForEveryone?: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-end px-4 pb-4">
@@ -28,13 +31,17 @@ export function DeleteActionSheet({
             <X className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onDeleteForEveryone}
-          className="w-full py-3 rounded-xl bg-red-500/15 text-sm font-semibold text-red-300 flex items-center justify-center gap-2"
-        >
-          <Trash2 className="w-4 h-4" aria-hidden="true" /> Herkesten Sil
-        </button>
+        {/* Hidden rather than disabled on somebody else's message: an offer that always fails is
+            worse than no offer, and the server now answers it with 403. */}
+        {canDeleteForEveryone && (
+          <button
+            type="button"
+            onClick={onDeleteForEveryone}
+            className="w-full py-3 rounded-xl bg-red-500/15 text-sm font-semibold text-red-300 flex items-center justify-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" aria-hidden="true" /> Herkesten Sil
+          </button>
+        )}
         <button
           type="button"
           onClick={onDeleteForMe}

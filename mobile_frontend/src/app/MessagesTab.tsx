@@ -2989,6 +2989,11 @@ function MessagesTab({
           onClose={() => setDirectActionTarget(null)}
           onDeleteForMe={deleteDirectMessageForMe}
           onDeleteForEveryone={() => void deleteDirectMessageForEveryone()}
+          canDeleteForEveryone={(() => {
+            const target = directMessages.find(item => item.id === directActionTarget.messageId);
+            // Unknown message: leave the option, and let the server have the last word.
+            return target ? directMessageOwn(target) : true;
+          })()}
         />
       )}
 
