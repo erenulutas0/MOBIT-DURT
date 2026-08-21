@@ -31,8 +31,11 @@ class EmployeeAuthenticationServiceTest {
     private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
     private final AuthAuditRecorder auditRecorder = mock(AuthAuditRecorder.class);
 
+    private final LoginFailureRecorder loginFailureRecorder = new LoginFailureRecorder(userRepository);
+
     private final EmployeeAuthenticationService service = new EmployeeAuthenticationService(
-            userRepository, passwordEncoder, refreshTokenService, auditRecorder);
+            userRepository, passwordEncoder, refreshTokenService, auditRecorder,
+            (com.docsbot.ops.erp.application.NotificationService) null, "", loginFailureRecorder);
 
     private ErpUser user;
 
@@ -41,6 +44,10 @@ class EmployeeAuthenticationServiceTest {
         user = ErpUser.approvedEmployee("Ada", "ada@mobit.com.tr", null, "hashed", NOW);
         ReflectionTestUtils.setField(user, "id", 7L);
         when(userRepository.findByEmailIgnoreCase("ada@mobit.com.tr")).thenReturn(Optional.of(user));
+        // The recorder re-reads the account inside its own transaction; here that is the same
+        // instance, so the threshold still accumulates. What a mock cannot show is whether the
+        // increment survives the rollback the rejection causes — see the integration test.
+        lenient().when(userRepository.findById(7L)).thenReturn(Optional.of(user));
         lenient().when(refreshTokenService.issueSession(anyString(), anyString(), anyString(), anyString(), anyLong(), anyString()))
                 .thenReturn(new AuthSessionResponse("EMPLOYEE", "Ada", 7L, "ada@mobit.com.tr", "a", "Bearer", 3600, "r", 100));
     }

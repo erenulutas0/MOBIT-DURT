@@ -25,6 +25,8 @@ public class EmployeeAuthenticationService {
     private final RefreshTokenService refreshTokenService;
     private final AuthAuditRecorder auditRecorder;
     private final NotificationService notificationService;
+    /** Counts failures outside this service's transaction, which a rejection rolls back. */
+    private final LoginFailureRecorder loginFailureRecorder;
     /**
      * The code a colleague is given so they can sign themselves up.
      *
@@ -47,7 +49,7 @@ public class EmployeeAuthenticationService {
             AuthAuditRecorder auditRecorder
     ) {
         this(userRepository, passwordEncoder, refreshTokenService, auditRecorder,
-                (NotificationService) null, "");
+                (NotificationService) null, "", null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -58,10 +60,11 @@ public class EmployeeAuthenticationService {
             AuthAuditRecorder auditRecorder,
             ObjectProvider<NotificationService> notificationService,
             @org.springframework.beans.factory.annotation.Value("${docsbot.registration.join-code:}")
-            String joinCode
+            String joinCode,
+            LoginFailureRecorder loginFailureRecorder
     ) {
         this(userRepository, passwordEncoder, refreshTokenService, auditRecorder,
-                notificationService.getIfAvailable(), joinCode);
+                notificationService.getIfAvailable(), joinCode, loginFailureRecorder);
     }
 
     EmployeeAuthenticationService(
@@ -70,8 +73,10 @@ public class EmployeeAuthenticationService {
             RefreshTokenService refreshTokenService,
             AuthAuditRecorder auditRecorder,
             NotificationService notificationService,
-            String joinCode
+            String joinCode,
+            LoginFailureRecorder loginFailureRecorder
     ) {
+        this.loginFailureRecorder = loginFailureRecorder;
         this.joinCode = joinCode == null ? "" : joinCode.trim();
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -101,8 +106,10 @@ public class EmployeeAuthenticationService {
 
         boolean passwordOk = user != null && passwordEncoder.matches(password, user.getPasswordHash());
         if (!passwordOk) {
-            if (user != null) {
-                user.registerFailedLogin(now);
+            if (user != null && loginFailureRecorder != null) {
+                // Its own transaction: the throw two lines down rolls this one back, and with it
+                // any counter incremented here.
+                loginFailureRecorder.registerFailure(user.getId(), now);
             }
             // Same generic message whether the identifier is unknown or the password is wrong — no
             // account enumeration.

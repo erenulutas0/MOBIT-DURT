@@ -151,6 +151,11 @@ public class ErpUser {
         return lockedUntil;
     }
 
+    /** Read by the lockout test, which has to assert the stored row rather than an object in a mock. */
+    public int getFailedLoginCount() {
+        return failedLoginCount;
+    }
+
     /** Records a failed login; locks the account once the failure threshold is crossed. */
     public void registerFailedLogin(Instant now) {
         failedLoginCount += 1;
