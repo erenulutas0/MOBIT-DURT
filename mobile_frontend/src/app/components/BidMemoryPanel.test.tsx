@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BidMemory } from "../api";
@@ -29,7 +30,7 @@ describe("BidMemoryPanel", () => {
   });
 
   it("kaybettiğinde ne kadar yukarıda kaldığını söyler", async () => {
-    render(<BidMemoryPanel onClose={vi.fn()} />);
+    render(<BidMemoryPanel onClose={vi.fn()} onOpenBulletin={vi.fn()} />);
 
     // The only feedback a bidder ever gets — and today they get it by doing the subtraction off
     // EKAP in their head, if at all.
@@ -38,7 +39,7 @@ describe("BidMemoryPanel", () => {
   });
 
   it("sizi geçen firmayı ve farkı adıyla söyler", async () => {
-    render(<BidMemoryPanel onClose={vi.fn()} />);
+    render(<BidMemoryPanel onClose={vi.fn()} onOpenBulletin={vi.fn()} />);
 
     // The sentence this whole feature exists to produce, and the one no bulletin service can:
     // it needs our own bid, which never leaves the company.
@@ -51,7 +52,7 @@ describe("BidMemoryPanel", () => {
       lost: 2, median_gap_percent: null, smallest_gap_percent: "3.8",
       rivals: [{ rival: "Rakip A.Ş.", beat_us: 2, median_gap_percent: null }],
     }));
-    render(<BidMemoryPanel onClose={vi.fn()} />);
+    render(<BidMemoryPanel onClose={vi.fn()} onOpenBulletin={vi.fn()} />);
 
     // Two near misses are an anecdote. A median over them looks like knowledge and is a coin flip.
     expect(await screen.findByText(/henüz yeterli veri yok/)).toBeInTheDocument();
@@ -68,7 +69,7 @@ describe("BidMemoryPanel", () => {
         note: "Sonuç ilanı henüz yayımlanmadı.",
       }],
     }));
-    render(<BidMemoryPanel onClose={vi.fn()} />);
+    render(<BidMemoryPanel onClose={vi.fn()} onOpenBulletin={vi.fn()} />);
 
     // Weeks pass between a bid and its result; reading that silence as a loss would make the whole
     // memory wrong for most of its life.
@@ -77,14 +78,26 @@ describe("BidMemoryPanel", () => {
 
   it("hiç teklif yokken ne yapılacağını söyler", async () => {
     getBidMemory.mockResolvedValue(memory({ total_bids: 0, outcomes: [], rivals: [] }));
-    render(<BidMemoryPanel onClose={vi.fn()} />);
+    render(<BidMemoryPanel onClose={vi.fn()} onOpenBulletin={vi.fn()} />);
 
     expect(await screen.findByText("Henüz kayıtlı teklifiniz yok")).toBeInTheDocument();
   });
 
+  it("boş ekrandan bültene götürür", async () => {
+    // The screen asks for a bid, and a bid is recorded on an ilan. Saying so without opening the
+    // bulletin leaves a first morning at a dead end with correct advice on it.
+    const onOpenBulletin = vi.fn();
+    getBidMemory.mockResolvedValue(memory({ total_bids: 0, outcomes: [], rivals: [] }));
+    render(<BidMemoryPanel onClose={vi.fn()} onOpenBulletin={onOpenBulletin} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Bülteni aç" }));
+
+    expect(onOpenBulletin).toHaveBeenCalled();
+  });
+
   it("alınamazsa hatayı söyler", async () => {
     getBidMemory.mockRejectedValue(new Error("Teklif geçmişi alınamadı."));
-    render(<BidMemoryPanel onClose={vi.fn()} />);
+    render(<BidMemoryPanel onClose={vi.fn()} onOpenBulletin={vi.fn()} />);
 
     expect(await screen.findByText("Teklif geçmişi alınamadı.")).toBeInTheDocument();
   });

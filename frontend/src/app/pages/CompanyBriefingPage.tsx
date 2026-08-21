@@ -183,9 +183,11 @@ export function CompanyBriefingPage() {
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center space-y-1">
               <Wallet className="w-6 h-6 text-slate-400 mx-auto" />
               <p className="text-sm text-slate-900">Henüz kayıtlı teklif yok</p>
+              {/* Says where, because a bid is recorded on the phone and this page is read on a
+                  laptop. Left unsaid, the advice is correct and unfollowable from here. */}
               <p className="text-xs text-slate-500">
-                Bir ihaleye teklif verdiğinizde kaydedin; bu sayfa kazanılan işi ve bekleyen parayı
-                buradan toplar.
+                Mobil uygulamada bir ihaleye teklif verdiğinizde kaydedin; bu sayfa kazanılan işi
+                ve bekleyen parayı buradan toplar.
               </p>
             </div>
           )}

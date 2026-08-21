@@ -1224,7 +1224,12 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
         />
       )}
 
-      {showBids && <BidMemoryPanel onClose={() => setShowBids(false)} />}
+      {showBids && (
+        <BidMemoryPanel
+          onClose={() => setShowBids(false)}
+          onOpenBulletin={() => { setShowBids(false); setShowBulletin(true); }}
+        />
+      )}
 
       {showRivals && <RivalPanel onClose={() => setShowRivals(false)} />}
 
@@ -1233,6 +1238,7 @@ function HomeTab({ user, setTab, unreadNotifications, onOpenNotifications }: { u
           onClose={() => setShowBriefing(false)}
           onOpenTasks={() => { setShowBriefing(false); setTab("erp"); }}
           onOpenBids={() => { setShowBriefing(false); setShowBids(true); }}
+          onOpenBulletin={() => { setShowBriefing(false); setShowBulletin(true); }}
         />
       )}
 

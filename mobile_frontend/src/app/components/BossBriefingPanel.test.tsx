@@ -24,7 +24,7 @@ function briefing(overrides: Partial<BossBriefing> = {}): BossBriefing {
 function panel(props: Partial<Parameters<typeof BossBriefingPanel>[0]> = {}) {
   return (
     <BossBriefingPanel
-      onClose={vi.fn()} onOpenTasks={vi.fn()} onOpenBids={vi.fn()}
+      onClose={vi.fn()} onOpenTasks={vi.fn()} onOpenBids={vi.fn()} onOpenBulletin={vi.fn()}
       {...props}
     />
   );
@@ -90,6 +90,21 @@ describe("BossBriefingPanel", () => {
     render(panel());
 
     expect(await screen.findByText("Henüz kayıtlı teklif yok")).toBeInTheDocument();
+  });
+
+  it("boş ekrandan bültene götürür", async () => {
+    // This page adds up bids and there are none to add up. Correct advice with no way to follow it
+    // is where a first morning ends.
+    const onOpenBulletin = vi.fn();
+    getBossBriefing.mockResolvedValue(briefing({
+      bids_this_month: 0, won_this_month: 0, won_amount_this_month: "0",
+      awaiting_result: 0, awaiting_amount: "0",
+    }));
+    render(panel({ onOpenBulletin }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Bülteni aç" }));
+
+    expect(onOpenBulletin).toHaveBeenCalled();
   });
 
   it("alınamazsa hatayı söyler", async () => {

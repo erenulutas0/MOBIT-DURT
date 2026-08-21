@@ -41,7 +41,11 @@ function percent(value: string | null): string | null {
     : null;
 }
 
-export function BidMemoryPanel({ onClose }: { onClose: () => void }) {
+export function BidMemoryPanel({ onClose, onOpenBulletin }: {
+  onClose: () => void;
+  /** Where the empty state sends people. Nothing lands here until a bid is recorded on an ilan. */
+  onOpenBulletin: () => void;
+}) {
   const [memory, setMemory] = useState<BidMemory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -100,6 +104,14 @@ export function BidMemoryPanel({ onClose }: { onClose: () => void }) {
               Bir ilanı açıp verdiğiniz teklifi kaydedin. Sonuç yayımlandığında kaç fark kaybettiğinizi
               ve kime kaybettiğinizi kendiliğinden söyler.
             </p>
+            {/* Advice with no way to follow it is where a first morning ends. The one thing this
+                screen asks for happens on another screen, so it opens that screen. */}
+            <button
+              onClick={onOpenBulletin}
+              className="mt-3 h-9 px-4 rounded-xl bg-primary/15 text-primary text-sm font-medium active:scale-[0.98] transition-transform"
+            >
+              Bülteni aç
+            </button>
           </div>
         )}
 

@@ -33,10 +33,12 @@ function monthName(iso: string | null): string {
     : date.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
 }
 
-export function BossBriefingPanel({ onClose, onOpenTasks, onOpenBids }: {
+export function BossBriefingPanel({ onClose, onOpenTasks, onOpenBids, onOpenBulletin }: {
   onClose: () => void;
   onOpenTasks: () => void;
   onOpenBids: () => void;
+  /** Where the empty state sends people: this page adds up bids, and there are none to add up. */
+  onOpenBulletin: () => void;
 }) {
   const [briefing, setBriefing] = useState<BossBriefing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -217,6 +219,13 @@ export function BossBriefingPanel({ onClose, onOpenTasks, onOpenBids }: {
                   Bir ihaleye teklif verdiğinizde kaydedin; bu ekran kazanılan işi ve bekleyen
                   parayı buradan toplar.
                 </p>
+                {/* Advice with no way to follow it is where a first morning ends. */}
+                <button
+                  onClick={onOpenBulletin}
+                  className="mt-3 h-9 px-4 rounded-xl bg-primary/15 text-primary text-sm font-medium active:scale-[0.98] transition-transform"
+                >
+                  Bülteni aç
+                </button>
               </div>
             )}
           </>
