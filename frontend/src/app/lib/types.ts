@@ -33,6 +33,7 @@ export type Page =
   | "bid-memory"
   | "company-briefing"
   | "company-qualification"
+  | "company-credentials"
   | "feedback";
 
 export type LiveData = {

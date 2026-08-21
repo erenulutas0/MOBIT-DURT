@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BossBriefing } from "../api";
@@ -31,7 +32,7 @@ describe("CompanyBriefingPage", () => {
   });
 
   it("kazanılan işi ve bekleyen parayı ayrı gösterir", async () => {
-    render(<CompanyBriefingPage />);
+    render(<CompanyBriefingPage setPage={vi.fn()} />);
 
     expect(await screen.findByText("8.000.000 TRY")).toBeInTheDocument();
     // Money that is not decided must not be folded into what was won.
@@ -40,13 +41,13 @@ describe("CompanyBriefingPage", () => {
 
   it("toplamın ne kadarı kendi rakamımızsa söyler", async () => {
     getBossBriefing.mockResolvedValue(briefing({ won_amount_from_our_own_figure: 2 }));
-    render(<CompanyBriefingPage />);
+    render(<CompanyBriefingPage setPage={vi.fn()} />);
 
     expect(await screen.findByText(/2 tanesinin sözleşme bedeli henüz/)).toBeInTheDocument();
   });
 
   it("onay bekleyen yoksa o uyarıyı hiç göstermez", async () => {
-    render(<CompanyBriefingPage />);
+    render(<CompanyBriefingPage setPage={vi.fn()} />);
 
     await screen.findByText("8.000.000 TRY");
     expect(screen.queryByText(/onayınızı bekliyor/)).not.toBeInTheDocument();
@@ -54,16 +55,33 @@ describe("CompanyBriefingPage", () => {
 
   it("süresi dolmuş belgeyi yaklaşandan ayırır", async () => {
     getBossBriefing.mockResolvedValue(briefing({ lapsed_credentials: 1, expiring_credentials: 2 }));
-    render(<CompanyBriefingPage />);
+    render(<CompanyBriefingPage setPage={vi.fn()} />);
 
     // A lapsed paper stops a bid at the door; one expiring next month does not.
     expect(await screen.findByText(/1 belgenizin süresi dolmuş/)).toBeInTheDocument();
     expect(screen.queryByText(/30 gün içinde doluyor/)).not.toBeInTheDocument();
   });
 
+  it("hiç teklif yokken boş ekrandan bültene götürür", async () => {
+    // This page adds up bids and there are none to add up, so it opens where one is recorded —
+    // which the web panel can now do.
+    const user = userEvent.setup();
+    const setPage = vi.fn();
+    getBossBriefing.mockResolvedValue(briefing({
+      bids_this_month: 0, won_this_month: 0, won_amount_this_month: "0",
+      awaiting_result: 0, awaiting_amount: "0",
+    }));
+    render(<CompanyBriefingPage setPage={setPage} />);
+
+    expect(await screen.findByText("Henüz kayıtlı teklif yok")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Bülteni aç" }));
+
+    expect(setPage).toHaveBeenCalledWith("tender-bulletin");
+  });
+
   it("alınamazsa hatayı söyler", async () => {
     getBossBriefing.mockRejectedValue(new Error("Şirket özeti alınamadı."));
-    render(<CompanyBriefingPage />);
+    render(<CompanyBriefingPage setPage={vi.fn()} />);
 
     expect(await screen.findByText("Şirket özeti alınamadı.")).toBeInTheDocument();
   });

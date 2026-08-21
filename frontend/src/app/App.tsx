@@ -30,6 +30,7 @@ const TenderResultsPage = lazy(() => import("./pages/TenderResultsPage").then((m
 const BidMemoryPage = lazy(() => import("./pages/BidMemoryPage").then((m) => ({ default: m.BidMemoryPage })));
 const CompanyBriefingPage = lazy(() => import("./pages/CompanyBriefingPage").then((m) => ({ default: m.CompanyBriefingPage })));
 const CompanyQualificationPage = lazy(() => import("./pages/CompanyQualificationPage").then((m) => ({ default: m.CompanyQualificationPage })));
+const CompanyCredentialsPage = lazy(() => import("./pages/CompanyCredentialsPage").then((m) => ({ default: m.CompanyCredentialsPage })));
 const FeedbackPage = lazy(() => import("./pages/FeedbackPage").then((m) => ({ default: m.FeedbackPage })));
 
 function PageFallback() {
@@ -103,7 +104,7 @@ export default function App() {
         />
         <main className="flex-1 overflow-auto">
           <Suspense fallback={<PageFallback />}>
-          {page === "home" && <HomePage setPage={navigate} live={live} onEmployeeDrilldown={openOverdueEmployees} />}
+          {page === "home" && <HomePage setPage={navigate} live={live} isAdmin={isAdmin(session)} onEmployeeDrilldown={openOverdueEmployees} />}
           {page === "erp-overview" && <ERPOverviewPage setPage={navigate} live={live} onEmployeeDrilldown={openOverdueEmployees} />}
           {page === "employees" && <EmployeesPage live={live} session={session} focus={employeeFocus} onFocusClear={() => setEmployeeFocus(null)} />}
           {page === "tasks" && <TasksPage live={live} session={session} />}
@@ -122,9 +123,10 @@ export default function App() {
           {page === "ai-extraction" && isAdmin(session) && <AIExtractionPage />}
           {page === "tender-bulletin" && isAdmin(session) && <TenderBulletinPage />}
           {page === "tender-results" && isAdmin(session) && <TenderResultsPage />}
-          {page === "bid-memory" && isAdmin(session) && <BidMemoryPage />}
-          {page === "company-briefing" && isAdmin(session) && <CompanyBriefingPage />}
+          {page === "bid-memory" && isAdmin(session) && <BidMemoryPage setPage={navigate} />}
+          {page === "company-briefing" && isAdmin(session) && <CompanyBriefingPage setPage={navigate} />}
           {page === "company-qualification" && isAdmin(session) && <CompanyQualificationPage />}
+          {page === "company-credentials" && isAdmin(session) && <CompanyCredentialsPage />}
           {page === "feedback" && isAdmin(session) && <FeedbackPage />}
           </Suspense>
         </main>

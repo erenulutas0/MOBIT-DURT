@@ -7,6 +7,7 @@ import {
   getBidMemory, getRivalProfile, searchRivals,
   type BidMemory, type BidOutcomeRow, type RivalMatch, type RivalProfile,
 } from "../api";
+import type { Page } from "../lib/types";
 
 /**
  * "Tekliflerimiz" — what this company offered, beside what the bulletin later said happened.
@@ -42,7 +43,7 @@ function percent(value: string | null): string | null {
     : null;
 }
 
-export function BidMemoryPage() {
+export function BidMemoryPage({ setPage }: { setPage: (page: Page) => void }) {
   const [memory, setMemory] = useState<BidMemory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -120,9 +121,17 @@ export function BidMemoryPage() {
           <Swords className="w-6 h-6 text-slate-400 mx-auto" />
           <p className="text-sm text-slate-900">Henüz kayıtlı teklifiniz yok</p>
           <p className="text-xs text-slate-500">
-            Mobil uygulamada bir ilanı açıp verdiğiniz teklifi kaydedin. Sonuç yayımlandığında kaç
+            Bültenden bir ilanı açıp verdiğiniz teklifi kaydedin. Sonuç yayımlandığında kaç
             farkla ve kime kaybettiğinizi kendiliğinden söyler.
           </p>
+          {/* Advice with no way to follow it is where a first morning ends. It says "open an ilan",
+              so it opens the bulletin. */}
+          <button
+            onClick={() => setPage("tender-bulletin")}
+            className="mt-3 h-9 px-4 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition-colors"
+          >
+            Bülteni aç
+          </button>
         </div>
       )}
 

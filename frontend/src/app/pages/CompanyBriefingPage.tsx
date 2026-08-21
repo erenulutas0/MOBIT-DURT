@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 
 import { getBossBriefing, type BossBriefing } from "../api";
+import type { Page } from "../lib/types";
 
 /**
  * "Şirket Özeti" — the owner's page, and the reason the web panel exists at all.
@@ -33,7 +34,7 @@ function monthName(iso: string | null): string {
     : date.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
 }
 
-export function CompanyBriefingPage() {
+export function CompanyBriefingPage({ setPage }: { setPage: (page: Page) => void }) {
   const [briefing, setBriefing] = useState<BossBriefing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -183,12 +184,18 @@ export function CompanyBriefingPage() {
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center space-y-1">
               <Wallet className="w-6 h-6 text-slate-400 mx-auto" />
               <p className="text-sm text-slate-900">Henüz kayıtlı teklif yok</p>
-              {/* Says where, because a bid is recorded on the phone and this page is read on a
-                  laptop. Left unsaid, the advice is correct and unfollowable from here. */}
               <p className="text-xs text-slate-500">
-                Mobil uygulamada bir ihaleye teklif verdiğinizde kaydedin; bu sayfa kazanılan işi
-                ve bekleyen parayı buradan toplar.
+                Bültenden bir ihaleye teklif verdiğinizde kaydedin; bu sayfa kazanılan işi ve
+                bekleyen parayı buradan toplar.
               </p>
+              {/* This page adds up bids and there are none to add up, so it opens where one is
+                  recorded. */}
+              <button
+                onClick={() => setPage("tender-bulletin")}
+                className="mt-3 h-9 px-4 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition-colors"
+              >
+                Bülteni aç
+              </button>
             </div>
           )}
         </>

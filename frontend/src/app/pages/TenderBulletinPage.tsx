@@ -4,8 +4,8 @@ import {
 } from "lucide-react";
 
 import {
-  getTenderCategories, getTenderNoticeDetail, getTenderNotices, getTenderProfile,
-  getTenderProvinces, refreshTenderBulletin, saveTenderProfile,
+  getBidForNotice, getTenderCategories, getTenderNoticeDetail, getTenderNotices, getTenderProfile,
+  getTenderProvinces, recordBid, refreshTenderBulletin, saveTenderProfile,
   type TenderCategoryCount, type TenderNotice, type TenderProvinceCount, type TenderWatchProfile,
 } from "../api";
 import { TurkeyTenderMap } from "../components/TurkeyTenderMap";
@@ -387,6 +387,8 @@ function NoticeDialog({ notice, body, onClose }: {
                 value={notice.quantity} />
             )}
           </dl>
+          <BidBox noticeId={notice.id} />
+
           <div>
             <p className="text-xs text-slate-500 mb-1">İlan metni</p>
             <pre className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-3 text-xs leading-relaxed text-slate-800 whitespace-pre-wrap font-sans">
@@ -395,6 +397,102 @@ function NoticeDialog({ notice, body, onClose }: {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * "Verdiğiniz teklif" — the company's own number, recorded against this ilan.
+ *
+ * <p>The only figure in the whole product that no bulletin service has, and the one that makes the
+ * loss margin computable: when the sonuç ilanı publishes the winning price, the difference between
+ * it and this is the answer to "by how much did we miss". Without it a result is just news.
+ *
+ * <p>On the web because the boss reads the Şirket Özeti on a laptop and, until now, could not enter
+ * a single number that feeds it — recording a bid existed only on the phone. Written to a tender's
+ * ilan rather than to a list, because a bid without an İKN cannot be matched to a result.
+ */
+function BidBox({ noticeId }: { noticeId: number }) {
+  const [recorded, setRecorded] = useState<string | null>(null);
+  const [amount, setAmount] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  // null while the probe is in flight: an empty box would read as "no bid recorded" and invite a
+  // second one to be typed over the first.
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoaded(false);
+    void getBidForNotice(noticeId)
+      .then(bid => { if (!cancelled) { setRecorded(bid.amount); setLoaded(true); } })
+      .catch(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, [noticeId]);
+
+  const save = async () => {
+    // Turkish input: thousands with dots, decimals with a comma.
+    const parsed = Number(amount.replace(/\./g, "").replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setError("Geçerli bir tutar girin.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await recordBid(noticeId, { amount: parsed });
+      setRecorded(saved.amount);
+      setAmount("");
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "Teklif kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-xs font-medium text-slate-700 mb-2">Verdiğiniz teklif</p>
+
+      {recorded !== null && (
+        <p className="text-sm text-slate-900 mb-2">
+          <span className="font-semibold tabular-nums">
+            {Number(recorded).toLocaleString("tr-TR", { maximumFractionDigits: 0 })} TRY
+          </span>{" "}
+          <span className="text-xs text-slate-500">kayıtlı</span>
+        </p>
+      )}
+
+      <div className="flex items-end gap-2">
+        <div className="flex-1 min-w-0">
+          <label htmlFor={`bid-${noticeId}`} className="sr-only">Teklif tutarı</label>
+          <input
+            id={`bid-${noticeId}`}
+            value={amount}
+            onChange={event => { setError(""); setAmount(event.target.value); }}
+            inputMode="decimal"
+            placeholder={recorded === null ? "örn. 8.250.000" : "Yeni tutar"}
+            className="w-full h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-400"
+          />
+        </div>
+        <button
+          onClick={() => void save()}
+          disabled={saving || !amount.trim()}
+          className="h-9 px-4 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
+        >
+          {saving ? "Kaydediliyor…" : recorded === null ? "Kaydet" : "Güncelle"}
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-700 mt-2">{error}</p>}
+
+      {recorded === null && !error && (
+        <p className="text-[11px] text-slate-500 mt-2">
+          Sonuç yayımlandığında kaç farkla ve kime kaybettiğinizi bu sayede söyleyebiliriz.
+        </p>
+      )}
     </div>
   );
 }

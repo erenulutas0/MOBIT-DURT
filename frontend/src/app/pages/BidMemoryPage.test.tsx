@@ -34,7 +34,7 @@ describe("BidMemoryPage", () => {
   });
 
   it("kaybettiğinde ne kadar yukarıda kaldığını söyler", async () => {
-    render(<BidMemoryPage />);
+    render(<BidMemoryPage setPage={vi.fn()} />);
 
     expect(await screen.findByText("%3,4")).toBeInTheDocument();
     expect(screen.getByText(/5 kayıp üzerinden ortanca/)).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe("BidMemoryPage", () => {
     getBidMemory.mockResolvedValue(memory({
       lost: 2, median_gap_percent: null, smallest_gap_percent: "3.8", rivals: [],
     }));
-    render(<BidMemoryPage />);
+    render(<BidMemoryPage setPage={vi.fn()} />);
 
     // Two near misses are an anecdote; the closest one is still a fact and survives.
     expect(await screen.findByText(/henüz yeterli veri yok/)).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe("BidMemoryPage", () => {
       distinct_authorities: 6, median_discount: "11.2", beat_us: 3,
       authorities: [{ name: "Karayolları", contracts: 8 }], provinces: [], recent: [],
     });
-    render(<BidMemoryPage />);
+    render(<BidMemoryPage setPage={vi.fn()} />);
 
     await user.click(await screen.findByText(/3 kez geçti/));
 
@@ -69,14 +69,27 @@ describe("BidMemoryPage", () => {
 
   it("hiç teklif yokken ne yapılacağını söyler", async () => {
     getBidMemory.mockResolvedValue(memory({ total_bids: 0, outcomes: [], rivals: [] }));
-    render(<BidMemoryPage />);
+    render(<BidMemoryPage setPage={vi.fn()} />);
 
     expect(await screen.findByText("Henüz kayıtlı teklifiniz yok")).toBeInTheDocument();
   });
 
+  it("boş ekrandan bültene götürür", async () => {
+    // The screen asks for a bid and a bid is recorded on an ilan — which the web panel can now do,
+    // so the button is no longer a path to a page that cannot answer it.
+    const user = userEvent.setup();
+    const setPage = vi.fn();
+    getBidMemory.mockResolvedValue(memory({ total_bids: 0, outcomes: [], rivals: [] }));
+    render(<BidMemoryPage setPage={setPage} />);
+
+    await user.click(await screen.findByRole("button", { name: "Bülteni aç" }));
+
+    expect(setPage).toHaveBeenCalledWith("tender-bulletin");
+  });
+
   it("tek harfle firma araması yapmaz", async () => {
     const user = userEvent.setup();
-    render(<BidMemoryPage />);
+    render(<BidMemoryPage setPage={vi.fn()} />);
 
     await user.type(await screen.findByPlaceholderText("Rakip firma adı…"), "a");
 

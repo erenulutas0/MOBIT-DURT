@@ -1414,6 +1414,85 @@ export type BidOutcomeRow = {
 };
 
 /**
+ * The company's own bid on one tender. Never leaves the company, and is the one number no bulletin
+ * service has — which is why the loss margin can only be worked out here.
+ */
+export type TenderBid = {
+  id: number | null;
+  ikn: string | null;
+  amount: string | null;
+  bid_at: string | null;
+  note: string | null;
+  outcome: string | null;
+  recorded_by: string | null;
+};
+
+export async function getBidForNotice(noticeId: number): Promise<TenderBid> {
+  const response = await apiFetch(`/api/erp/bulletin/notices/${noticeId}/bid`);
+  if (!response.ok) throw new Error("Teklif kaydı alınamadı.");
+  return response.json();
+}
+
+export async function recordBid(noticeId: number, payload: {
+  amount: number;
+  bid_at?: string | null;
+  note?: string | null;
+  outcome?: string | null;
+}): Promise<TenderBid> {
+  const response = await apiFetch(`/api/erp/bulletin/notices/${noticeId}/bid`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("Teklif kaydedilemedi.");
+  return response.json();
+}
+
+export type CompanyCredential = {
+  id: number;
+  name: string;
+  kind: string | null;
+  issued_at: string | null;
+  valid_until: string | null;
+  document_id: number | null;
+  note: string | null;
+  /** Negative once lapsed; null when the document has no expiry, which is not urgency. */
+  days_remaining: number | null;
+};
+
+export type CompanyCredentialInput = {
+  name: string;
+  kind?: string | null;
+  issued_at?: string | null;
+  valid_until?: string | null;
+  note?: string | null;
+};
+
+/** İmza sirküleri, oda kaydı, borcu yoktur — the paperwork an idare asks for at the door. */
+export async function getCompanyCredentials(): Promise<CompanyCredential[]> {
+  const response = await apiFetch("/api/erp/company-credentials");
+  if (!response.ok) throw new Error("Belgeler yüklenemedi.");
+  return response.json();
+}
+
+export async function createCompanyCredential(
+  input: CompanyCredentialInput
+): Promise<CompanyCredential> {
+  const response = await apiFetch("/api/erp/company-credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error("Belge kaydedilemedi.");
+  return response.json();
+}
+
+export async function deleteCompanyCredential(id: number): Promise<void> {
+  const response = await apiFetch(`/api/erp/company-credentials/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("Belge silinemedi.");
+}
+
+/**
  * What the company can prove about itself when an idare asks.
  *
  * <p>Every figure is nullable and a missing one means "not entered" rather than zero. The yeterlik
