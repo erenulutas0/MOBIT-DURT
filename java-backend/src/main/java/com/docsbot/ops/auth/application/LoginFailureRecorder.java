@@ -2,6 +2,7 @@ package com.docsbot.ops.auth.application;
 
 import java.time.Instant;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,9 @@ import com.docsbot.ops.auth.infrastructure.ErpUserRepository;
  * writing it from here would mean two contexts owning one row.
  */
 @Service
+// Same profile as the service it serves and the repository it needs: without it, contexts that
+// run without Postgres try to build this bean and fail to start.
+@Profile("postgres")
 public class LoginFailureRecorder {
 
     private final ErpUserRepository userRepository;
