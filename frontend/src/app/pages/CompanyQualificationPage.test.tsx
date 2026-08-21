@@ -96,8 +96,39 @@ describe("CompanyQualificationPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Tekrar dene" }));
 
-    expect(await screen.findByLabelText("Son yıl cirosu")).toHaveValue("4000000");
+    expect(await screen.findByLabelText("Son yıl cirosu")).toHaveValue("4.000.000");
     expect(screen.queryByText("Yeterlik bilgileri alınamadı.")).not.toBeInTheDocument();
+  });
+
+  it("dokunulmayan oranı yeniden kaydedince aynen geri gönderir", async () => {
+    // Bu testin varlik sebebi olan hata: sunucunun "0.85"i kutuya oldugu gibi yaziliyor, kaydederken
+    // Turkce okunup noktalar binlik ayraci sanildigi icin dokunulmamis cari oran 85 olarak geri
+    // gidiyordu. Musteri sadece cirosunu duzeltmek icin ekrani actiginda oranlari bozuluyordu.
+    const user = userEvent.setup();
+    getCompanyQualification.mockResolvedValue(record({
+      current_ratio: "0.85", equity_ratio: "1.2", turnover_last_year: "6200000",
+    }));
+    render(<CompanyQualificationPage />);
+
+    // Sadece ilgisiz bir alana dokunuluyor.
+    await user.type(await screen.findByLabelText("İşin konusu"), "Köprü");
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() => expect(saveCompanyQualification).toHaveBeenCalled());
+    const sent = saveCompanyQualification.mock.calls[0][0];
+    expect(Number(sent.current_ratio)).toBe(0.85);
+    expect(Number(sent.equity_ratio)).toBe(1.2);
+    expect(Number(sent.turnover_last_year)).toBe(6200000);
+  });
+
+  it("kayıtlı değeri Türkçe biçimde gösterir", async () => {
+    getCompanyQualification.mockResolvedValue(record({
+      current_ratio: "0.850", turnover_last_year: "6200000",
+    }));
+    render(<CompanyQualificationPage />);
+
+    expect(await screen.findByLabelText("Cari oran")).toHaveValue("0,85");
+    expect(screen.getByLabelText("Son yıl cirosu")).toHaveValue("6.200.000");
   });
 
   it("kim ne zaman güncellemiş gösterir", async () => {
@@ -107,6 +138,6 @@ describe("CompanyQualificationPage", () => {
     render(<CompanyQualificationPage />);
 
     expect(await screen.findByText(/Eren/)).toBeInTheDocument();
-    expect(await screen.findByLabelText("Son yıl cirosu")).toHaveValue("4000000");
+    expect(await screen.findByLabelText("Son yıl cirosu")).toHaveValue("4.000.000");
   });
 });

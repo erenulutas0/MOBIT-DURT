@@ -4,6 +4,7 @@ import { Loader2, X } from "lucide-react";
 import {
   getCompanyQualification, saveCompanyQualification, type CompanyQualification,
 } from "../api";
+import { formatTurkishNumber, parseTurkishNumber } from "../utils/turkishNumber";
 
 /**
  * The company's own yeterlik figures — entered once, instead of remembered by whoever is preparing
@@ -40,14 +41,6 @@ const FIELDS: Field[] = [
   { key: "bank_reference_limit", kind: "money", label: "Banka referans limiti" },
 ];
 
-/** Turkish input: thousands with dots, decimals with a comma. Empty stays empty, never zero. */
-function toNumber(value: string): string | null {
-  const cleaned = value.trim().replace(/\./g, "").replace(",", ".");
-  if (!cleaned) return null;
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? String(parsed) : null;
-}
-
 export function CompanyQualificationSheet({ onClose, onSaved }: {
   onClose: () => void;
   onSaved?: () => void;
@@ -65,7 +58,11 @@ export function CompanyQualificationSheet({ onClose, onSaved }: {
         const next: Record<string, string> = {};
         for (const field of FIELDS) {
           const raw = current[field.key];
-          next[field.key] = raw === null || raw === undefined ? "" : String(raw);
+          // Written in the same Turkish format the box is read back in. Writing the server's own
+          // "0.85" here instead is what turned an untouched cari oran into 85 on the next save.
+          next[field.key] = field.kind === "money" || field.kind === "ratio"
+            ? formatTurkishNumber(raw)
+            : (raw === null || raw === undefined ? "" : String(raw));
         }
         setValues(next);
       })
@@ -83,16 +80,16 @@ export function CompanyQualificationSheet({ onClose, onSaved }: {
     setError("");
     try {
       await saveCompanyQualification({
-        experience_amount: toNumber(values.experience_amount || ""),
+        experience_amount: parseTurkishNumber(values.experience_amount || ""),
         experience_date: values.experience_date?.trim() || null,
         experience_subject: values.experience_subject?.trim() || null,
-        turnover_last_year: toNumber(values.turnover_last_year || ""),
-        turnover_previous_year: toNumber(values.turnover_previous_year || ""),
-        sector_turnover: toNumber(values.sector_turnover || ""),
-        current_ratio: toNumber(values.current_ratio || ""),
-        equity_ratio: toNumber(values.equity_ratio || ""),
-        bank_debt_ratio: toNumber(values.bank_debt_ratio || ""),
-        bank_reference_limit: toNumber(values.bank_reference_limit || ""),
+        turnover_last_year: parseTurkishNumber(values.turnover_last_year || ""),
+        turnover_previous_year: parseTurkishNumber(values.turnover_previous_year || ""),
+        sector_turnover: parseTurkishNumber(values.sector_turnover || ""),
+        current_ratio: parseTurkishNumber(values.current_ratio || ""),
+        equity_ratio: parseTurkishNumber(values.equity_ratio || ""),
+        bank_debt_ratio: parseTurkishNumber(values.bank_debt_ratio || ""),
+        bank_reference_limit: parseTurkishNumber(values.bank_reference_limit || ""),
       });
       onSaved?.();
       onClose();
