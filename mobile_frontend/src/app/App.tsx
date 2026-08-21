@@ -127,7 +127,7 @@ import type { KnowledgeGraphData, KnowledgeGraphEdge, KnowledgeGraphNode } from 
 import {
   Users, ClipboardList, CheckSquare, MessageSquare,
   Bell, UserPlus, FileText, Send, FolderOpen, Upload, BookOpen,
-  ChevronRight, Search, Building2, Swords, TrendingUp, Users,
+  ChevronRight, Search, Building2, Swords,
   AlertTriangle, CheckCircle2, XCircle,
   Download, Eye, Link, Tag, Paperclip, Pencil,
   UserCheck, CalendarDays, GitBranch,
