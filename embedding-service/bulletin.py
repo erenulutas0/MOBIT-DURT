@@ -81,6 +81,11 @@ LABEL_TENDER_AT = "tarihi ve saati"
 
 # The two-column separator. A line carrying one belongs to an announcement's field table.
 FIELD_SEPARATOR = re.compile(r"\s{2,}:")
+
+# The running number and the İKN a result block opens with, which belong to neither the title nor
+# the buyer and would otherwise make the first printing of the title differ from the second.
+INDEX_PREFIX = re.compile(r"^\d+\.\s*(?:\d{4}/\d+)?\s*")
+
 # How every headline in the bulletin ends. Used to tell the headline apart from the buyer's name,
 # which is printed in the same capitals directly beneath it.
 HEADLINE_VERB = re.compile(
@@ -275,12 +280,40 @@ def _block_start(text: str, ikn_position: int, floor: int) -> int:
     return start
 
 
-def _authority_from_header(header: str) -> str:
+def _authority_from_header(header: str, doubled_title: bool = False) -> str:
     """The buyer's name as printed above the İKN, for the layout that has no field for it.
 
     Read from the bottom up: the name sits directly above the İhale Kayıt Numarası, in the same
     capitals as the headline above it, and the headline is told apart by the verb it ends with.
+
+    A result block prints the work's name twice — once on the index line beside the İKN and again
+    as the block's own heading — while the buyer is printed once, after both. Flattened to words
+    the header is therefore TITLE TITLE BUYER, and the buyer is whatever follows the longest
+    doubled prefix. That repetition is the only reliable way to tell the two apart, because plenty
+    of titles are neither shorter than a buyer's name nor end in one of the headline verbs:
+    "1 ADET 4X4 ÇEKİŞ SİSTEMLİ PİKAP ALIMI" reads exactly like an institution to any rule that does
+    not count occurrences. Without it the title glued itself to the front of the buyer on three
+    quarters of one day's mal contracts, which left every one of them looking like a different
+    idare and the per-buyer history unable to accumulate at all.
+
+    Compared as words rather than as lines because the two printings wrap at different columns, so
+    they are never equal line for line, and counting occurrences of a line does not work either:
+    the walk up from the İKN starts on the tail of a wrapped buyer name, and a tail that short
+    ("BAŞKANLIĞI") occurs all over the header as a substring of longer words.
+
+    Only a result block repeats itself, so the caller says which layout it is reading. Left to
+    guess, the cut fires on the first announcement of a bulletin, whose header still carries the
+    front matter ("1. İSTİSNA İHALE İLANLARI 1.1. MAL ALIMI İHALELERİ BÜLTENİ 1. İSTİSNA…") and
+    repeats there for reasons that have nothing to do with a title.
     """
+    if doubled_title:
+        words = INDEX_PREFIX.sub("", header.strip(), count=1).split()
+        for size in range(len(words) // 2, 0, -1):
+            if len(words) > size * 2 and words[:size] == words[size : size * 2]:
+                return " ".join(words[size * 2 :])[:400]
+
+    # An ilan prints its title once, so there is no doubled prefix to cut and the name has to be
+    # read bottom-up from the İKN instead.
     names = []
     for line in reversed(header.split("\n")):
         stripped = line.strip()
@@ -459,7 +492,7 @@ def parse_results(text: str) -> list:
             "ikn": ikn.group(1),
             "kind": "sonuc",
             "title": value("2|adı", "2.a"),
-            "authority": _authority_from_header(header),
+            "authority": _authority_from_header(header, doubled_title=True),
             "work_place": work_place,
             "tender_date": tender_date.group(0) if tender_date else "",
             "procedure": value("1|usulü", "1.c"),
