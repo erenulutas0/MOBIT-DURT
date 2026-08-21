@@ -2,9 +2,10 @@ import { ClipboardList, CheckSquare, FileText, Bot, AlertTriangle, ArrowRight, R
 import type { Page, LiveData } from "../lib/types";
 import { shortName, relativeTime, taskLabel, getAssignee, overdueEmployeeRows } from "../lib/helpers";
 import { KPICard } from "../components/KPICard";
+import { SetupCard } from "../components/SetupCard";
 
 // ─── HOME PAGE ───────────────────────────────────────────────────────────────
-export function HomePage({ setPage, live, onEmployeeDrilldown }: { setPage: (p: Page) => void; live: LiveData; onEmployeeDrilldown: () => void }) {
+export function HomePage({ setPage, live, isAdmin, onEmployeeDrilldown }: { setPage: (p: Page) => void; live: LiveData; isAdmin: boolean; onEmployeeDrilldown: () => void }) {
   const overview = live.overview;
   const tasks = overview?.tasks || [];
   const users = overview?.users || [];
@@ -31,6 +32,12 @@ export function HomePage({ setPage, live, onEmployeeDrilldown }: { setPage: (p: 
   return (
     <div className="p-6 space-y-6">
       {live.error && <div className="bg-red-50 border border-red-100 text-red-700 rounded px-4 py-2 text-xs">{live.error}</div>}
+
+      {/* Above the numbers, and only until the four steps are done. On a company's first morning
+          those numbers are all technically correct and all meaningless, and the useful thing to say
+          is what to do about it. Admin-only: all four are admin actions, and a checklist you have
+          no way to complete is just a reproach. */}
+      {isAdmin && <SetupCard setPage={setPage} />}
       <div className="grid grid-cols-2 gap-4">
         <button
           onClick={() => setPage("erp-overview")}
