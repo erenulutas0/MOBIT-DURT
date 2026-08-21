@@ -1,0 +1,40 @@
+name: Sidecar Quality Gate
+
+# The bulletin parser is the one piece of this system with no compiler and no type checker behind
+# it, and it is where a silent mistake costs the most: it decides which tenders a company is shown.
+# find_province alone has been wrong three separate ways, each of them invisible until somebody
+# measured production. This runs the rules that need neither the network nor a PDF.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "embedding-service/**"
+      - ".github/workflows/sidecar-ci.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "embedding-service/**"
+      - ".github/workflows/sidecar-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  sidecar:
+    name: Test (bulletin parser)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: embedding-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No install step and no requirements file on purpose: the tested rules are pure text and the
+      # module imports nothing outside the standard library, so the suite stays runnable anywhere.
+      - name: Run tests
+        run: python -m unittest discover -p "test_*.py" -v

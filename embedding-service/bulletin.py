@@ -59,9 +59,25 @@ PROVINCES = [
     "Siirt", "Sinop", "Sivas", "Şırnak", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Uşak", "Van",
     "Yalova", "Yozgat", "Zonguldak",
 ]
-# Matched case-insensitively against a casefolded haystack; Turkish dotted/dotless I makes
-# str.lower() unreliable here, so casefold with an explicit İ→i mapping is used throughout.
-_PROVINCE_KEYS = [(name, name.replace("İ", "i").casefold()) for name in PROVINCES]
+def _turkish_fold(value: str) -> str:
+    """One folding, used on both sides of every comparison in this file.
+
+    Defined here rather than beside the other helpers because the province table below is built
+    with it. When the table was folded one way (I -> i) and the text another (I -> ı), Isparta and
+    Iğdır could never be matched at all — two of the eighty-one provinces were permanently
+    invisible, and every announcement in them fell through to whatever the fallback found.
+    """
+    return value.replace("İ", "i").replace("I", "ı").casefold()
+
+
+_PROVINCE_KEYS = [(name, _turkish_fold(name)) for name in PROVINCES]
+
+# Anchored on both sides against the folded alphabet, which is where the Turkish letters end up —
+# a plain \b would treat ı, ç, ğ, ö, ş and ü as boundaries and let "vana" match Van after all.
+_PROVINCE_PATTERNS = [
+    (name, re.compile(r"(?<![0-9a-zçğıöşü])" + re.escape(key) + r"(?![0-9a-zçğıöşü])"))
+    for name, key in _PROVINCE_KEYS
+]
 
 IKN_LINE = re.compile(r"^\s*İhale Kayıt Numarası[^:]*:\s*(\d{4}/\d+)\s*$", re.MULTILINE)
 # Section headings, e.g. "2. İHALE İLANLARI" or "4. İHALE İPTAL İLANLARI".
@@ -112,10 +128,6 @@ RESULT_FIELD_LINE = re.compile(r"^\s*([a-zğüşıöç])\)\s*(.+?)\s{2,}:\s*(.*)
 # decimals are required, so a duration of "240" can never be mistaken for a sum of money.
 MONEY_VALUE = re.compile(r"(\d[\d.]*,\d{2})\s*([A-Z]{3})?")
 DATE_VALUE = re.compile(r"\d{2}\.\d{2}\.\d{4}")
-
-
-def _turkish_fold(value: str) -> str:
-    return value.replace("İ", "i").replace("I", "ı").casefold()
 
 
 def _hidden_fields(page: str) -> dict:
@@ -177,12 +189,26 @@ def pdf_to_text(data: bytes) -> str:
 
 
 def find_province(text: str):
-    """The province an announcement belongs to, or None when the address does not name one."""
+    """The province an announcement belongs to, or None when the address does not name one.
+
+    Two rules, both learned from being wrong on 210 of 3,078 stored announcements.
+
+    The last match wins, not the first. A Turkish address ends with its province and may name
+    another on the way — "Kahramanmaraş Caddesi No:159 Ortahisar/Trabzon" is in Trabzon — and a
+    scan that stops at the first hit returns whichever province the list happens to reach first,
+    which is alphabetical order and has nothing to do with the text.
+
+    Matches are whole words. Without that, "vana montajı" is filed under Van and "gidiyordu" under
+    Ordu: a province invented out of an ordinary Turkish word, which is worse than none because the
+    map and the province filter both count it.
+    """
     haystack = _turkish_fold(text)
-    for name, key in _PROVINCE_KEYS:
-        if key in haystack:
-            return name
-    return None
+    found, found_at = None, -1
+    for name, pattern in _PROVINCE_PATTERNS:
+        for match in pattern.finditer(haystack):
+            if match.start() > found_at:
+                found, found_at = name, match.start()
+    return found
 
 
 def classify(section: str) -> str:
