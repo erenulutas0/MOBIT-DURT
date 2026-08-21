@@ -148,6 +148,27 @@ describe("TenderResultsPanel", () => {
     expect(await screen.findByText("%24,8")).toBeInTheDocument();
     expect(screen.getByText(/21 ihalede/)).toBeInTheDocument();
     expect(screen.getByText("Sık Kazanan A.Ş.", { exact: false })).toBeInTheDocument();
+    // A company that bids to this number and trips the aşırı düşük teklif threshold should have
+    // been told once where it came from and whose call it was.
+    expect(screen.getByText(/Kaynak: EKAP sonuç ilanları/)).toBeInTheDocument();
+  });
+
+  it("rakam yokken kaynak notunu da göstermez", async () => {
+    const user = userEvent.setup();
+    getTenderResultDetail.mockResolvedValue({ result: result(), body: "gövde" });
+    getAuthorityProfile.mockResolvedValue({
+      authority: "TCDD 3. BÖLGE MÜDÜRLÜĞÜ",
+      total_awards: 2, sample_size: 2, median_discount: null,
+      lowest_discount: null, highest_discount: null, average_bidders: null,
+      top_winners: [], awards: [],
+    });
+    render(panel());
+
+    await user.click(await screen.findByText("Açık stok alanlarının yapılması işi"));
+
+    // Attributing a figure that was never printed would read as if one had been.
+    await screen.findByText(/henüz yeterli veri yok/);
+    expect(screen.queryByText(/Kaynak: EKAP sonuç ilanları/)).not.toBeInTheDocument();
   });
 
   it("veri azken ortanca uydurmaz, eksikliği söyler", async () => {

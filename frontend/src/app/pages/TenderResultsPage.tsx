@@ -5,6 +5,7 @@ import {
   getAuthorityProfile, getTenderResults,
   type AuthorityProfile, type TenderResult,
 } from "../api";
+import { DiscountSourceNote } from "../components/DiscountSourceNote";
 
 /**
  * "Sonuçlanan İhaleler" — who took the work, for how much, against how many bidders.
@@ -167,6 +168,9 @@ export function TenderResultsPage() {
                 <p className="text-sm text-slate-600">
                   Ortanca kırım için henüz yeterli veri yok — {authority.sample_size} ihale.
                 </p>
+              )}
+              {authority.median_discount !== null && (
+                <div className="pt-1"><DiscountSourceNote /></div>
               )}
               <p className="text-xs text-slate-500">
                 Toplam {authority.total_awards} sözleşme

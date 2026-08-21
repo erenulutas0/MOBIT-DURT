@@ -7,6 +7,7 @@ import {
   getAuthorityProfile, getTenderResultDetail, getTenderResults,
   type AuthorityProfile, type TenderResult,
 } from "../api";
+import { DiscountSourceNote } from "./DiscountSourceNote";
 
 /**
  * "Sonuçlanan İhaleler" — who took the work, for how much, against how many bidders.
@@ -82,6 +83,10 @@ function AuthorityHistory({ profile }: { profile: AuthorityProfile }) {
             : `Ortanca kırım için henüz yeterli veri yok — ${profile.sample_size} ihale. Sonuçlar her gün birikiyor.`}
         </p>
       )}
+
+      {/* Only where a figure was actually printed: a note under "not enough data yet" would be
+          attributing a number that is not there. */}
+      {median !== null && <DiscountSourceNote />}
 
       <p className="text-[11px] text-muted-foreground">
         Toplam {profile.total_awards} sözleşme

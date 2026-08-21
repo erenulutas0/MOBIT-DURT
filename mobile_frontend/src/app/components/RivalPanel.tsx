@@ -6,6 +6,7 @@ import {
 import {
   getRivalProfile, searchRivals, type RivalMatch, type RivalProfile,
 } from "../api";
+import { DiscountSourceNote } from "./DiscountSourceNote";
 
 /**
  * "Kime karşı teklif veriyoruz?" — one firm's record in the public results.
@@ -210,6 +211,7 @@ export function RivalPanel({ onClose, initialWinner }: {
                   <p className="text-[11px] text-muted-foreground">
                     Kırımı hesaplanabilen sözleşmelerin ortancası
                   </p>
+                  <div className="mt-2"><DiscountSourceNote /></div>
                 </>
               ) : (
                 <p className="text-xs text-muted-foreground leading-relaxed">
