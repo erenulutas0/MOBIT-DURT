@@ -94,6 +94,32 @@ class QualificationCheckTest {
     }
 
     @Test
+    void aCertificateWithNoDateIsUnknownRatherThanATick() throws IOException {
+        // The bug this defends against: the window check was guarded on the date being present, so
+        // a company that entered a large enough tutar and left the tarih blank was told MET on a
+        // tender that counts only the last fifteen years. "We do not know" had collapsed into
+        // "yes" — the one direction this file's contract forbids, and the expensive one.
+        Map<String, Item> items = check("yeterlik-yapim.txt",
+                company("90000000", null, null), "8000000");
+
+        Item experience = items.get("experience");
+        assertThat(experience.status()).isEqualTo(Status.UNKNOWN);
+        assertThat(experience.note()).contains("tarihi kayıtlı değil");
+        // The figures it does know are still reported, so the company can see what is missing.
+        assertThat(experience.available()).isEqualByComparingTo("90000000");
+    }
+
+    @Test
+    void aDateIsOnlyAskedForWhenTheAmountWouldOtherwisePass() throws IOException {
+        // Below the bar on the amount alone: SHORT is both correct and more useful than telling
+        // somebody to go and find a date that cannot change the answer.
+        Map<String, Item> items = check("yeterlik-yapim.txt",
+                company("100000", null, null), "8000000");
+
+        assertThat(items.get("experience").status()).isEqualTo(Status.SHORT);
+    }
+
+    @Test
     void anUnenteredFigureIsUnknownAndNeverAFailure() throws IOException {
         Map<String, Item> items = check("yeterlik-hizmet.txt", company(null, null, null), "1000000");
 

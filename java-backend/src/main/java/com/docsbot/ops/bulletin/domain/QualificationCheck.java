@@ -110,6 +110,18 @@ public record QualificationCheck(
         // A certificate older than the tender's window is not evidence, however large it is.
         String note = null;
         Status status = have.compareTo(required) >= 0 ? Status.MET : Status.SHORT;
+        // A tender that asks for a window, against a certificate whose date we do not hold, is the
+        // one thing this file must not answer with a tick. The amount alone was deciding it, so a
+        // company that entered its iş deneyim tutarı and left the date blank was told MET on a
+        // tender it might be years too late for — the exact "we do not know" collapsed into "yes"
+        // that the contract above forbids. Only where the amount would otherwise pass: if it does
+        // not, SHORT is both correct and the more useful thing to say.
+        if (status == Status.MET && tender.experienceYears() != null && tenderDate != null
+                && company.getExperienceDate() == null) {
+            return new Item("experience", label, Status.UNKNOWN, required, have,
+                    "Bu ihale belgenin son " + tender.experienceYears()
+                            + " yıl içinde alınmış olmasını istiyor; belgenizin tarihi kayıtlı değil.");
+        }
         if (tender.experienceYears() != null && company.getExperienceDate() != null
                 && tenderDate != null
                 && company.getExperienceDate().isBefore(tenderDate.minusYears(tender.experienceYears()))) {
