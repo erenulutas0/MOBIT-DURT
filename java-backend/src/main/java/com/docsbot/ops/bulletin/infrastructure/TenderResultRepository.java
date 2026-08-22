@@ -94,9 +94,26 @@ public interface TenderResultRepository extends JpaRepository<TenderResult, Long
     /** Every contract one firm has taken, newest first — the rows a firm profile is built from. */
     List<TenderResult> findByWinnerOrderByContractDateDescIdDesc(String winner);
 
-    /** Same retention window as the announcements, and for the same reason: it is a public file. */
+    /**
+     * Same retention window as the announcements, and for the same reason: it is a public file.
+     *
+     * <p>Except where the company bid on it. A bid's outcome is not stored — it is worked out on
+     * every read by matching the İKN against this table — so deleting the result silently turned a
+     * settled bid back into "sonuç ilanı henüz yayımlanmadı" four months after the fact. The loss
+     * count dropped, the rival who beat us lost a tally mark, and if the remaining losses fell
+     * under three the median gap vanished altogether, all without anything having happened.
+     *
+     * <p>Keeping those rows rather than copying the outcome onto the bid: the results table stays
+     * the single place an outcome is derived from, and the rows retained are only the tenders this
+     * company actually competed for — a handful against a thousand a day. TenderBidRepository says
+     * a bid is never purged; this is what that promise costs.
+     */
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.transaction.annotation.Transactional
-    @Query("delete from TenderResult result where result.bulletinDate < :cutoff")
+    @Query("""
+            delete from TenderResult result
+             where result.bulletinDate < :cutoff
+               and result.ikn not in (select bid.ikn from TenderBid bid where bid.ikn is not null)
+            """)
     int deleteOlderThan(@Param("cutoff") LocalDate cutoff);
 }
