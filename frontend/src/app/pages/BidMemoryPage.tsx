@@ -28,8 +28,10 @@ const STATUS: Record<BidOutcomeRow["status"], { label: string; icon: typeof Trop
   UNCLEAR: { label: "Belirsiz", icon: CircleHelp, tone: "text-amber-600" },
 };
 
+/** A missing amount is a dash. `Number(null)` is 0, and "0 TRY" reads as a contract won for nothing. */
 function money(value: string | null, currency = "TRY"): string {
-  const parsed = Number(value ?? 0);
+  if (value === null || value === undefined || value === "") return "—";
+  const parsed = Number(value);
   return Number.isFinite(parsed)
     ? `${parsed.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} ${currency}`
     : "—";
@@ -273,6 +275,14 @@ export function BidMemoryPage({ setPage }: { setPage: (page: Page) => void }) {
                   {rival.contracts} sözleşme · {rival.distinct_authorities} idare ·{" "}
                   {money(rival.total_amount, rival.currency)}
                 </p>
+                {/* Said rather than folded in: lira added to euros is not a total that is slightly
+                    off, it is a total for a different company. */}
+                {rival.contracts_in_other_currencies > 0 && (
+                  <p className="text-xs text-slate-500">
+                    {rival.contracts_in_other_currencies} sözleşme başka para biriminde; toplama
+                    katılmadı.
+                  </p>
+                )}
               </div>
               <button onClick={() => setRival(null)}
                 className="text-slate-400 hover:text-slate-700" aria-label="Kapat">

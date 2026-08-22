@@ -27,6 +27,40 @@ class RivalProfileTest {
                 "TRY", 5, 5, "Rakip A.Ş.", "Adres", province, lots, "gövde", NOW);
     }
 
+    private static TenderResult inCurrency(String amount, String unit) {
+        return new TenderResult("2026/" + unit + amount, "mal", LocalDate.of(2026, 8, 21), "DSİ",
+                "İthal ekipman", "Ankara", "Ankara", "Açık", LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 8, 1), null, unit, new BigDecimal(amount),
+                unit, 5, 5, "Rakip A.Ş.", "Adres", "Ankara", false, "gövde", NOW);
+    }
+
+    @Test
+    void doesNotAddLiraToEuros() {
+        // Borusan's real pair in today's archive: 139,602 USD and 31,709,200 TRY. Summed under one
+        // label the firm reads as forty times its size, or a fraction of it, depending on which row
+        // came first — not a rounding error, a different company.
+        RivalProfile profile = RivalProfile.of("Rakip A.Ş.", List.of(
+                inCurrency("139602", "USD"),
+                inCurrency("31709200", "TRY"),
+                inCurrency("2500000", "TRY")), 0);
+
+        // The currency it has most contracts in wins, and only those are totalled.
+        assertThat(profile.currency()).isEqualTo("TRY");
+        assertThat(profile.totalAmount()).isEqualByComparingTo("34209200");
+        assertThat(profile.contractsInOtherCurrencies()).isEqualTo(1);
+    }
+
+    @Test
+    void everyContractCarriesItsOwnCurrency() {
+        RivalProfile profile = RivalProfile.of("Rakip A.Ş.", List.of(
+                inCurrency("139602", "USD"), inCurrency("31709200", "TRY")), 0);
+
+        // The list used to label every row with the profile's single currency, so a dollar contract
+        // was drawn as lira.
+        assertThat(profile.recent()).extracting(RivalProfile.Contract::currency)
+                .containsExactly("USD", "TRY");
+    }
+
     @Test
     void addsUpWhatTheFirmHasTakenAndFromWhom() {
         RivalProfile profile = RivalProfile.of("Rakip A.Ş.", List.of(

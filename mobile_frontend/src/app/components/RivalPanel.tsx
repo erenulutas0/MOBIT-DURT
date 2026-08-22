@@ -20,8 +20,10 @@ import { DiscountSourceNote } from "./DiscountSourceNote";
  * firm has taken. The bulletin says who won; only our own bid memory says who won against us.
  */
 
+/** A missing amount is a dash. `Number(null)` is 0, and "0 TRY" reads as a contract won for nothing. */
 function money(value: string | null, currency: string | null): string {
-  const parsed = Number(value ?? 0);
+  if (value === null || value === undefined || value === "") return "—";
+  const parsed = Number(value);
   return Number.isFinite(parsed)
     ? `${parsed.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} ${currency || "TRY"}`
     : "—";
@@ -185,6 +187,14 @@ export function RivalPanel({ onClose, initialWinner }: {
               <p className="text-base font-semibold text-foreground tabular-nums">
                 {money(profile.total_amount, profile.currency)}
               </p>
+              {/* Said rather than folded in: lira added to euros is not a total that is slightly
+                  off, it is a total for a different company. */}
+              {profile.contracts_in_other_currencies > 0 && (
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {profile.contracts_in_other_currencies} sözleşme başka para biriminde; toplama
+                  katılmadı.
+                </p>
+              )}
             </div>
 
             {profile.beat_us > 0 && (
@@ -266,7 +276,7 @@ export function RivalPanel({ onClose, initialWinner }: {
                       </p>
                       <div className="flex flex-wrap gap-x-3 text-[11px] tabular-nums">
                         <span className="text-foreground">
-                          {money(contract.amount, profile.currency)}
+                          {money(contract.amount, contract.currency)}
                         </span>
                         {contract.discount_percent !== null && (
                           <span className="text-muted-foreground">

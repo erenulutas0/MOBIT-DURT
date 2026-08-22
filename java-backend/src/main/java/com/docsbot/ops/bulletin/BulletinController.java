@@ -717,6 +717,7 @@ public class BulletinController {
                 profile.contracts(),
                 profile.totalAmount(),
                 profile.currency(),
+                profile.contractsInOtherCurrencies(),
                 profile.distinctAuthorities(),
                 profile.medianDiscount(),
                 profile.beatUs(),
@@ -728,7 +729,8 @@ public class BulletinController {
                         .map(contract -> new RivalContractResponse(
                                 contract.id(), contract.ikn(), contract.title(),
                                 contract.authority(), contract.province(), contract.amount(),
-                                contract.contractDate(), contract.discountPercent()))
+                                contract.currency(), contract.contractDate(),
+                                contract.discountPercent()))
                         .toList());
     }
 
@@ -736,7 +738,10 @@ public class BulletinController {
             String winner,
             int contracts,
             @JsonProperty("total_amount") BigDecimal totalAmount,
+            /** The currency the total is in: whichever this firm has the most contracts in. */
             String currency,
+            /** Contracts in another currency, left out of the total rather than added to it. */
+            @JsonProperty("contracts_in_other_currencies") int contractsInOtherCurrencies,
             @JsonProperty("distinct_authorities") int distinctAuthorities,
             /** Null below three usable contracts: two is an anecdote, not a pricing habit. */
             @JsonProperty("median_discount") BigDecimal medianDiscount,
@@ -758,6 +763,8 @@ public class BulletinController {
             String authority,
             String province,
             BigDecimal amount,
+            /** Per row: a euro contract must not be drawn with a lira label. */
+            String currency,
             @JsonProperty("contract_date") LocalDate contractDate,
             @JsonProperty("discount_percent") BigDecimal discountPercent
     ) {

@@ -1600,7 +1600,10 @@ export type RivalProfile = {
   winner: string;
   contracts: number;
   total_amount: string;
+  /** The currency the total is in: whichever this firm has the most contracts in. */
   currency: string;
+  /** Contracts in another currency, left out of the total rather than added to it. */
+  contracts_in_other_currencies: number;
   distinct_authorities: number;
   median_discount: string | null;
   /** How many of our own bids this firm has taken — the line no public record can produce. */
@@ -1609,8 +1612,8 @@ export type RivalProfile = {
   provinces: Array<{ name: string; contracts: number }>;
   recent: Array<{
     id: number | null; ikn: string; title: string | null; authority: string | null;
-    province: string | null; amount: string | null; contract_date: string | null;
-    discount_percent: string | null;
+    province: string | null; amount: string | null; currency: string | null;
+    contract_date: string | null; discount_percent: string | null;
   }>;
 };
 

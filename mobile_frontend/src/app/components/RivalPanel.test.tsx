@@ -12,13 +12,15 @@ const { searchRivals, getRivalProfile } = mocks;
 function profile(overrides: Partial<RivalProfile> = {}): RivalProfile {
   return {
     winner: "Sürekli Rakip A.Ş.",
-    contracts: 14, total_amount: "48000000", currency: "TRY", distinct_authorities: 6,
+    contracts: 14, total_amount: "48000000", currency: "TRY",
+    contracts_in_other_currencies: 0, distinct_authorities: 6,
     median_discount: "11.2", beat_us: 0,
     authorities: [{ name: "Karayolları Genel Müdürlüğü", contracts: 8 }],
     provinces: [{ name: "Konya", contracts: 9 }],
     recent: [{
       id: 1, ikn: "2026/1", title: "Köy yolu asfalt işi", authority: "Karayolları",
-      province: "Konya", amount: "8000000", contract_date: "2026-08-01", discount_percent: "12.4",
+      province: "Konya", amount: "8000000", currency: "TRY",
+      contract_date: "2026-08-01", discount_percent: "12.4",
     }],
     ...overrides,
   };
@@ -95,5 +97,41 @@ describe("RivalPanel", () => {
     await user.click(screen.getByLabelText("Ara"));
 
     expect(await screen.findByText(/sonuçlanmış ihale bulunamadı/)).toBeInTheDocument();
+  });
+
+  it("bilinmeyen sözleşme bedelini 0 TRY diye yazmaz", async () => {
+    // Number(null) is 0, and "0 TRY" next to a discount percentage reads as a contract won for
+    // nothing. A dash says what is true: we do not hold the figure.
+    getRivalProfile.mockResolvedValue(profile({
+      recent: [{
+        id: 2, ikn: "2026/2", title: "Bedeli okunamayan iş", authority: "DSİ",
+        province: "Konya", amount: null, currency: null,
+        contract_date: "2026-08-02", discount_percent: null,
+      }],
+    }));
+    render(<RivalPanel onClose={vi.fn()} initialWinner="Sürekli Rakip A.Ş." />);
+
+    expect(await screen.findByText("Bedeli okunamayan iş")).toBeInTheDocument();
+    // Exact text, not a regex: /0 TRY/ also matches the header's "48.000.000 TRY".
+    expect(screen.queryByText("0 TRY")).not.toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("başka para birimindeki sözleşmelerin toplama katılmadığını söyler", async () => {
+    // Borusan holds 139,602 USD and 31,709,200 TRY. Added together under one label the firm reads
+    // as forty times its size, or a fraction of it, depending which row was seen first.
+    getRivalProfile.mockResolvedValue(profile({
+      total_amount: "31709200", currency: "TRY", contracts_in_other_currencies: 1,
+      recent: [{
+        id: 3, ikn: "2026/3", title: "İthal ekipman", authority: "DSİ",
+        province: "Ankara", amount: "139602", currency: "USD",
+        contract_date: "2026-08-03", discount_percent: null,
+      }],
+    }));
+    render(<RivalPanel onClose={vi.fn()} initialWinner="Sürekli Rakip A.Ş." />);
+
+    expect(await screen.findByText(/başka para biriminde/)).toBeInTheDocument();
+    // And the row itself carries its own currency rather than the profile's.
+    expect(screen.getByText(/139\.602 USD/)).toBeInTheDocument();
   });
 });
