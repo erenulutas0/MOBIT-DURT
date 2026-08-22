@@ -106,11 +106,34 @@ jobs:
       # The sidecar's build context lived only on the server and drifted from the repo: its
       # Dockerfile was changed and committed, the image was rebuilt on the box, and the rebuild
       # silently used the old file — it succeeded and shipped nothing. Syncing keeps the two equal.
-      # Deliberately does not rebuild: that takes minutes and downloads a model, so remaking the
-      # image stays a decision somebody makes rather than a tax on every deploy.
-      - name: Sync sidecar sources (build context, not a rebuild)
+      - name: Sync sidecar sources
         run: |
           scp -i ~/.ssh/deploy_key embedding-service/Dockerfile embedding-service/app.py embedding-service/bulletin.py ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/docsbot/embedding-service/
+
+      # Rebuilt here rather than left to somebody to remember. It used to be a manual step on the
+      # grounds that a rebuild "takes minutes and downloads a model" — but the model and the wheels
+      # are earlier layers and stay cached; only the COPY at the end is invalidated, which takes
+      # about a second. What the manual step actually cost was correctness: it failed twice in one
+      # day, both times the same way. The rebuild has to run AFTER the sync, and when somebody runs
+      # it before, Docker finds nothing new to copy, reports CACHED, leaves the old container
+      # running and looks exactly like success. A parser fix and an event-loop fix each sat
+      # undeployed behind that.
+      - name: Rebuild the sidecar so the sources just synced are the ones running
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} "
+            set -euo pipefail
+            cd /opt/docsbot
+            docker compose --profile rag up -d --build docsbot-embeddings
+            # Proof rather than trust: the file inside the running container must match the one
+            # just uploaded. This is the check that would have caught both of today's misses.
+            HOST_SHA=\$(sha256sum /opt/docsbot/embedding-service/app.py | awk '{print \$1}')
+            RUN_SHA=\$(docker exec docsbot-embeddings sha256sum /app/app.py | awk '{print \$1}')
+            if [ \"\$HOST_SHA\" != \"\$RUN_SHA\" ]; then
+              echo 'Sidecar is still running an older app.py than the one deployed.'
+              exit 1
+            fi
+            echo 'sidecar rebuilt and verified'
+          "
 
       - name: Verify checksum, swap JAR, recreate container
         run: |
