@@ -76,14 +76,23 @@ def embed_passages(request: PassagesRequest):
 
 
 @app.post("/ocr")
-async def ocr(file: UploadFile = File(...)):
+def ocr(file: UploadFile = File(...)):
     """Reads a scan. Called only when normal extraction found nothing worth indexing.
 
     Takes the bytes rather than a path on purpose: this container is shared by every tenant, and
     the moment it can open one customer's files it has to be trusted not to open another's. Bytes
     over the internal network keep it unable to reach any of them.
+
+    Sync, like every other endpoint here, and that is the whole point. Declared `async def` it ran
+    on the event loop, and everything below it — poppler rasterising pages, tesseract reading them —
+    is blocking CPU work that FastAPI cannot interleave. Measured on production before the change:
+    /health went from 4 milliseconds to 13.3 seconds while one scan was in flight, because it was
+    waiting for that scan to finish. This container is the one piece shared by every tenant and runs
+    with a single worker, so one customer's scan stopped every other customer's search, embedding
+    and health check for as long as it took. A plain `def` hands the work to FastAPI's threadpool
+    and the loop stays free.
     """
-    payload = await file.read()
+    payload = file.file.read()
     filename = (file.filename or "").lower()
     try:
         if filename.endswith(".pdf") or payload[:5] == b"%PDF-":

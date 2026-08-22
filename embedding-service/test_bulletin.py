@@ -11,6 +11,7 @@ without word boundaries so "vana montajı" was filed under Van, and it folded it
 at all. Province is the filter customers actually use, so each of those quietly hid tenders from
 the companies that wanted them.
 """
+import io
 import unittest
 
 import bulletin
@@ -75,6 +76,31 @@ class AuthorityFromHeaderTest(unittest.TestCase):
         self.assertEqual(bulletin._authority_from_header(header),
                          "BÜNYAN BELEDİYE BAŞKANLIĞI FEN İŞLERİ MÜDÜRLÜĞÜ")
 
+
+
+class SidecarEndpointsTest(unittest.TestCase):
+    """Every endpoint in app.py must be sync, and this is cheaper to keep than to rediscover.
+
+    Declared `async def`, an endpoint runs on the event loop, and the work in this service — poppler
+    rasterising pages, tesseract reading them, a bulletin downloaded over the network — is blocking.
+    /ocr was the one exception and it cost the most: measured on production, /health went from 4
+    milliseconds to 13.3 seconds while a single scan was in flight. This container is shared by
+    every tenant and runs one worker, so that was every customer's search stopped by one customer's
+    scan.
+
+    Checked by reading the source rather than importing it: app.py pulls in fastapi and a 280M
+    parameter model, and a guard that needs half a gigabyte of wheels to run is a guard that stops
+    being run.
+    """
+
+    def test_no_endpoint_is_declared_async(self):
+        import os
+        import re
+
+        source = io.open(
+            os.path.join(os.path.dirname(__file__), "app.py"), encoding="utf-8").read()
+        offenders = re.findall(r"@app\.\w+\([^)]*\)\s*\nasync def (\w+)", source)
+        self.assertEqual(offenders, [], f"event dongusunde kosacak uc(lar): {offenders}")
 
 if __name__ == "__main__":
     unittest.main()
