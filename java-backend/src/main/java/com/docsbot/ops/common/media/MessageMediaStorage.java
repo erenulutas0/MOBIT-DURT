@@ -69,8 +69,13 @@ public class MessageMediaStorage {
         }
         String normalized = mediaData.trim();
         if (normalized.startsWith(REFERENCE_PREFIX)) {
-            ensureReadable(normalized);
-            return normalized;
+            // Forwarding hands back the reference it was shown rather than the bytes, so returning
+            // it unchanged put two message rows on one file — and deleteReference below removes the
+            // file whenever ANY row holding it is hard-deleted. Deleting your copy of a forwarded
+            // photograph took it away from the person who sent it and from everyone else it had
+            // been passed to. Copying restores the one-message-one-file rule the whole delete path
+            // is built on; a duplicated file is cheap next to a destroyed one.
+            return copyReference(normalized, scope);
         }
         if (!normalized.startsWith("data:")) {
             throw new ErpExceptions.BadRequest("Message media must be a data URL");
@@ -119,7 +124,8 @@ public class MessageMediaStorage {
 
     /**
      * Best-effort deletion of a file-backed media reference. No-op for inline/legacy values or
-     * a null. Each message owns a unique uuid file, so deleting it when the message row is
+     * a null. Each message owns a unique uuid file — including a forwarded one, which is copied
+     * rather than shared for exactly this reason — so deleting it when the message row is
      * hard-deleted is safe and prevents unbounded disk growth. Failures are swallowed — a
      * leftover file is a nuisance, not a correctness problem, and must not fail the delete.
      */
@@ -156,6 +162,34 @@ public class MessageMediaStorage {
                 path,
                 mimeTypeFromPath(path, fallbackMimeType),
                 path.getFileName().toString());
+    }
+
+    /**
+     * A private copy of an already-stored file, under a uuid of its own.
+     *
+     * <p>Keeps the extension so the mime type is still readable from the path, and lands in the
+     * scope of the message being written rather than the one it came from — a room message
+     * forwarded to a person belongs with the person's.
+     */
+    private String copyReference(String reference, String scope) {
+        ensureReadable(reference);
+        Path source = pathForReference(reference);
+        String name = source.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        String extension = dot > 0 ? name.substring(dot + 1) : "bin";
+        String safeScope = scope == null || scope.isBlank()
+                ? "general"
+                : scope.replaceAll("[^a-zA-Z0-9._-]+", "-");
+        String filename = UUID.randomUUID() + "." + extension;
+        Path directory = resolveInsideRoot(safeScope);
+        Path target = resolveInsideRoot(safeScope, filename);
+        try {
+            Files.createDirectories(directory);
+            Files.copy(source, target);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Message media could not be copied", exception);
+        }
+        return REFERENCE_PREFIX + safeScope + "/" + filename;
     }
 
     private void ensureReadable(String reference) {

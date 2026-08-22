@@ -65,6 +65,37 @@ class MessageMediaStorageTest {
     }
 
     @Test
+    void forwardingCopiesTheFileSoDeletingOneCannotDestroyTheOther() {
+        // Forwarding hands back the reference it was shown, not the bytes. While that reference was
+        // stored unchanged, two message rows shared one file and deleteReference removed it for
+        // whichever row went first: deleting your copy of a forwarded photograph took it away from
+        // the person who sent it, and from everyone else it had been passed to.
+        MessageMediaStorage storage = storage();
+        String original = storage.storeDataUrl("direct", "image", dataUrl("image/png", "resim"), null);
+
+        String forwarded = storage.storeDataUrl("direct", "image", original, null);
+
+        assertThat(forwarded).isNotEqualTo(original);
+        storage.deleteReference(forwarded);
+        // The sender's copy is untouched and still readable.
+        assertThat(storage.toDataUrl(original, null)).isEqualTo(dataUrl("image/png", "resim"));
+    }
+
+    @Test
+    void aForwardOfAForwardIsItsOwnFileToo() {
+        MessageMediaStorage storage = storage();
+        String original = storage.storeDataUrl("direct", "image", dataUrl("image/png", "resim"), null);
+        String once = storage.storeDataUrl("direct", "image", original, null);
+
+        String twice = storage.storeDataUrl("room", "image", once, null);
+
+        assertThat(twice).isNotEqualTo(once).isNotEqualTo(original);
+        storage.deleteReference(once);
+        assertThat(storage.toDataUrl(twice, null)).isEqualTo(dataUrl("image/png", "resim"));
+        assertThat(storage.toDataUrl(original, null)).isEqualTo(dataUrl("image/png", "resim"));
+    }
+
+    @Test
     void deleteReferenceRemovesTheBackingFileAndIsNoOpForInlineOrNull() {
         MessageMediaStorage storage = storage();
         String ref = storage.storeDataUrl("direct", "image", dataUrl("image/png", "bytes"), "image/png");
