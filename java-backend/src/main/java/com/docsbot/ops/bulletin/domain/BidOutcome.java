@@ -44,9 +44,9 @@ public record BidOutcome(
      * @param results every contract recorded under this bid's İKN, in any order
      */
     public static BidOutcome of(TenderBid bid, List<TenderResult> results) {
-        if (bid.getOutcomeOverride() != null && !bid.getOutcomeOverride().isBlank()) {
+        Status stated = statedOutcome(bid.getOutcomeOverride());
+        if (stated != null) {
             // Somebody who was in the room corrected us. That beats any inference.
-            Status stated = Status.valueOf(bid.getOutcomeOverride());
             TenderResult single = results.size() == 1 ? results.get(0) : null;
             return new BidOutcome(bid, stated,
                     single == null ? null : single.getContractAmount(),
@@ -90,4 +90,25 @@ public record BidOutcome(
                 .setScale(1, RoundingMode.HALF_UP);
         return new BidOutcome(bid, Status.LOST, winning, result.getWinner(), gap, null);
     }
+    /**
+     * The manual correction, if it is one this code understands.
+     *
+     * <p>Status.valueOf on the raw column was the whole of the reading, and it throws on anything
+     * it does not recognise — so a single stored "won" instead of "WON" turned /bids, /briefing and
+     * /rivals into a permanent 500 for the entire company, on every request, until somebody edited
+     * the database. The column carries no CHECK and nothing validated the write. A value that
+     * cannot be read is ignored here and the outcome is inferred from the published result as if
+     * nobody had corrected anything: worse than the correction, far better than three dead screens.
+     */
+    private static Status statedOutcome(String override) {
+        if (override == null || override.isBlank()) {
+            return null;
+        }
+        try {
+            return Status.valueOf(override.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException unreadable) {
+            return null;
+        }
+    }
+
 }

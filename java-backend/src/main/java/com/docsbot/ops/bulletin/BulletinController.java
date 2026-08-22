@@ -481,9 +481,14 @@ public class BulletinController {
         if (request.amount() == null || request.amount().signum() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Teklif tutarı gerekli");
         }
+        // Only the amount used to be checked, and the outcome went to the column as typed. The
+        // column has no CHECK, so "won" instead of "WON" stored happily and then broke every later
+        // read of /bids, /briefing and /rivals. Refused here, where it is still one person's
+        // mistake rather than everybody's outage.
+        String outcome = normalizeOutcome(request.outcome());
         try {
             TenderBid bid = bidMemoryService.record(id, request.amount(), request.bidAt(),
-                    request.note(), request.outcome(), principal.displayName());
+                    request.note(), outcome, principal.displayName());
             return BidResponse.from(bid);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage());
@@ -846,4 +851,18 @@ public class BulletinController {
     /** The whole announcement, as printed. Kept off the list because it is several KB each. */
     record NoticeDetailResponse(NoticeResponse notice, String body, String section) {
     }
+    /** Blank stays blank — an unset outcome means "infer it from the published result". */
+    private static String normalizeOutcome(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String upper = value.trim().toUpperCase(java.util.Locale.ROOT);
+        try {
+            return com.docsbot.ops.bulletin.domain.BidOutcome.Status.valueOf(upper).name();
+        } catch (IllegalArgumentException unknown) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Sonuç yalnızca WON, LOST, UNCLEAR veya PENDING olabilir");
+        }
+    }
+
 }

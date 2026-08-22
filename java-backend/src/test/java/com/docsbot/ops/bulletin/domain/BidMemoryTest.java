@@ -33,6 +33,34 @@ class BidMemoryTest {
                 winner, "Adres", "Konya", lots, "gövde", NOW);
     }
 
+    private static TenderBid corrected(String ikn, String override) {
+        TenderBid bid = bid(ikn, "8250000", "Karayolları");
+        bid.update(bid.getAmount(), bid.getBidAt(), null, override, "admin", NOW);
+        return bid;
+    }
+
+    @Test
+    void aCorrectionNobodyCanReadIsIgnoredRatherThanThrown() {
+        // The column carries no CHECK and nothing validated the write, so a single stored "won"
+        // instead of "WON" used to reach Status.valueOf and throw — turning /bids, /briefing and
+        // /rivals into a permanent 500 for the whole company until somebody edited the database.
+        BidOutcome outcome = BidOutcome.of(corrected("2026/9", "kazandik"),
+                List.of(award("2026/9", "8000000", "Rakip A.Ş.", false)));
+
+        // Falls back to what the published result says, as if nobody had corrected anything.
+        assertThat(outcome.status()).isEqualTo(BidOutcome.Status.LOST);
+        assertThat(outcome.winner()).isEqualTo("Rakip A.Ş.");
+    }
+
+    @Test
+    void aCorrectionInTheWrongCaseIsStillHonoured() {
+        BidOutcome outcome = BidOutcome.of(corrected("2026/10", "won"),
+                List.of(award("2026/10", "8000000", "Rakip A.Ş.", false)));
+
+        assertThat(outcome.status()).isEqualTo(BidOutcome.Status.WON);
+        assertThat(outcome.note()).contains("elle işaretlendi");
+    }
+
     @Test
     void tellsYouHowFarOverTheWinnerYouCame() {
         BidOutcome outcome = BidOutcome.of(bid("2026/1", "8250000", "Karayolları"),
