@@ -73,7 +73,17 @@ public class TenderTextExtractionService {
                     extracted = scanned;
                 }
             }
-            document.markTextExtracted(extracted, now);
+            if (extracted.length() < USABLE_TEXT_CHARS) {
+                // OCR was the rescue and it did not arrive — timed out, refused the size, or is
+                // switched off. Calling that 'extracted' repeats on the OCR path the exact mistake
+                // the comment above names on the parse path: the document reads as done, holds
+                // nothing, answers no question ever asked of it, and appears in no failure count,
+                // so nobody is ever told to go and look at it.
+                document.markTextExtractionFailed(
+                        "Metin çıkarılamadı: belgede metin katmanı yok ve OCR da okuyamadı.", now);
+            } else {
+                document.markTextExtracted(extracted, now);
+            }
         } catch (Exception exception) {
             document.markTextExtractionFailed(exception.getMessage(), now);
         }
